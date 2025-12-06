@@ -110,10 +110,14 @@ export const ProjectService = {
       process.env.DEPLOY_ENGINE_URL || "http://localhost:4002";
     try {
       if (project.port) {
+        const subdomain = project.name
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, "-")
+          .replace(/^-+|-+$/g, "");
         await fetch(`${deployEngineUrl}/projects/${id}/delete`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ port: project.port }),
+          body: JSON.stringify({ port: project.port, subdomain }),
         });
       }
     } catch (e) {

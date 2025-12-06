@@ -26,6 +26,10 @@ export const DeploymentService = {
         buildId: buildId,
         port: project.port,
         appType: project.app_type,
+        subdomain: project.name
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, "-")
+          .replace(/^-+|-+$/g, ""), // Slugify
       }),
     });
 

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "fs";
 import { rm, unlink } from "fs/promises";
 import { join } from "path";
+import { NginxService } from "./nginx-service";
 
 const BASE_DIR = process.env.BASE_DIR || join(process.cwd(), "apps");
 const ARTIFACTS_DIR = join(BASE_DIR, "artifacts");
@@ -48,9 +49,10 @@ export const DeployService = {
     buildId: string,
     port: number,
     appType: "nextjs" | "vite",
+    subdomain: string, // NEW: Subdomain required
   ) {
     console.log(
-      `[DeployService] Activating ${projectId}:${buildId} on port ${port}`,
+      `[DeployService] Activating ${projectId}:${buildId} on port ${port} (subdomain: ${subdomain})`,
     );
 
     const paths = this.getPaths(projectId, buildId);
@@ -80,6 +82,19 @@ export const DeployService = {
       paths.projectDir,
     );
 
+    // 7. Configure Nginx Proxy
+    try {
+      console.log(`[DeployService] Configuring Nginx for ${subdomain}...`);
+      await NginxService.createConfig(subdomain, port);
+    } catch (e) {
+      console.error(
+        `[DeployService] Failed to configure Nginx for ${subdomain}:`,
+        e,
+      );
+      // We log but don't fail the whole deployment, as the app is running.
+      // User might need to fix domain issues manually.
+    }
+
     return { success: true };
   },
 
@@ -100,7 +115,7 @@ export const DeployService = {
   /**
    * Deletes a project's files and stops its running process.
    */
-  async deleteProject(projectId: string, port?: number) {
+  async deleteProject(projectId: string, port?: number, subdomain?: string) {
     console.log(`[DeployService] Deleting project ${projectId}`);
 
     if (port) {
@@ -110,6 +125,15 @@ export const DeployService = {
     const projectDir = join(BASE_DIR, projectId);
     if (existsSync(projectDir)) {
       await rm(projectDir, { recursive: true, force: true });
+    }
+
+    // Cleanup Nginx
+    if (subdomain) {
+      await NginxService.removeConfig(subdomain);
+    } else {
+      console.warn(
+        `[DeployService] No subdomain provided for project ${projectId}. Skipping Nginx cleanup.`,
+      );
     }
 
     return { success: true };

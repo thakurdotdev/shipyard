@@ -21,7 +21,7 @@ const app = new Elysia()
   .post(
     "/activate",
     async ({ body }: { body: any }) => {
-      const { projectId, buildId, port, appType } = body;
+      const { projectId, buildId, port, appType, subdomain } = body;
 
       try {
         await DeployService.activateDeployment(
@@ -29,6 +29,7 @@ const app = new Elysia()
           buildId,
           port,
           appType,
+          subdomain,
         );
         return { success: true };
       } catch (e: any) {
@@ -41,6 +42,7 @@ const app = new Elysia()
         buildId: t.String(),
         port: t.Number(),
         appType: t.Union([t.Literal("nextjs"), t.Literal("vite")]),
+        subdomain: t.String(),
       }),
     },
   )
@@ -62,9 +64,9 @@ const app = new Elysia()
     },
   )
   .post("/projects/:id/delete", async ({ params: { id }, body }) => {
-    const { port } = body as { port?: number };
+    const { port, subdomain } = body as { port?: number; subdomain?: string };
     try {
-      await DeployService.deleteProject(id, port);
+      await DeployService.deleteProject(id, port, subdomain);
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
