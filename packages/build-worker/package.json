@@ -1,0 +1,17 @@
+{
+  "name": "@mini-vercel/build-worker",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@mini-vercel/shared": "workspace:*",
+    "@types/tar": "^6.1.13",
+    "bullmq": "^5.65.1",
+    "elysia": "latest",
+    "ioredis": "^5.8.2",
+    "simple-git": "^3.22.0",
+    "tar": "^7.5.2"
+  }
+}

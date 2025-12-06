@@ -1,0 +1,27 @@
+{
+  "version": "5",
+  "dialect": "pg",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1764963215606,
+      "tag": "0000_cool_fallen_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1764966069184,
+      "tag": "0001_tired_tyger_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1765018791049,
+      "tag": "0002_ambiguous_sersi",
+      "breakpoints": true
+    }
+  ]
+}

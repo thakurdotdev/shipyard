@@ -1,0 +1,27 @@
+{
+  "name": "@mini-vercel/control-api",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "migrate": "bun run src/db/migrate.ts",
+    "generate": "drizzle-kit generate:pg",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.4.0",
+    "@mini-vercel/shared": "workspace:*",
+    "@sinclair/typebox": "^0.34.41",
+    "bullmq": "^5.65.1",
+    "drizzle-orm": "^0.30.10",
+    "elysia": "latest",
+    "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.3",
+    "postgres": "^3.4.7",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@fast-check/vitest": "^0.2.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "drizzle-kit": "^0.20.18"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "mini-vercel-platform",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "dev": "concurrently \"bun run --filter '@mini-vercel/control-api' dev\" \"bun run --filter '@mini-vercel/build-worker' dev\" \"bun run --filter '@mini-vercel/deploy-engine' dev\" \"bun run --filter 'ui' dev\" -c \"blue,yellow,magenta,cyan\" --kill-others",
+    "migrate": "bun run --filter '@mini-vercel/control-api' migrate"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "concurrently": "^9.2.1",
+    "fast-check": "^3.15.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
