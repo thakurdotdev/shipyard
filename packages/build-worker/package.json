@@ -6,7 +6,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@mini-vercel/shared": "workspace:*",
     "@types/tar": "^6.1.13",
     "bullmq": "^5.65.1",
     "elysia": "latest",

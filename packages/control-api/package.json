@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
-    "@mini-vercel/shared": "workspace:*",
     "@sinclair/typebox": "^0.34.41",
     "bullmq": "^5.65.1",
     "drizzle-orm": "^0.30.10",

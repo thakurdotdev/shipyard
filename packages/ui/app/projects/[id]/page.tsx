@@ -53,7 +53,7 @@ export default function ProjectDetails() {
   useEffect(() => {
     refreshData();
     const socket = io(
-      process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4003",
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000",
     );
 
     socket.on("connect", () => {

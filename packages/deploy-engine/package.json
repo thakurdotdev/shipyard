@@ -6,7 +6,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "elysia": "latest",
-    "@mini-vercel/shared": "workspace:*"
+    "elysia": "latest"
   }
 }
