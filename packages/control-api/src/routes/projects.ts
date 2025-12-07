@@ -22,10 +22,12 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     },
     {
       body: t.Object({
-        name: t.String(),
-        github_url: t.String(),
-        build_command: t.String(),
-        app_type: t.Union([t.Literal('nextjs'), t.Literal('vite')]),
+        name: t.String({ minLength: 1, error: 'Project name is required' }),
+        github_url: t.String({ minLength: 1, error: 'GitHub URL is required' }),
+        build_command: t.String({ minLength: 1, error: 'Build command is required' }),
+        app_type: t.Union([t.Literal('nextjs'), t.Literal('vite')], {
+          error: 'Invalid app type',
+        }),
         root_directory: t.Optional(t.String()),
         domain: t.Optional(t.String()),
         env_vars: t.Optional(t.Record(t.String(), t.String())),

@@ -1,41 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
+import { Loader2 } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState, Activity } from 'react';
 import { io } from 'socket.io-client';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogViewer } from '@/components/log-viewer';
-import {
-  GitBranch,
-  ExternalLink,
-  Play,
-  Github,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Terminal,
-  Settings,
-} from 'lucide-react';
-import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+import { toast } from 'sonner';
+import { DeploymentsTab } from './components/deployments-tab';
+import { OverviewTab } from './components/overview-tab';
+import { ProjectHeader } from './components/project-header';
+import { SettingsTab } from './components/settings-tab';
 
-export default function ProjectDetails() {
+function ProjectDetailsContent() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get('tab') || 'overview';
+
   const [project, setProject] = useState<any>(null);
   const [builds, setBuilds] = useState<any[]>([]);
   const [activeDeployment, setActiveDeployment] = useState<any>(null);
-  const [tab, setTab] = useState<'overview' | 'deployments'>('overview');
+  const [isDeploying, setIsDeploying] = useState(false);
 
   const refreshData = () => {
     if (!id) return;
@@ -45,6 +32,7 @@ export default function ProjectDetails() {
   };
 
   useEffect(() => {
+    if (!id) return;
     refreshData();
     const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
 
@@ -61,6 +49,17 @@ export default function ProjectDetails() {
         }
         return [updatedBuild, ...prev];
       });
+      if (updatedBuild.status === 'success') {
+        api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
+        toast.success(`Build #${updatedBuild.id.slice(0, 8)} succeeded`);
+      } else if (updatedBuild.status === 'failed') {
+        toast.error(`Build #${updatedBuild.id.slice(0, 8)} failed`);
+      }
+    });
+
+    socket.on('deployment_updated', () => {
+      api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
+      toast.info('Deployment updated');
     });
 
     return () => {
@@ -71,302 +70,136 @@ export default function ProjectDetails() {
 
   const triggerBuild = async () => {
     try {
+      setIsDeploying(true);
       await api.triggerBuild(id);
       refreshData();
+      return Promise.resolve();
     } catch (error) {
       console.error(error);
+      return Promise.reject(error);
+    } finally {
+      setIsDeploying(false);
     }
   };
 
   const activateBuild = async (buildId: string) => {
     try {
-      await api.activateBuild(buildId);
-      refreshData();
+      toast.promise(api.activateBuild(buildId), {
+        loading: 'Activating build...',
+        success: () => {
+          refreshData();
+          return 'Build activated';
+        },
+        error: 'Failed to activate build',
+      });
     } catch (e) {
       console.error(e);
-      alert('Failed to activate build');
     }
   };
 
-  if (!project) return <div className="p-10 text-center animate-pulse">Loading...</div>;
+  const stopDeployment = async () => {
+    try {
+      toast.promise(
+        (async () => {
+          await api.stopDeployment(id);
+          refreshData();
+          setActiveDeployment(null);
+        })(),
+        {
+          loading: 'Stopping deployment...',
+          success: 'Deployment stopped',
+          error: 'Failed to stop deployment',
+        },
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTabChange = (value: string) => {
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set('tab', value);
+    router.push(`?${newParams.toString()}`);
+  };
+
+  if (!project) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
-    <div className="container mx-auto py-10 px-4 space-y-8 max-w-7xl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b pb-8">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-4xl font-bold tracking-tight">{project.name}</h1>
-            <Badge variant="outline" className="font-mono text-xs">
-              {project.app_type}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground pt-1">
-            <a
-              href={project.github_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+    <div className="min-h-screen bg-background pb-10">
+      <ProjectHeader
+        project={project}
+        activeDeployment={activeDeployment}
+        isDeploying={isDeploying}
+        onTriggerBuild={triggerBuild}
+      />
+
+      <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
+        <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="mb-8 w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+            <TabsTrigger
+              value="overview"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
             >
-              <Github className="w-4 h-4" />
-              {project.github_url.split('/').slice(-2).join('/')}
-            </a>
-            {project.domain && (
-              <a
-                href={`http://${project.domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-                {project.domain}
-              </a>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <Button
-            onClick={triggerBuild}
-            size="default"
-            className="gap-2 shadow-lg hover:shadow-xl transition-all"
-          >
-            <Play className="h-4 w-4" /> Deploy
-          </Button>
-          {activeDeployment && (
-            <Button variant="secondary" asChild className="gap-2">
-              <a
-                href={
-                  project.domain ? `https://${project.domain}` : `http://localhost:${project.port}`
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Visit App <ExternalLink className="h-4 w-4" />
-              </a>
-            </Button>
-          )}
-          <Button variant="outline" size="icon" asChild>
-            <Link href={`/projects/${id}/settings`}>
-              <Settings className="h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      </div>
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="deployments"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+            >
+              Deployments
+            </TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+            >
+              Settings
+            </TabsTrigger>
+          </TabsList>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Active Deployment Card */}
-          <Card className="bg-gradient-to-br from-card to-muted/20 border-primary/10 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div
-                  className={`w-2 h-2 rounded-full justify-between ${
-                    activeDeployment
-                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'
-                      : 'bg-gray-400'
-                  }`}
-                />
-                Production Deployment
-                {activeDeployment && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="h-7 text-xs shadow-sm hover:shadow-md transition-all z-10"
-                    onClick={(e) => {
-                      // Prevent event bubbling if any
-                      e.stopPropagation();
-                      if (!confirm('Are you sure you want to stop this deployment?')) return;
+          <Activity mode={currentTab === 'overview' ? 'visible' : 'hidden'}>
+            <OverviewTab
+              project={project}
+              activeDeployment={activeDeployment}
+              builds={builds}
+              onStopDeployment={stopDeployment}
+              onTriggerBuild={triggerBuild}
+              onActivateBuild={activateBuild}
+            />
+          </Activity>
 
-                      api
-                        .stopDeployment(id)
-                        .then(() => {
-                          // Refresh data immediately
-                          refreshData();
-                          // Also clear local state to give instant feedback
-                          setActiveDeployment(null);
-                        })
-                        .catch((e) => {
-                          console.error(e);
-                          alert('Failed to stop deployment');
-                        });
-                    }}
-                  >
-                    Stop
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activeDeployment ? (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-background/50 rounded-lg border">
-                    <div className="space-y-1">
-                      <div className="text-sm text-muted-foreground">Deployed</div>
-                      <div className="font-medium flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        {new Date(activeDeployment.activated_at).toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-muted-foreground">Source</div>
-                      <div className="font-medium flex items-center gap-2 justify-end">
-                        <GitBranch className="w-4 h-4 text-muted-foreground" />
-                        main
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground space-y-2">
-                  <AlertCircle className="w-8 h-8 opacity-50" />
-                  <p>No active deployment</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <Activity mode={currentTab === 'deployments' ? 'visible' : 'hidden'}>
+            <DeploymentsTab
+              builds={builds}
+              onActivateBuild={activateBuild}
+              activeDeployment={activeDeployment}
+            />
+          </Activity>
 
-          {/* Recent Activity */}
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
-            <div className="space-y-3">
-              {builds.length === 0 ? (
-                <div className="text-center py-12 border border-dashed rounded-lg text-muted-foreground">
-                  No builds yet
-                </div>
-              ) : (
-                builds.map((build) => (
-                  <div
-                    key={build.id}
-                    className="group flex items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/20 transition-all shadow-sm"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`p-2 rounded-full bg-muted/50 ${
-                          build.status === 'success'
-                            ? 'text-green-500'
-                            : build.status === 'failed'
-                              ? 'text-red-500'
-                              : 'text-blue-500 animate-pulse'
-                        }`}
-                      >
-                        {build.status === 'success' ? (
-                          <CheckCircle2 className="w-5 h-5" />
-                        ) : build.status === 'failed' ? (
-                          <AlertCircle className="w-5 h-5" />
-                        ) : (
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">Build #{build.id.slice(0, 8)}</span>
-                          <Badge variant="secondary" className="text-[10px] h-5">
-                            {build.status}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-3">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />{' '}
-                            {new Date(build.created_at).toLocaleTimeString()}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <GitBranch className="w-3 h-3" /> main
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {build.status === 'success' &&
-                        (!activeDeployment || activeDeployment.build_id !== build.id) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={() => activateBuild(build.id)}
-                          >
-                            Promote
-                          </Button>
-                        )}
-                      <Sheet>
-                        <SheetTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 gap-2">
-                            <Terminal className="w-3 h-3" /> Logs
-                          </Button>
-                        </SheetTrigger>
-                        <SheetContent className="sm:max-w-[900px] w-full p-0 gap-0">
-                          <SheetHeader className="p-6 border-b">
-                            <SheetTitle className="font-mono">
-                              Build #{build.id.slice(0, 8)}
-                            </SheetTitle>
-                            <SheetDescription>
-                              {new Date(build.created_at).toLocaleString()}
-                            </SheetDescription>
-                          </SheetHeader>
-                          <div className="flex-1 h-[calc(100vh-100px)]">
-                            <LogViewer buildId={build.id} initialLogs="" />
-                          </div>
-                        </SheetContent>
-                      </Sheet>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar Info */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Project Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Framework</span>
-                <span className="font-medium capitalize">{project.app_type}</span>
-              </div>
-              <div className="space-y-1.5 py-2 border-b border-border/50">
-                <span className="text-muted-foreground block mb-1">Build Command</span>
-                <code className="block w-full bg-muted/50 px-2.5 py-1.5 rounded text-xs font-mono break-all">
-                  {project.build_command}
-                </code>
-              </div>
-              <div className="space-y-1.5 py-2">
-                <span className="text-muted-foreground block mb-1">Root Directory</span>
-                <code className="block w-full bg-muted/50 px-2.5 py-1.5 rounded text-xs font-mono">
-                  {project.root_directory || './'}
-                </code>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="text-xs text-muted-foreground text-center">
-            Project ID: <span className="font-mono">{project.id}</span>
-          </div>
-        </div>
+          <Activity mode={currentTab === 'settings' ? 'visible' : 'hidden'}>
+            <SettingsTab project={project} />
+          </Activity>
+        </Tabs>
       </div>
     </div>
   );
 }
 
-function Loader2({ className }: { className?: string }) {
+export default function ProjectDetails() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      }
     >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
+      <ProjectDetailsContent />
+    </Suspense>
   );
 }

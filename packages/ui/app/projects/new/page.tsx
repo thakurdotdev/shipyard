@@ -15,6 +15,7 @@ import { api } from '@/lib/api';
 import { Check, Eye, EyeOff, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 export default function NewProject() {
   const router = useRouter();
@@ -37,17 +38,20 @@ export default function NewProject() {
   >('idle');
   const [subdomainError, setSubdomainError] = useState('');
 
-  const checkSubdomain = async () => {
-    if (!formData.domain) return;
+  const checkSubdomain = async (): Promise<boolean> => {
+    if (!formData.domain) return true;
     setSubdomainStatus('loading');
     setSubdomainError('');
     try {
       const { available } = await api.checkDomainAvailability(formData.domain);
       setSubdomainStatus(available ? 'available' : 'unavailable');
+      if (!available) setSubdomainError('Domain is already taken');
+      return available;
     } catch (e: any) {
       console.error(e);
       setSubdomainStatus('idle'); // Reset to idle to allow retry
       setSubdomainError(e.message || 'Failed to check');
+      return false;
     }
   };
 
@@ -105,7 +109,33 @@ export default function NewProject() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // Basic validation
+    if (!formData.name.trim()) {
+      toast.error('Project Name is required');
+      setLoading(false);
+      return;
+    }
+    if (!formData.github_url.trim()) {
+      toast.error('GitHub URL is required');
+      setLoading(false);
+      return;
+    }
+    if (!formData.build_command.trim()) {
+      toast.error('Build Command is required');
+      setLoading(false);
+      return;
+    }
+
     try {
+      if (formData?.domain?.trim()) {
+        const isAvailable = await checkSubdomain();
+        if (!isAvailable) {
+          toast.error(subdomainError || 'Domain is unavailable');
+          setLoading(false);
+          return;
+        }
+      }
       const envVarsRecord = envVars.reduce(
         (acc, curr) => {
           if (curr.key) acc[curr.key] = curr.value;
@@ -122,9 +152,11 @@ export default function NewProject() {
       router.push(`/projects/${project.id}`);
     } catch (error) {
       console.error(error);
-      alert('Failed to create project');
+      toast.error('Failed to create project');
     } finally {
-      setLoading(false);
+      if (!formData?.domain?.trim() || subdomainStatus !== 'unavailable') {
+        setLoading(false);
+      }
     }
   };
 
@@ -135,7 +167,7 @@ export default function NewProject() {
         <p className="text-muted-foreground">Deploy your GitHub repository with a few clicks.</p>
       </div>
 
-      <form className="space-y-8">
+      <form className="space-y-8" onSubmit={handleSubmit}>
         <div className="grid gap-8 md:grid-cols-2">
           {/* Project Details */}
           <Card className="h-fit">
@@ -363,10 +395,9 @@ export default function NewProject() {
             Cancel
           </Button>
           <Button
-            type="button"
+            type="submit"
             variant="default"
-            disabled={loading}
-            onClick={(e) => handleSubmit(e)}
+            disabled={loading || subdomainStatus === 'loading' || subdomainStatus === 'unavailable'}
           >
             Create Project
           </Button>

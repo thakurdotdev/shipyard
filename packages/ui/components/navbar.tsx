@@ -25,12 +25,6 @@ export function Navbar() {
 
   const routes = [
     {
-      href: '/',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      active: pathname === '/',
-    },
-    {
       href: '/projects/new',
       label: 'New Project',
       icon: FolderGit2,
@@ -40,7 +34,7 @@ export function Navbar() {
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="container mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/" className="font-bold text-xl flex items-center gap-2">
             <Image src="/logo.png" alt="Logo" width={30} height={30} />
