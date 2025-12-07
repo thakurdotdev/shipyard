@@ -2,6 +2,8 @@
   "name": "@thakur-deploy/control-api",
   "version": "0.0.0",
   "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target=bun",
+    "start": "bun dist/index.js",
     "dev": "bun run --watch src/index.ts",
     "migrate": "bun run src/db/migrate.ts",
     "generate": "drizzle-kit generate:pg",

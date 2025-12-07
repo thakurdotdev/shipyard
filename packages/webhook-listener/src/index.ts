@@ -28,3 +28,5 @@ new Elysia()
     return { ok: true };
   })
   .listen(5050);
+
+console.log('Webhook listener started on port 5050');

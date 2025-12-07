@@ -2,21 +2,21 @@ module.exports = {
   apps: [
     {
       name: 'control-api',
-      script: 'src/index.ts',
+      script: 'dist/index.js',
       cwd: 'packages/control-api',
       interpreter: 'bun',
       env: { NODE_ENV: 'production', PORT: 4000 },
     },
     {
       name: 'build-worker',
-      script: 'src/index.ts',
+      script: 'dist/index.js',
       cwd: 'packages/build-worker',
       interpreter: 'bun',
       env: { NODE_ENV: 'production', PORT: 4001 },
     },
     {
       name: 'deploy-engine',
-      script: 'src/index.ts',
+      script: 'dist/index.js',
       cwd: 'packages/deploy-engine',
       interpreter: 'bun',
       env: {
@@ -34,8 +34,8 @@ module.exports = {
     },
     {
       name: 'webhook-listener',
-      script: 'deploy.ts',
-      cwd: '.',
+      script: 'dist/index.js',
+      cwd: 'packages/webhook-listener',
       interpreter: 'bun',
       env: { NODE_ENV: 'production', PORT: 5050 },
     },

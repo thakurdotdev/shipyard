@@ -7,3 +7,6 @@ builds
 # Deploy Engine Apps (Keep dir, ignore content)
 packages/deploy-engine/apps/*
 !packages/deploy-engine/apps/.gitkeep
+
+dist/
+packages/*/dist/

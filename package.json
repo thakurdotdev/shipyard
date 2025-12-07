@@ -11,7 +11,8 @@
     "migrate": "bun run --filter '@thakur-deploy/control-api' migrate",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build": "bun run --filter '*' build"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

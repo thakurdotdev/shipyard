@@ -1,5 +1,5 @@
 {
-  "name": "@thakur-deploy/deploy-engine",
+  "name": "@thakur-deploy/webhook-listener",
   "version": "0.0.0",
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target=bun",
@@ -8,6 +8,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "elysia": "latest"
+    "elysia": "*"
   }
 }
