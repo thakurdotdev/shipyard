@@ -5,6 +5,10 @@ import { Builder } from './services/builder';
 
 const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
+  retryStrategy(times) {
+    // Wait 5s before retrying if we hit a limit, preventing tight restart loops
+    return Math.min(times * 500, 5000);
+  },
 });
 
 connection.on('connect', () => {
@@ -13,6 +17,22 @@ connection.on('connect', () => {
 
 connection.on('error', (err) => {
   console.error('❌ Redis connection error:', err);
+  if (err.message.includes('max requests limit exceeded')) {
+    console.error('⚠️ Redis limit exceeded. Disconnecting and waiting 30s...');
+    connection.disconnect();
+    setTimeout(() => {
+      console.log('🔄 Reconnecting to Redis...');
+      connection.connect();
+    }, 30000);
+  }
+});
+
+// Prevent crash on unhandled errors to stop restart loops
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 console.log('🚀 Starting Build Worker...');
@@ -35,6 +55,7 @@ const worker = new Worker(
     // Optimize for lower Redis usage
     lockDuration: 300000, // 5 minutes (was 60s)
     stalledInterval: 300000, // Check for stalled jobs every 5 mins
+    drainDelay: 30000, // Check for delayed jobs every 30s (default 5s)
   },
 );
 
