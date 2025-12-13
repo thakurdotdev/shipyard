@@ -90,7 +90,7 @@ export default function ImportPage() {
         build_command: config.buildCommand,
         app_type: config.appType,
         root_directory: config.rootDirectory,
-        domain: config.domain,
+        domain: config.domain ? `${config.domain}.thakur.dev` : '',
         github_repo_id: selectedRepo.id.toString(),
         github_repo_full_name: selectedRepo.full_name,
         github_branch: selectedRepo.default_branch,

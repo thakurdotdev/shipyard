@@ -193,20 +193,83 @@ export const DeployService = {
     appType: 'nextjs' | 'vite',
     projectDir: string,
   ) {
-    const cmd =
-      appType === 'vite'
-        ? ['bun', 'run', 'preview', '--port', String(port)]
-        : ['bun', 'run', 'start', '--', '--port', String(port)];
+    let startCmd: string[];
+    let isStatic = false;
 
-    const proc = Bun.spawn(cmd, {
-      cwd,
-      detached: true,
+    // Detect static Next.js export
+    const staticNextPath = join(cwd, 'out');
+    const isStaticNext = appType === 'nextjs' && existsSync(staticNextPath);
+
+    if (appType === 'vite' || isStaticNext) {
+      isStatic = true;
+
+      const serverScript = join(process.cwd(), 'src', 'static-server.ts');
+      const distDir = join(cwd, isStaticNext ? 'out' : 'dist');
+
+      startCmd = ['bun', 'run', serverScript, distDir, port.toString()];
+    } else {
+      // SSR Next.js
+      const nodeModulesPath = join(cwd, 'node_modules');
+
+      if (!existsSync(nodeModulesPath)) {
+        const installProc = Bun.spawn(['bun', 'install', '--production'], {
+          cwd,
+          stdout: 'inherit',
+          stderr: 'inherit',
+        });
+        await installProc.exited;
+        if (installProc.exitCode !== 0) {
+          throw new Error('Dependency install failed');
+        }
+      }
+
+      startCmd = ['bun', 'run', 'start', '--', '--port', port.toString()];
+    }
+
+    const appProc = Bun.spawn(startCmd, {
+      cwd: appType === 'nextjs' && !isStatic ? cwd : process.cwd(),
       stdout: 'inherit',
       stderr: 'inherit',
-      env: { ...process.env, PORT: String(port) },
+      detached: true,
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        PLATFORM_ENV: 'production',
+        PORT: port.toString(),
+      },
     });
 
-    await Bun.write(join(projectDir, 'server.pid'), String(proc.pid));
-    proc.unref();
+    const pidFile = join(projectDir, 'server.pid');
+    await Bun.write(pidFile, appProc.pid.toString());
+
+    appProc.unref();
+
+    await this.performHealthCheck(port);
+  },
+
+  async performHealthCheck(port: number) {
+    console.log(`[DeployService] Waiting for health check on port ${port}...`);
+
+    const maxWaitMs = 10000; // total wait time
+    const intervalMs = 500;
+    const deadline = Date.now() + maxWaitMs;
+
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(`http://localhost:${port}`);
+        if (res.ok || res.status < 500) {
+          console.log(`[DeployService] Health check passed.`);
+          return;
+        }
+      } catch {
+        // service not up yet
+      }
+
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+
+    throw new Error(
+      `Health check failed: application did not become ready on port ${port} within ${maxWaitMs}ms`,
+    );
   },
 };
