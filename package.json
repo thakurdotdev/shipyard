@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "prepare": "husky",
-    "build": "bun run --filter '*' build"
+    "build": "NODE_ENV=production PLATFORM_ENV=production bun run --filter '*' build"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
