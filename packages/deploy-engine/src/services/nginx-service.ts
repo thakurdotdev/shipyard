@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { unlink, symlink } from 'fs/promises';
+import { unlink } from 'fs/promises';
 import { join } from 'path';
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
@@ -19,6 +19,22 @@ const RESERVED = [
   'dev',
 ];
 
+// Bounded retry helper
+async function retry(fn: () => Promise<void>, retries = 3, delayMs = 300) {
+  let lastErr: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < retries - 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 export const NginxService = {
   isSubdomainAllowed(sub: string) {
     if (!sub) return false;
@@ -31,42 +47,40 @@ export const NginxService = {
 
   generateConfig(sub: string, port: number) {
     return `
-    server {
-        listen 80;
-        server_name ${sub}.${BASE_DOMAIN};
+server {
+    listen 80;
+    server_name ${sub}.${BASE_DOMAIN};
 
-        # Redirect all HTTP to HTTPS
-        return 301 https://$host$request_uri;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${sub}.${BASE_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${BASE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${BASE_DOMAIN}/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://localhost:${port};
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
     }
-
-    server {
-        listen 443 ssl;
-        server_name ${sub}.${BASE_DOMAIN};
-
-        # Wildcard certificate for *.thakur.dev
-        ssl_certificate     /etc/letsencrypt/live/${BASE_DOMAIN}/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/${BASE_DOMAIN}/privkey.pem;
-
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
-
-        location / {
-            proxy_pass http://localhost:${port};
-            proxy_http_version 1.1;
-
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-            proxy_read_timeout 300;
-            proxy_connect_timeout 300;
-            proxy_send_timeout 300;
-        }
-    }
-    `;
+}
+`;
   },
 
   async createConfig(sub: string, port: number) {
@@ -74,16 +88,13 @@ export const NginxService = {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
     }
 
-    const content = this.generateConfig(sub, port);
     const available = join(AVAILABLE_DIR, `${sub}.conf`);
     const enabled = join(ENABLED_DIR, `${sub}.conf`);
 
-    // Write config file
-    await Bun.write(available, content);
+    await Bun.write(available, this.generateConfig(sub, port));
 
-    // Create symlink in sites-enabled
     if (!existsSync(enabled)) {
-      await symlink(available, enabled);
+      await Bun.spawn(['ln', '-sf', available, enabled]).exited;
     }
 
     await this.reload();
@@ -118,21 +129,27 @@ server {
     add_header Content-Type text/plain;
     return 404 "Unknown subdomain. No project deployed.\\n";
 }
-  `;
+`;
 
     const file = join(AVAILABLE_DIR, '00-default.conf');
 
     await Bun.write(file, content);
-
     await this.reload();
   },
 
   async reload() {
-    const proc = Bun.spawn(['sudo', 'systemctl', 'reload', 'nginx']);
-    await proc.exited;
+    await retry(async () => {
+      const test = Bun.spawn(['sudo', 'nginx', '-t']);
+      await test.exited;
+      if (test.exitCode !== 0) {
+        throw new Error('nginx config validation failed');
+      }
 
-    if (proc.exitCode !== 0) {
-      throw new Error('Failed to reload nginx');
-    }
+      const reload = Bun.spawn(['sudo', 'systemctl', 'reload', 'nginx']);
+      await reload.exited;
+      if (reload.exitCode !== 0) {
+        throw new Error('nginx reload failed');
+      }
+    });
   },
 };

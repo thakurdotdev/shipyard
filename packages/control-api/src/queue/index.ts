@@ -6,6 +6,7 @@ export interface BuildJob {
   root_directory: string;
   app_type: 'nextjs' | 'vite';
   env_vars: Record<string, string>;
+  installation_id?: string;
 }
 
 import { Queue } from 'bullmq';

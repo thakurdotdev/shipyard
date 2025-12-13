@@ -45,15 +45,14 @@ export function SettingsTab({ project }: SettingsTabProps) {
 
     setIsDeleting(true);
     try {
-      toast.promise(api.deleteProject(project.id), {
+      const promise = api.deleteProject(project.id);
+      toast.promise(promise, {
         loading: 'Deleting project...',
         success: 'Project deleted successfully',
         error: 'Failed to delete project',
       });
-      // Optimistic navigation or wait? Usually wait is safer but API promise handles it.
-      // We push immediately or wait for promise? toast.promise doesn't block.
-      // Let's await the explicit call if we want to route after.
-      await api.deleteProject(project.id);
+
+      await promise;
       router.push('/');
     } catch (e) {
       console.error(e);

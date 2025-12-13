@@ -4,7 +4,6 @@ import { ProjectService } from '../services/project-service';
 import { JobQueue } from '../queue';
 import { LogService } from '../services/log-service';
 import { WebSocketService } from '../ws';
-import { EnvService } from '../services/env-service';
 import { db } from '../db';
 import { deployments } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -20,17 +19,6 @@ export const buildsRoutes = new Elysia()
         const build = await BuildService.create({
           project_id: id,
           status: 'pending',
-        });
-
-        // Enqueue build job
-        await JobQueue.enqueue({
-          build_id: build.id,
-          project_id: project.id,
-          github_url: project.github_url,
-          build_command: project.build_command,
-          root_directory: project.root_directory || './',
-          app_type: project.app_type as 'nextjs' | 'vite',
-          env_vars: await EnvService.getAsRecord(project.id),
         });
 
         return build;

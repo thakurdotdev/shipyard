@@ -18,6 +18,12 @@ export const projects = pgTable('projects', {
   app_type: varchar('app_type', { length: 50 }).notNull(), // 'nextjs' | 'vite'
   domain: varchar('domain', { length: 255 }).unique(),
   port: integer('port').unique(),
+  github_repo_id: text('github_repo_id'),
+  github_repo_full_name: text('github_repo_full_name'),
+  github_branch: text('github_branch').default('main'),
+  github_installation_id: text('github_installation_id').references(
+    () => githubInstallations.github_installation_id,
+  ),
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -130,4 +136,13 @@ export const verification = pgTable('verification', {
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at'),
   updatedAt: timestamp('updated_at'),
+});
+
+export const githubInstallations = pgTable('github_installations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  github_installation_id: text('github_installation_id').notNull().unique(),
+  account_login: text('account_login').notNull(),
+  account_id: text('account_id').notNull(),
+  account_type: text('account_type').notNull(), // 'User' or 'Organization'
+  created_at: timestamp('created_at').defaultNow().notNull(),
 });

@@ -42,8 +42,32 @@ export const Builder = {
         job.project_id,
         `Starting build for ${job.build_id}\n`,
       );
+
+      let token: string | undefined;
+      // Resolve installation token if installation_id exists
+      if ((job as any).installation_id) {
+        // Cast to any because we updated interface in control-api but strict types might miss here unless we update build-worker interface too.
+        try {
+          const { GitHubService } = await import('./github-service');
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Authenticating with GitHub App...\n',
+          );
+          token = await GitHubService.getInstallationToken((job as any).installation_id);
+        } catch (e: any) {
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            `GitHub Auth Failed: ${e.message}\n`,
+          );
+          // Proceed? No build will fail if private.
+          throw e;
+        }
+      }
+
       await LogStreamer.stream(job.build_id, job.project_id, 'Cloning repository...\n');
-      await GitService.clone(job.github_url, workDir);
+      await GitService.clone(job.github_url, workDir, token);
 
       // 2. Install
       await LogStreamer.stream(job.build_id, job.project_id, 'Installing dependencies...\n');

@@ -1,8 +1,18 @@
 #!/bin/bash
 set -e
 
+# -----------------------------------------------------
+# HARD-ENFORCE PRODUCTION ENV (build + runtime)
+# -----------------------------------------------------
+export NODE_ENV=production
+export PLATFORM_ENV=production
+
 WORKDIR="/opt/platform/deploy-project"
 cd "$WORKDIR"
+
+echo "Deploying commit in PRODUCTION mode"
+echo "NODE_ENV=$NODE_ENV"
+echo "PLATFORM_ENV=$PLATFORM_ENV"
 
 echo "Fetching latest changes..."
 git fetch --all
@@ -34,17 +44,17 @@ else
 fi
 
 # -----------------------------------------------------
-# UI build
+# UI build (Next.js / Vite picks up NODE_ENV automatically)
 # -----------------------------------------------------
 if changed "packages/ui"; then
-  echo "UI changed → rebuilding UI"
-  (cd packages/ui && bun run build)
+  echo "UI changed → rebuilding UI (production)"
+  (cd packages/ui && NODE_ENV=production bun run build)
 else
   echo "UI unchanged → skipping UI build"
 fi
 
 # -----------------------------------------------------
-# Backend builds
+# Backend builds (critical: NODE_ENV present at build time)
 # -----------------------------------------------------
 BACKEND_SERVICES=(
   "packages/control-api"
@@ -55,8 +65,8 @@ BACKEND_SERVICES=(
 
 for dir in "${BACKEND_SERVICES[@]}"; do
   if changed "$dir"; then
-    echo "$dir changed → rebuilding"
-    (cd "$dir" && bun run build)
+    echo "$dir changed → rebuilding (production)"
+    (cd "$dir" && NODE_ENV=production bun run build)
   else
     echo "$dir unchanged → skipping build"
   fi
@@ -87,7 +97,7 @@ if echo "$CHANGED_FILES" | grep -q "^ecosystem.config.js"; then
 fi
 
 # -----------------------------------------------------
-# Apply reloads
+# Apply reloads (env must be refreshed)
 # -----------------------------------------------------
 if [ ${#SERVICES_TO_RELOAD[@]} -eq 0 ]; then
   echo "No services need reload."
@@ -98,4 +108,4 @@ else
   done
 fi
 
-echo "Tada! Deploy complete. 🎉"
+echo "Tada! Deploy complete in PRODUCTION. 🚀"

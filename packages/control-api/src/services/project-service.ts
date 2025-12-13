@@ -20,6 +20,10 @@ export const ProjectService = {
     app_type: 'nextjs' | 'vite';
     domain?: string;
     env_vars?: Record<string, string>;
+    github_repo_id?: string;
+    github_repo_full_name?: string;
+    github_branch?: string;
+    github_installation_id?: string;
   }) {
     // Determine next available port
     const resultMax = await db
@@ -79,6 +83,10 @@ export const ProjectService = {
         root_directory: data.root_directory,
         domain: domain,
         port: nextPort,
+        github_repo_id: data.github_repo_id,
+        github_repo_full_name: data.github_repo_full_name,
+        github_branch: data.github_branch || 'main',
+        github_installation_id: data.github_installation_id,
       })
       .returning();
 

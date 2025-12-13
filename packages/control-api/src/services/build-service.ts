@@ -9,7 +9,33 @@ export const BuildService = {
     status: 'pending' | 'building' | 'success' | 'failed';
   }) {
     const result = await db.insert(builds).values(data).returning();
-    return result[0];
+    const build = result[0];
+
+    // Enqueue build job
+    if (data.status === 'pending') {
+      const { ProjectService } = await import('./project-service');
+      const { EnvService } = await import('./env-service');
+      const { JobQueue } = await import('../queue');
+
+      const project = await ProjectService.getById(data.project_id);
+      if (project) {
+        const envVarsList = await EnvService.getAll(project.id);
+        const envVars = envVarsList.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {});
+
+        await JobQueue.enqueue({
+          build_id: build.id,
+          project_id: project.id,
+          github_url: project.github_url,
+          build_command: project.build_command,
+          root_directory: project.root_directory || './',
+          app_type: project.app_type as 'nextjs' | 'vite',
+          env_vars: envVars,
+          installation_id: project.github_installation_id || undefined,
+        });
+      }
+    }
+
+    return build;
   },
 
   async getByProjectId(projectId: string) {

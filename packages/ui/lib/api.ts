@@ -102,4 +102,21 @@ export const api = {
     }
     return res.json() as Promise<{ available: boolean }>;
   },
+
+  // GitHub Integration
+  async getGithubInstallations() {
+    const res = await fetch(`${API_URL}/github/installations`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to fetch GitHub installations');
+    return res.json();
+  },
+
+  async getGithubRepositories(installationId: number) {
+    const res = await fetch(`${API_URL}/github/installations/${installationId}/repositories`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to fetch repositories');
+    return res.json();
+  },
 };

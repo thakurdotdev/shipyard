@@ -8,10 +8,12 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/tar": "^6.1.13",
     "bullmq": "^5.65.1",
     "elysia": "latest",
     "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.3",
     "simple-git": "^3.22.0",
     "tar": "^7.5.2"
   }

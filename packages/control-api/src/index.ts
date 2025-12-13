@@ -8,6 +8,8 @@ import { deploymentsRoutes } from './routes/deployments';
 import { domainsRoutes } from './routes/domains';
 import { envRoutes } from './routes/env';
 import { projectsRoutes } from './routes/projects';
+import { githubWebhook } from './routes/webhook-handler';
+import { githubRoutes } from './routes/github';
 import { WebSocketService } from './ws';
 
 // 1. Create your Elysia app
@@ -25,6 +27,8 @@ const app = new Elysia()
   .use(envRoutes)
   .use(deploymentsRoutes)
   .use(domainsRoutes)
+  .use(githubWebhook)
+  .use(githubRoutes)
   .mount(auth.handler)
   .get('/', () => 'Hello from Thakur Deploy');
 

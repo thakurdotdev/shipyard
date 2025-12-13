@@ -10,3 +10,5 @@ packages/deploy-engine/apps/*
 
 dist/
 packages/*/dist/
+
+*.pem
