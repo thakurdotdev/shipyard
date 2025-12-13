@@ -31,7 +31,6 @@ module.exports = {
       script: 'bun',
       args: 'run start',
       cwd: 'packages/ui',
-      interpreter: 'bun',
       env: { NODE_ENV: 'production', PORT: 3000 },
     },
     {
