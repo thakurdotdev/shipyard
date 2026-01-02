@@ -7,8 +7,16 @@ import { api } from '@/lib/api';
 import { InstallationSelector, GitInstallation } from '@/components/github/installation-selector';
 import { RepositoryList, GitRepository } from '@/components/github/repository-list';
 import { ProjectConfigForm, ProjectConfig } from '@/components/github/project-config-form';
-import { GitBranch, User, Settings2 } from 'lucide-react';
+import { FolderPicker } from '@/components/github/folder-picker';
+import { GitBranch, User, Settings2, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface SelectedFolder {
+  path: string;
+  name: string;
+  framework: string | null;
+  frameworkInfo: { name: string; icon: string; color: string };
+}
 
 export default function ImportPage() {
   const router = useRouter();
@@ -16,12 +24,14 @@ export default function ImportPage() {
   // State
   const [step, setStep] = useState<'installations' | 'repos' | 'config'>('installations');
   const [loading, setLoading] = useState(true);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
 
   // Data
   const [installations, setInstallations] = useState<GitInstallation[]>([]);
   const [selectedInstallation, setSelectedInstallation] = useState<number | null>(null);
   const [repositories, setRepositories] = useState<GitRepository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<GitRepository | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
 
   // Initial Fetch & URL Handling
   useEffect(() => {
@@ -76,6 +86,12 @@ export default function ImportPage() {
 
   const handleRepoSelect = (repo: GitRepository) => {
     setSelectedRepo(repo);
+    setShowFolderPicker(true); // Show folder picker modal
+  };
+
+  const handleFolderSelect = (folder: SelectedFolder) => {
+    setSelectedFolder(folder);
+    setShowFolderPicker(false);
     setStep('config');
   };
 
@@ -214,9 +230,23 @@ export default function ImportPage() {
             loading={loading}
             onBack={() => setStep('repos')}
             onSubmit={handleDeploy}
+            initialRootDirectory={selectedFolder?.path || './'}
+            initialFramework={selectedFolder?.framework || undefined}
           />
         )}
       </div>
+
+      {/* Folder Picker Modal */}
+      {selectedRepo && selectedInstallation && (
+        <FolderPicker
+          isOpen={showFolderPicker}
+          onClose={() => setShowFolderPicker(false)}
+          onSelect={handleFolderSelect}
+          installationId={selectedInstallation.toString()}
+          owner={selectedRepo.full_name.split('/')[0]}
+          repo={selectedRepo.full_name.split('/')[1]}
+        />
+      )}
     </div>
   );
 }

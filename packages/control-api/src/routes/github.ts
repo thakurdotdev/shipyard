@@ -244,4 +244,181 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
       set.status = 500;
       return { error: e.message || 'Internal Server Error' };
     }
-  });
+  })
+  .get(
+    '/installations/:id/repositories/:owner/:repo/folders',
+    async ({ params, set }) => {
+      try {
+        const { id: installationId, owner, repo } = params;
+        const { detectFramework, getFrameworkDisplayInfo } =
+          await import('../services/framework-detector');
+        const token = await GitHubService.getInstallationToken(installationId);
+
+        // Get root contents
+        const rootRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
+          headers: {
+            Authorization: `token ${token}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+        });
+
+        if (!rootRes.ok) {
+          set.status = 502;
+          return { error: 'Failed to fetch repository contents' };
+        }
+
+        const rootContents = (await rootRes.json()) as Array<{
+          name: string;
+          type: string;
+          path: string;
+        }>;
+
+        // Find all folders with package.json
+        const folders: Array<{
+          path: string;
+          name: string;
+          framework: string | null;
+          frameworkInfo: { name: string; icon: string; color: string };
+          hasPackageJson: boolean;
+        }> = [];
+
+        // Check root for package.json
+        const rootHasPackageJson = rootContents.some((f) => f.name === 'package.json');
+
+        if (rootHasPackageJson) {
+          const pkgRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/contents/package.json`,
+            {
+              headers: {
+                Authorization: `token ${token}`,
+                Accept: 'application/vnd.github.v3.raw+json',
+              },
+            },
+          );
+          const pkgJson = pkgRes.ok ? await pkgRes.json() : null;
+          const rootFiles = rootContents.map((f) => f.name);
+          const detected = detectFramework(rootFiles, pkgJson);
+
+          folders.push({
+            path: './',
+            name: repo,
+            framework: detected.framework,
+            frameworkInfo: getFrameworkDisplayInfo(detected.framework),
+            hasPackageJson: true,
+          });
+        }
+
+        // Check common monorepo directories
+        const monorepoPatterns = ['packages', 'apps', 'services', 'projects'];
+        const dirsToCheck = rootContents.filter(
+          (f) =>
+            f.type === 'dir' &&
+            (monorepoPatterns.includes(f.name) ||
+              !monorepoPatterns.some((p) => f.path.startsWith(p))),
+        );
+
+        for (const dir of dirsToCheck) {
+          // Check if this dir has package.json
+          const dirRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}`,
+            {
+              headers: {
+                Authorization: `token ${token}`,
+                Accept: 'application/vnd.github.v3+json',
+              },
+            },
+          );
+
+          if (!dirRes.ok) continue;
+
+          const dirContents = (await dirRes.json()) as Array<{
+            name: string;
+            type: string;
+          }>;
+          const hasPackageJson = dirContents.some((f) => f.name === 'package.json');
+
+          if (hasPackageJson) {
+            const pkgRes = await fetch(
+              `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}/package.json`,
+              {
+                headers: {
+                  Authorization: `token ${token}`,
+                  Accept: 'application/vnd.github.v3.raw+json',
+                },
+              },
+            );
+            const pkgJson = pkgRes.ok ? await pkgRes.json() : null;
+            const dirFiles = dirContents.map((f) => f.name);
+            const detected = detectFramework(dirFiles, pkgJson);
+
+            folders.push({
+              path: dir.path,
+              name: dir.name,
+              framework: detected.framework,
+              frameworkInfo: getFrameworkDisplayInfo(detected.framework),
+              hasPackageJson: true,
+            });
+          }
+
+          // Check subdirectories for monorepo patterns
+          if (monorepoPatterns.includes(dir.name)) {
+            const subDirs = dirContents.filter((f) => f.type === 'dir');
+            for (const subDir of subDirs) {
+              const subDirRes = await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}/${subDir.name}`,
+                {
+                  headers: {
+                    Authorization: `token ${token}`,
+                    Accept: 'application/vnd.github.v3+json',
+                  },
+                },
+              );
+
+              if (!subDirRes.ok) continue;
+
+              const subDirContents = (await subDirRes.json()) as Array<{
+                name: string;
+              }>;
+              const subHasPackageJson = subDirContents.some((f) => f.name === 'package.json');
+
+              if (subHasPackageJson) {
+                const pkgRes = await fetch(
+                  `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}/${subDir.name}/package.json`,
+                  {
+                    headers: {
+                      Authorization: `token ${token}`,
+                      Accept: 'application/vnd.github.v3.raw+json',
+                    },
+                  },
+                );
+                const pkgJson = pkgRes.ok ? await pkgRes.json() : null;
+                const subFiles = subDirContents.map((f) => f.name);
+                const detected = detectFramework(subFiles, pkgJson);
+
+                folders.push({
+                  path: `${dir.path}/${subDir.name}`,
+                  name: subDir.name,
+                  framework: detected.framework,
+                  frameworkInfo: getFrameworkDisplayInfo(detected.framework),
+                  hasPackageJson: true,
+                });
+              }
+            }
+          }
+        }
+
+        return { folders };
+      } catch (e: any) {
+        console.error('[GitHub] Error fetching folders:', e);
+        set.status = 500;
+        return { error: e.message || 'Failed to fetch repository folders' };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+        owner: t.String(),
+        repo: t.String(),
+      }),
+    },
+  );

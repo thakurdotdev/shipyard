@@ -38,6 +38,8 @@ interface ProjectConfigFormProps {
   loading: boolean;
   onBack: () => void;
   onSubmit: (config: ProjectConfig) => void;
+  initialRootDirectory?: string;
+  initialFramework?: string;
 }
 
 export interface ProjectConfig {
@@ -50,12 +52,20 @@ export interface ProjectConfig {
   autoDeploy: boolean;
 }
 
-export function ProjectConfigForm({ repo, loading, onBack, onSubmit }: ProjectConfigFormProps) {
+export function ProjectConfigForm({
+  repo,
+  loading,
+  onBack,
+  onSubmit,
+  initialRootDirectory = './',
+  initialFramework,
+}: ProjectConfigFormProps) {
   const [name, setName] = useState(repo.name.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
-  const [rootDirectory, setRootDirectory] = useState('./');
+  const [rootDirectory, setRootDirectory] = useState(initialRootDirectory);
   const [domain, setDomain] = useState('');
-  const [appType, setAppType] = useState<AppType>('nextjs');
-  const [buildCommand, setBuildCommand] = useState(getDefaultBuildCommand('nextjs'));
+  const detectedAppType = (initialFramework as AppType) || 'nextjs';
+  const [appType, setAppType] = useState<AppType>(detectedAppType);
+  const [buildCommand, setBuildCommand] = useState(getDefaultBuildCommand(detectedAppType));
   const [autoDeploy, setAutoDeploy] = useState(true);
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
 

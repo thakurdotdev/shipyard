@@ -76,20 +76,62 @@ export const Builder = {
 
       // Handle differently based on framework category
       if (isBackendFramework(job.app_type)) {
-        // Backend apps: Just package source code
-        // Dependencies will be installed at deploy time
-        await LogStreamer.stream(
-          job.build_id,
-          job.project_id,
-          'Backend project detected - skipping build step...\n',
-          'info',
-        );
-        await LogStreamer.stream(
-          job.build_id,
-          job.project_id,
-          'Source code will be packaged and dependencies installed at deploy time.\n',
-          'info',
-        );
+        // Backend apps: Check if build command does real compilation
+        const buildCommand = job.build_command.toLowerCase().trim();
+        const needsBuild = this.needsCompilationStep(buildCommand);
+
+        if (needsBuild) {
+          // TypeScript/compiled backend: Install deps and run build
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'TypeScript backend detected - running build step...\n',
+            'info',
+          );
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Installing dependencies...\n',
+            'info',
+          );
+          await this.runCommand(
+            'bun install',
+            projectDir,
+            job.build_id,
+            job.project_id,
+            job.env_vars,
+          );
+
+          await LogStreamer.stream(job.build_id, job.project_id, 'Building project...\n', 'info');
+          await this.runCommand(
+            job.build_command,
+            projectDir,
+            job.build_id,
+            job.project_id,
+            job.env_vars,
+          );
+
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Build completed successfully!\n',
+            'success',
+          );
+        } else {
+          // Plain JS backend: Just package source code
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Backend project detected - skipping build step...\n',
+            'info',
+          );
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Source code will be packaged and dependencies installed at deploy time.\n',
+            'info',
+          );
+        }
       } else {
         // Frontend apps: Install dependencies and run build command
         await LogStreamer.stream(
@@ -259,5 +301,54 @@ export const Builder = {
     });
 
     return convertedParts.join(' && ');
+  },
+
+  /**
+   * Detects if a build command does real compilation (TypeScript, bundling, etc.)
+   * vs just installing dependencies or no-op commands.
+   */
+  needsCompilationStep(buildCommand: string): boolean {
+    const cmd = buildCommand.toLowerCase().trim();
+
+    // Skip if build command is just dependency installation
+    if (
+      cmd === 'npm install' ||
+      cmd === 'yarn install' ||
+      cmd === 'bun install' ||
+      cmd === 'pnpm install' ||
+      cmd === 'npm ci' ||
+      cmd === ''
+    ) {
+      return false;
+    }
+
+    // Detect common compilation/build tools
+    const compilationPatterns = [
+      'tsc', // TypeScript compiler
+      'esbuild', // esbuild bundler
+      'swc', // SWC compiler
+      'rollup', // Rollup bundler
+      'webpack', // Webpack bundler
+      'parcel', // Parcel bundler
+      'vite build', // Vite build
+      'next build', // Next.js build
+      'tsup', // tsup bundler
+      'unbuild', // unbuild
+      'ncc', // ncc compiler
+    ];
+
+    // Check if build command contains any compilation pattern
+    for (const pattern of compilationPatterns) {
+      if (cmd.includes(pattern)) {
+        return true;
+      }
+    }
+
+    // Check for npm run build / bun run build patterns that likely compile
+    if (/\b(npm|bun|yarn|pnpm)\s+run\s+build\b/.test(cmd)) {
+      return true;
+    }
+
+    return false;
   },
 };
