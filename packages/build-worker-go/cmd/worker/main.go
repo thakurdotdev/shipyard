@@ -5,14 +5,13 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/thakurdotdev/deploy-engine/internal/config"
-	"github.com/thakurdotdev/deploy-engine/internal/server"
+	"github.com/thakurdotdev/build-worker/internal/config"
+	"github.com/thakurdotdev/build-worker/internal/server"
 )
 
 func main() {
-	// Load .env file if exists (ignores error if not found)
+	// Load .env file if exists
 	if err := godotenv.Load(); err != nil {
-		// Try parent directories
 		for _, path := range []string{".env", "../.env", "../../.env"} {
 			if _, statErr := os.Stat(path); statErr == nil {
 				godotenv.Load(path)
@@ -24,10 +23,7 @@ func main() {
 		fmt.Println("📄 Loaded .env file")
 	}
 
-	// Load configuration
 	config.Load()
-
-	// Create and start server
 	srv := server.New()
 	srv.StartWithGracefulShutdown()
 }
