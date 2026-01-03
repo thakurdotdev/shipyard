@@ -4,12 +4,14 @@ node_modules
 workspace
 artifacts
 builds
-# Deploy Engine Apps (Keep dir, ignore content)
-packages/deploy-engine/apps/*
-!packages/deploy-engine/apps/.gitkeep
+
+
+packages/deploy-engine/apps/
+packages/deploy-engine-go/apps/
 
 dist/
 packages/*/dist/
+packages/*/bin/
 
 *.pem
 server.pid
