@@ -330,7 +330,7 @@ func (d *DeployService) ensureDependenciesInstalled(cwd string) error {
 		return nil // Already installed
 	}
 
-	cmd := exec.Command("bun", "install")
+	cmd := exec.Command(config.Get().BunPath, "install")
 	cmd.Dir = cwd
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

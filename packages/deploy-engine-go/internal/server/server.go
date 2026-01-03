@@ -81,8 +81,9 @@ func (s *Server) Start() error {
 		}()
 	}
 
-	s.logger.Info("Deploy Engine starting", "port", cfg.Port, "docker", cfg.UseDocker)
+	s.logger.Info("Deploy Engine starting", "port", cfg.Port, "docker", cfg.UseDocker, "bunPath", cfg.BunPath)
 	fmt.Printf("🚀 Deploy Engine is running at localhost:%d\n", cfg.Port)
+	fmt.Printf("🍞 Bun path: %s\n", cfg.BunPath)
 	if cfg.UseDocker {
 		fmt.Println("🐳 Docker mode enabled")
 	}

@@ -16,19 +16,19 @@ module.exports = {
       max_memory_restart: '256M',
       env: { NODE_ENV: 'production', PORT: 4001 },
     },
-    {
-      name: 'deploy-engine',
-      script: 'src/index.ts',
-      cwd: 'packages/deploy-engine',
-      interpreter: 'bun',
-      max_memory_restart: '256M',
-      env: {
-        NODE_ENV: 'production',
-        PLATFORM_ENV: 'production',
-        PORT: 4002,
-        NGINX_SITES_DIR: '/etc/nginx/platform-sites',
-      },
-    },
+    // {
+    //   name: 'deploy-engine',
+    //   script: 'src/index.ts',
+    //   cwd: 'packages/deploy-engine',
+    //   interpreter: 'bun',
+    //   max_memory_restart: '256M',
+    //   env: {
+    //     NODE_ENV: 'production',
+    //     PLATFORM_ENV: 'production',
+    //     PORT: 4002,
+    //     NGINX_SITES_DIR: '/etc/nginx/platform-sites',
+    //   },
+    // },
     {
       name: 'ui',
       script: 'bun',

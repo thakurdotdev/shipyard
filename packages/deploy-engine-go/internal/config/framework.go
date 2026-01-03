@@ -39,7 +39,8 @@ var Frameworks = map[AppType]FrameworkConfig{
 			return err == nil
 		},
 		StartCommand: func(port int, _ string) []string {
-			return []string{"bun", "run", "start", "--", "--port", strconv.Itoa(port)}
+			bun := Get().BunPath
+			return []string{bun, "run", "start", "--", "--port", strconv.Itoa(port)}
 		},
 	},
 	AppTypeVite: {
@@ -56,7 +57,7 @@ var Frameworks = map[AppType]FrameworkConfig{
 		Category:        "backend",
 		RequiresInstall: true,
 		IsStaticBuild:   func(_ string) bool { return false },
-		StartCommand:    func(_ int, _ string) []string { return []string{"bun", "run", "--bun", "start"} },
+		StartCommand:    func(_ int, _ string) []string { return []string{Get().BunPath, "run", "--bun", "start"} },
 	},
 	AppTypeHono: {
 		ID:              AppTypeHono,
@@ -64,7 +65,7 @@ var Frameworks = map[AppType]FrameworkConfig{
 		Category:        "backend",
 		RequiresInstall: true,
 		IsStaticBuild:   func(_ string) bool { return false },
-		StartCommand:    func(_ int, _ string) []string { return []string{"bun", "run", "--bun", "start"} },
+		StartCommand:    func(_ int, _ string) []string { return []string{Get().BunPath, "run", "--bun", "start"} },
 	},
 	AppTypeElysia: {
 		ID:              AppTypeElysia,
@@ -72,7 +73,7 @@ var Frameworks = map[AppType]FrameworkConfig{
 		Category:        "backend",
 		RequiresInstall: true,
 		IsStaticBuild:   func(_ string) bool { return false },
-		StartCommand:    func(_ int, _ string) []string { return []string{"bun", "run", "--bun", "start"} },
+		StartCommand:    func(_ int, _ string) []string { return []string{Get().BunPath, "run", "--bun", "start"} },
 	},
 }
 
@@ -148,10 +149,11 @@ func DetectEntryFile(cwd string) string {
 }
 
 func GetBackendStartCommand(cwd string) []string {
+	bun := Get().BunPath
 	if entry := DetectEntryFile(cwd); entry != "" {
-		return []string{"bun", "run", entry}
+		return []string{bun, "run", entry}
 	}
-	return []string{"bun", "run", "start"}
+	return []string{bun, "run", "start"}
 }
 
 var entryPattern = regexp.MustCompile(`(?:bun|node|tsx|ts-node|nodemon)\s+(?:run\s+)?(?:watch\s+)?(\S+\.(?:ts|js))`)
