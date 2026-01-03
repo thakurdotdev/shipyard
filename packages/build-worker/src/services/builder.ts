@@ -76,11 +76,12 @@ export const Builder = {
 
       // Handle differently based on framework category
       if (isBackendFramework(job.app_type)) {
-        // Backend apps: Check if build command does real compilation
+        // Backend apps: Check if build command does real compilation AND script exists
         const buildCommand = job.build_command.toLowerCase().trim();
         const needsBuild = this.needsCompilationStep(buildCommand);
+        const hasBuildScript = await this.hasScript(projectDir, 'build');
 
-        if (needsBuild) {
+        if (needsBuild && hasBuildScript) {
           // TypeScript/compiled backend: Install deps and run build
           await LogStreamer.stream(
             job.build_id,
@@ -118,7 +119,7 @@ export const Builder = {
             'success',
           );
         } else {
-          // Plain JS backend: Just package source code
+          // Plain JS/TS backend or no build script: Just package source code
           await LogStreamer.stream(
             job.build_id,
             job.project_id,
@@ -350,5 +351,19 @@ export const Builder = {
     }
 
     return false;
+  },
+
+  /**
+   * Checks if a specific script exists in the project's package.json.
+   */
+  async hasScript(projectDir: string, scriptName: string): Promise<boolean> {
+    try {
+      const pkgPath = join(projectDir, 'package.json');
+      const pkgContent = await Bun.file(pkgPath).text();
+      const pkg = JSON.parse(pkgContent);
+      return !!(pkg.scripts && pkg.scripts[scriptName]);
+    } catch {
+      return false;
+    }
   },
 };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Ansi from 'ansi-to-react';
 import { LogEntry, LogLevel } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getLogLineStyle } from './log-utils';
@@ -25,7 +26,7 @@ export function LogLine({ entry, searchTerm, isCurrentMatch, lineRef }: LogLineP
 
   // Highlight search matches in message
   const highlightedMessage = useMemo(() => {
-    if (!searchTerm) return message;
+    if (!searchTerm) return <Ansi>{message}</Ansi>;
 
     const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const parts = message.split(new RegExp(`(${escapedTerm})`, 'gi'));
@@ -35,7 +36,7 @@ export function LogLine({ entry, searchTerm, isCurrentMatch, lineRef }: LogLineP
           {part}
         </mark>
       ) : (
-        part
+        <Ansi key={i}>{part}</Ansi>
       ),
     );
   }, [message, searchTerm]);
