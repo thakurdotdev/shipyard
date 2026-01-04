@@ -16,27 +16,34 @@ export const DeploymentService = {
     // Fetch and decrypt environment variables for this project
     const envVarsObject = await EnvService.getAsRecord(projectId);
 
-    console.log(
-      `[DeploymentService] STARTING activation for ${project.name} (Build: ${buildId}) on Port: ${project.port}`,
-    );
-    console.log(`[DeploymentService] Passing ${Object.keys(envVarsObject).length} env vars`);
-
-    // Step 1: Create deployment record immediately with 'activating' status
-    console.log(`[DeploymentService] Creating deployment record with status='activating'`);
-
     let deploymentId: string;
     try {
-      const [newDeployment] = await db
-        .insert(deployments)
-        .values({
-          project_id: projectId,
-          build_id: buildId,
-          status: 'activating',
-        })
-        .returning();
+      // Look for existing deployment for this build
+      const existingDeployment = await db.query.deployments.findFirst({
+        where: eq(deployments.build_id, buildId),
+      });
 
-      deploymentId = newDeployment.id;
-      console.log(`[DeploymentService] Created deployment record ${deploymentId}`);
+      if (existingDeployment) {
+        // Update existing deployment to 'activating'
+        await db
+          .update(deployments)
+          .set({ status: 'activating' })
+          .where(eq(deployments.id, existingDeployment.id));
+
+        deploymentId = existingDeployment.id;
+      } else {
+        // Create new deployment record
+        const [newDeployment] = await db
+          .insert(deployments)
+          .values({
+            project_id: projectId,
+            build_id: buildId,
+            status: 'activating',
+          })
+          .returning();
+
+        deploymentId = newDeployment.id;
+      }
 
       // Broadcast deployment status
       const { WebSocketService } = await import('../ws');
@@ -47,16 +54,12 @@ export const DeploymentService = {
         status: 'activating',
       });
     } catch (dbError: any) {
-      console.error(`[DeploymentService] Failed to create deployment record:`, dbError);
-      throw new Error(`Failed to create deployment record: ${dbError.message}`);
+      console.error(`[DeploymentService] Failed to prepare deployment record:`, dbError);
+      throw new Error(`Failed to prepare deployment record: ${dbError.message}`);
     }
 
     // Step 2: Call Deploy Engine
     const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
-    console.log(
-      `[DeploymentService] Requesting activation from deploy-engine for build ${buildId}...`,
-    );
-
     try {
       const res = await fetch(`${deployEngineUrl}/activate`, {
         method: 'POST',
@@ -81,17 +84,9 @@ export const DeploymentService = {
         throw new Error(`Deploy Engine activation failed: ${err}`);
       }
 
-      console.log(
-        `[DeploymentService] Deploy Engine activation successful for build ${buildId}. Updating database...`,
-      );
-
       // Step 3: Update deployment statuses in a transaction
       try {
         await db.transaction(async (tx) => {
-          console.log(
-            `[DeploymentService] Marking existing active deployments as inactive for project ${projectId}`,
-          );
-
           // Mark all current active deployments for this project as inactive
           const deactivated = await tx
             .update(deployments)
@@ -99,24 +94,12 @@ export const DeploymentService = {
             .where(and(eq(deployments.project_id, projectId), eq(deployments.status, 'active')))
             .returning();
 
-          console.log(
-            `[DeploymentService] Deactivated ${deactivated.length} existing deployment(s)`,
-          );
-
-          console.log(`[DeploymentService] Updating deployment ${deploymentId} to status='active'`);
-
           // Update this deployment to active
           await tx
             .update(deployments)
             .set({ status: 'active' })
             .where(eq(deployments.id, deploymentId));
-
-          console.log(`[DeploymentService] Successfully activated deployment ${deploymentId}`);
         });
-
-        console.log(
-          `[DeploymentService] Database transaction completed successfully for build ${buildId}`,
-        );
 
         // Broadcast successful activation
         const { WebSocketService } = await import('../ws');
@@ -160,7 +143,6 @@ export const DeploymentService = {
           .update(deployments)
           .set({ status: 'failed' })
           .where(eq(deployments.id, deploymentId));
-        console.log(`[DeploymentService] Marked deployment ${deploymentId} as failed`);
 
         // Broadcast failure
         const { WebSocketService } = await import('../ws');
@@ -198,9 +180,6 @@ export const DeploymentService = {
 
     // Call Deploy Engine
     const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
-    console.log(
-      `[DeploymentService] Stopping deployment for project ${projectId} on port ${project.port}...`,
-    );
 
     const res = await fetch(`${deployEngineUrl}/stop`, {
       method: 'POST',
