@@ -6,7 +6,7 @@ build:
 
 # Run in development
 run:
-	go run ./cmd/worker
+	go run -gcflags="all=-N -l" ./cmd/worker
 
 # Run with hot reload (requires air)
 dev:

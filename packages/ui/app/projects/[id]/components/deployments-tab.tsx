@@ -80,17 +80,42 @@ export function DeploymentsTab({ builds, onActivateBuild, activeDeployment }: De
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={`
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Build:</span>
+                        <Badge
+                          variant="secondary"
+                          className={`
                                 text-[10px] h-5 capitalize
                                 ${build.status === 'success' ? 'text-green-600 bg-green-500/10' : ''}
                                 ${build.status === 'failed' ? 'text-red-600 bg-red-500/10' : ''}
                                 ${build.status === 'building' || build.status === 'pending' ? 'text-blue-600 bg-blue-500/10' : ''}
                             `}
-                    >
-                      {build.status}
-                    </Badge>
+                        >
+                          {build.status}
+                        </Badge>
+                      </div>
+                      {build.deployment_status && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Deploy:</span>
+                          <Badge
+                            variant="secondary"
+                            className={`
+                                    text-[10px] h-5 capitalize
+                                    ${build.deployment_status === 'active' ? 'text-green-600 bg-green-500/10' : ''}
+                                    ${build.deployment_status === 'failed' ? 'text-red-600 bg-red-500/10' : ''}
+                                    ${build.deployment_status === 'activating' ? 'text-yellow-600 bg-yellow-500/10 animate-pulse' : ''}
+                                    ${build.deployment_status === 'inactive' ? 'text-gray-600 bg-gray-500/10' : ''}
+                                `}
+                          >
+                            {build.deployment_status === 'activating' && (
+                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            )}
+                            {build.deployment_status}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">

@@ -57,9 +57,19 @@ function ProjectDetailsContent() {
       }
     });
 
-    socket.on('deployment_updated', () => {
+    socket.on('deployment_updated', (payload: any) => {
+      // Refresh builds to get updated deployment status (now included via JOIN)
+      api.getBuilds(id).then(setBuilds).catch(console.error);
       api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
-      toast.info('Deployment updated');
+
+      // Show appropriate toast based on deployment status
+      if (payload?.status === 'active') {
+        toast.success('Deployment activated');
+      } else if (payload?.status === 'failed') {
+        toast.error('Deployment failed');
+      } else if (payload?.status === 'activating') {
+        toast.info('Deployment starting...');
+      }
     });
 
     return () => {

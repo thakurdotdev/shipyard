@@ -8,6 +8,9 @@
   "scripts": {
     "test": "bun test",
     "dev": "concurrently -n api,build,deploy,ui -c blue,yellow,magenta,cyan --kill-others \"bun run --filter '@thakur-deploy/control-api' dev\" \"bun run --filter 'ui' dev\"",
+    "dev:go": "concurrently --raw -n api,build-go,deploy-go,ui -c blue,yellow,magenta,cyan --kill-others \"bun run --filter '@thakur-deploy/control-api' dev\" \"bun run build:go\" \"bun run deploy:go\" \"bun run --filter 'ui' dev\" 2>&1 | tee debug.log",
+    "build:go": "make -C packages/build-worker-go run",
+    "deploy:go": "make -C packages/deploy-engine-go run",
     "generate": "bun run --filter '@thakur-deploy/control-api' generate",
     "migrate": "bun run --filter '@thakur-deploy/control-api' migrate",
     "lint": "eslint .",

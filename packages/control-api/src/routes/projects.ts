@@ -102,6 +102,14 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     }
     return deployment;
   })
+  .get('/:id/deployments', async ({ params: { id } }) => {
+    // Get all deployments for this project (for status tracking in UI)
+    const allDeployments = await db.query.deployments.findMany({
+      where: eq(deployments.project_id, id),
+      orderBy: (deployments, { desc }) => [desc(deployments.activated_at)],
+    });
+    return allDeployments;
+  })
   .post('/:id/stop', async ({ params: { id }, set }) => {
     try {
       await DeploymentService.stop(id);

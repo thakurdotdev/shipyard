@@ -69,7 +69,7 @@ export const deployments = pgTable(
     build_id: uuid('build_id')
       .references(() => builds.id)
       .notNull(),
-    status: varchar('status', { length: 50 }).notNull(), // 'active' | 'inactive'
+    status: varchar('status', { length: 50 }).notNull(), // 'activating' | 'active' | 'inactive' | 'failed'
     activated_at: timestamp('activated_at').defaultNow().notNull(),
   },
   (table) => {

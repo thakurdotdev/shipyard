@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { builds } from '../db/schema';
+import { builds, deployments } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { DeploymentService } from './deployment-service';
 import { AppType } from '../config/framework-config';
@@ -172,11 +172,30 @@ export const BuildService = {
   },
 
   async getByProjectId(projectId: string) {
-    return await db
-      .select()
+    // Join builds with their deployments to send everything in one response
+    const buildsWithDeployments = await db
+      .select({
+        // Build fields
+        id: builds.id,
+        project_id: builds.project_id,
+        status: builds.status,
+        commit_sha: builds.commit_sha,
+        commit_message: builds.commit_message,
+        logs: builds.logs,
+        artifact_id: builds.artifact_id,
+        created_at: builds.created_at,
+        completed_at: builds.completed_at,
+        // Deployment fields (will be null if no deployment exists)
+        deployment_id: deployments.id,
+        deployment_status: deployments.status,
+        deployment_activated_at: deployments.activated_at,
+      })
       .from(builds)
+      .leftJoin(deployments, eq(builds.id, deployments.build_id))
       .where(eq(builds.project_id, projectId))
       .orderBy(desc(builds.created_at));
+
+    return buildsWithDeployments;
   },
 
   async getById(id: string) {
@@ -209,14 +228,33 @@ export const BuildService = {
 
     // Auto-activate on successful builds
     if (status === 'success' && updated) {
+      const { LogService } = await import('./log-service');
+
       console.log(
         `[BuildService] Auto-activating successful build ${id} for project ${updated.project_id}`,
       );
+
+      // Log deployment start to build logs
+      await LogService.persist(id, '🚀 Starting deployment activation...\n', 'deploy');
+
       try {
         await DeploymentService.activateBuild(updated.project_id, id);
-        console.log(`[BuildService] Deployment activated successfully`);
-      } catch (e) {
-        console.error(`[BuildService] Auto-activation failed:`, e);
+        console.log(`[BuildService] Deployment activated successfully for build ${id}`);
+
+        // Log success to build logs
+        await LogService.persist(id, '✅ Deployment activated successfully!\n', 'deploy');
+      } catch (e: any) {
+        const errorMsg = e?.message || 'Unknown error';
+        console.error(`[BuildService] Auto-activation failed for build ${id}:`, e);
+
+        // Log error to build logs so users can see it
+        await LogService.persist(
+          id,
+          `❌ Auto-deployment activation failed: ${errorMsg}\nPlease try activating manually.\n`,
+          'error',
+        );
+
+        // Don't re-throw - build was successful, just activation failed
       }
     }
 

@@ -6,7 +6,7 @@ build:
 
 # Run in development
 run:
-	go run ./cmd/engine
+	go run -gcflags="all=-N -l" ./cmd/engine
 
 # Run with hot reload (requires air: go install github.com/air-verse/air@latest)
 dev:
