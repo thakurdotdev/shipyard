@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "test": "bun test",
-    "dev": "concurrently -n api,build,deploy,ui -c blue,yellow,magenta,cyan --kill-others \"bun run --filter '@thakur-deploy/control-api' dev\" \"bun run --filter '@thakur-deploy/build-worker' dev\" \"bun run --filter '@thakur-deploy/deploy-engine' dev\" \"bun run --filter 'ui' dev\"",
+    "dev": "concurrently -n api,build,deploy,ui -c blue,yellow,magenta,cyan --kill-others \"bun run --filter '@thakur-deploy/control-api' dev\" \"bun run --filter 'ui' dev\"",
     "generate": "bun run --filter '@thakur-deploy/control-api' generate",
     "migrate": "bun run --filter '@thakur-deploy/control-api' migrate",
     "lint": "eslint .",
