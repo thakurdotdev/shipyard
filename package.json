@@ -8,6 +8,7 @@
   "scripts": {
     "test": "bun test",
     "dev": "concurrently -n api,build,deploy,ui -c blue,yellow,magenta,cyan --kill-others \"bun run --filter '@thakur-deploy/control-api' dev\" \"bun run --filter 'ui' dev\"",
+    "dev:go": "./scripts/dev.sh",
     "generate": "bun run --filter '@thakur-deploy/control-api' generate",
     "migrate": "bun run --filter '@thakur-deploy/control-api' migrate",
     "lint": "eslint .",

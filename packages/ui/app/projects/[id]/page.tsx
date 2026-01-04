@@ -1,11 +1,11 @@
 'use client';
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useProjectUpdates } from '@/hooks/use-realtime';
 import { api } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { DeploymentsTab } from './components/deployments-tab';
 import { OverviewTab } from './components/overview-tab';
@@ -31,17 +31,14 @@ function ProjectDetailsContent() {
     api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
   };
 
+  // Initial data load
   useEffect(() => {
-    if (!id) return;
     refreshData();
-    const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
+  }, [id]);
 
-    socket.on('connect', () => {
-      console.log('Socket Connected to Project Room');
-      socket.emit('subscribe_project', id);
-    });
-
-    socket.on('build_updated', (updatedBuild: any) => {
+  // Realtime updates via SSE or Socket.IO
+  const handleBuildUpdated = useCallback(
+    (updatedBuild: any) => {
       setBuilds((prev) => {
         const exists = prev.find((b) => b.id === updatedBuild.id);
         if (exists) {
@@ -55,18 +52,19 @@ function ProjectDetailsContent() {
       } else if (updatedBuild.status === 'failed') {
         toast.error(`Build #${updatedBuild.id.slice(0, 8)} failed`);
       }
-    });
+    },
+    [id],
+  );
 
-    socket.on('deployment_updated', () => {
-      api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
-      toast.info('Deployment updated');
-    });
-
-    return () => {
-      socket.emit('unsubscribe_project', id);
-      socket.disconnect();
-    };
+  const handleDeploymentUpdated = useCallback(() => {
+    api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
+    toast.info('Deployment updated');
   }, [id]);
+
+  useProjectUpdates(id, {
+    onBuildUpdated: handleBuildUpdated,
+    onDeploymentUpdated: handleDeploymentUpdated,
+  });
 
   const triggerBuild = async () => {
     try {

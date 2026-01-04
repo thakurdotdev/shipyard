@@ -1,12 +1,12 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { useBuildLogs } from '@/hooks/use-realtime';
 import { api } from '@/lib/api';
 import { LogLevel } from '@/lib/types';
 import { useLogStore } from '@/stores/log-store';
 import { ArrowDownCircle, Loader2 } from 'lucide-react';
 import { UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 
 import { LogActions } from './log-actions';
@@ -32,7 +32,6 @@ export function LogViewer({ buildId }: LogViewerProps) {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<LogLevel>>(new Set());
-  const socketRef = useRef<Socket | null>(null);
 
   // Count errors and warnings
   const { errorCount, warningCount } = useMemo(() => {
@@ -138,21 +137,14 @@ export function LogViewer({ buildId }: LogViewerProps) {
     };
   }, [buildId, setLogs, logEntries.length]);
 
-  // Socket connection
-  useEffect(() => {
-    socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
-    const socket = socketRef.current;
-    socket.on('connect', () => socket.emit('subscribe_build', buildId));
-    socket.on('build_log', (message: { buildId: string; data: string; level?: LogLevel }) => {
-      if (message.buildId === buildId) {
-        appendLog(buildId, message.data, message.level || 'info');
-      }
-    });
-    return () => {
-      socket.emit('unsubscribe_build', buildId);
-      socket.disconnect();
-    };
-  }, [buildId, appendLog]);
+  // Realtime logs via SSE or Socket.IO
+  const handleLog = useCallback(
+    (message: string, level: string) => {
+      appendLog(buildId, message, level as LogLevel);
+    },
+    [buildId, appendLog],
+  );
+  useBuildLogs(buildId, handleLog);
 
   // Auto-scroll effect
   useEffect(() => {
