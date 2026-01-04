@@ -71,7 +71,41 @@ export const ProjectService = {
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, '-')
         .replace(/^-+|-+$/g, '');
-      domain = `${slug}.${baseDomain}`;
+
+      // Generate random suffix for uniqueness (4 chars: letters + numbers)
+      const randomSuffix = Math.random().toString(36).substring(2, 6);
+      const subdomain = `${slug}-${randomSuffix}`;
+      const candidateDomain = `${subdomain}.${baseDomain}`;
+
+      // Verify uniqueness (should virtually always be unique with random suffix)
+      const { CloudflareService } = await import('./cloudflare-service');
+
+      // 1. Check database
+      const existingInDb = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.domain, candidateDomain))
+        .limit(1);
+
+      if (existingInDb.length > 0) {
+        throw new Error(`Domain collision detected: ${candidateDomain} already exists in database`);
+      }
+
+      // 2. Check Cloudflare DNS
+      try {
+        const isAvailableInDns = await CloudflareService.checkSubdomain(subdomain);
+        if (!isAvailableInDns) {
+          throw new Error(`Domain collision detected: ${candidateDomain} already exists in DNS`);
+        }
+      } catch (error: any) {
+        // If it's our own error, re-throw
+        if (error.message.includes('Domain collision')) throw error;
+        // Otherwise, log warning and proceed (Cloudflare check failed, but DB check passed)
+        console.warn(`[ProjectService] Could not verify Cloudflare DNS:`, error.message);
+      }
+
+      domain = candidateDomain;
+      console.log(`[ProjectService] Auto-generated unique domain: ${domain}`);
     }
 
     // Transactional Creation
