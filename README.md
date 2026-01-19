@@ -1,6 +1,6 @@
-# Thakur Deploy
+# ShipYard
 
-Thakur Deploy is a self-hosted PaaS (Platform as a Service) solution built for modern web applications. It allows you to build, deploy, and manage your projects with ease, leveraging a microservices architecture.
+ShipYard is a self-hosted PaaS (Platform as a Service) solution built for modern web applications. It allows you to build, deploy, and manage your projects with ease, leveraging a microservices architecture.
 
 ## Architecture
 
@@ -35,7 +35,3 @@ bun run dev
 ```
 
 This will concurrently start the Control API, Build Worker, Deploy Engine, and UI.
-
-## License
-
-MIT
