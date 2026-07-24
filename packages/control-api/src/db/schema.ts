@@ -181,3 +181,34 @@ export const buildLogs = pgTable(
 
 // Log level type for type safety
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
+
+// Infrastructure services table for standalone Redis/PostgreSQL instances
+export const infrastructureServices = pgTable(
+  'infrastructure_services',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 100 }).notNull(),
+    service_type: varchar('service_type', { length: 20 }).notNull(), // 'redis' | 'postgres'
+    container_id: text('container_id'),
+    container_name: text('container_name').notNull().unique(),
+    host: text('host').notNull(), // Server public IP or hostname
+    port: integer('port').notNull().unique(), // External port (20000-25000 range)
+    credentials: text('credentials').notNull(), // Encrypted JSON: { password, username?, database? }
+    status: varchar('status', { length: 20 }).notNull().default('stopped'), // 'running' | 'stopped' | 'error' | 'starting'
+    version: varchar('version', { length: 20 }), // e.g., '7' for Redis, '16' for Postgres
+    bind_localhost: boolean('bind_localhost').default(false).notNull(), // Security: bind to localhost only
+    created_by: text('created_by').references(() => user.id),
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      serviceTypeIdx: index('infra_service_type_idx').on(table.service_type),
+      statusIdx: index('infra_status_idx').on(table.status),
+    };
+  },
+);
+
+// Service types
+export type ServiceType = 'redis' | 'postgres';
+export type ServiceStatus = 'running' | 'stopped' | 'error' | 'starting';

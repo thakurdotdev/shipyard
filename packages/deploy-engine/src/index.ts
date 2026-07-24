@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { DeployService } from './services/deploy-service';
 import { NginxService } from './services/nginx-service';
 import { DockerService } from './services/docker';
+import { InfraContainers } from './services/infra-containers';
 
 import { isPortAvailable } from './utils/port';
 
@@ -87,6 +88,47 @@ const app = new Elysia()
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
     }
+  })
+  // Infrastructure service endpoints
+  .post('/infra/start', async ({ body }) => {
+    const config = body as any;
+    try {
+      const result = await InfraContainers.startService(config);
+      if (!result.success) {
+        return new Response(result.error || 'Failed to start service', { status: 500 });
+      }
+      return result;
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .post('/infra/stop', async ({ body }) => {
+    const { containerName, removeVolume } = body as {
+      containerName: string;
+      removeVolume?: boolean;
+    };
+    try {
+      const result = await InfraContainers.stopService(containerName, removeVolume);
+      return result;
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .get('/infra/status', async ({ query }) => {
+    const { containerName } = query as { containerName: string };
+    if (!containerName) return new Response('containerName required', { status: 400 });
+    const status = await InfraContainers.getStatus(containerName);
+    return { status };
+  })
+  .get('/infra/logs', async ({ query }) => {
+    const { containerName, tail } = query as { containerName: string; tail?: string };
+    if (!containerName) return new Response('containerName required', { status: 400 });
+    const logs = await InfraContainers.getLogs(containerName, parseInt(tail || '100'));
+    return { logs };
+  })
+  .get('/infra/list', async () => {
+    const containers = await InfraContainers.listAll();
+    return { containers };
   })
   .get('/*', () => {
     return DeployService.serveRequest();

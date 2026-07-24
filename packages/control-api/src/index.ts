@@ -10,6 +10,7 @@ import { envRoutes } from './routes/env';
 import { projectsRoutes } from './routes/projects';
 import { githubWebhook } from './routes/webhook-handler';
 import { githubRoutes } from './routes/github';
+import { infraRoutes } from './routes/infra';
 import { WebSocketService } from './ws';
 import { BuildQueue } from './queue';
 
@@ -69,7 +70,8 @@ const app = new Elysia()
         .use(buildsRoutes)
         .use(envRoutes)
         .use(deploymentsRoutes)
-        .use(domainsRoutes),
+        .use(domainsRoutes)
+        .use(infraRoutes),
   )
   .get('/', () => 'Hello from Thakur Deploy');
 

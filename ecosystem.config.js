@@ -5,7 +5,7 @@ module.exports = {
       script: 'src/index.ts',
       cwd: 'packages/control-api',
       interpreter: 'bun',
-      max_memory_restart: '512M',
+      max_memory_restart: '1G',
       env: { NODE_ENV: 'production', PORT: 4000 },
     },
     {
@@ -13,7 +13,7 @@ module.exports = {
       script: 'src/index.ts',
       cwd: 'packages/build-worker',
       interpreter: 'bun',
-      max_memory_restart: '256M',
+      max_memory_restart: '1G',
       env: { NODE_ENV: 'production', PORT: 4001 },
     },
     {
@@ -21,7 +21,7 @@ module.exports = {
       script: 'src/index.ts',
       cwd: 'packages/deploy-engine',
       interpreter: 'bun',
-      max_memory_restart: '256M',
+      max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
         PLATFORM_ENV: 'production',

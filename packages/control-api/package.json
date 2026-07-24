@@ -14,7 +14,7 @@
     "@sinclair/typebox": "^0.34.41",
     "better-auth": "^1.4.5",
     "bullmq": "^5.66.4",
-    "drizzle-orm": "^0.30.10",
+    "drizzle-orm": "^0.45.1",
     "elysia": "latest",
     "ioredis": "^5.9.1",
     "jsonwebtoken": "^9.0.3",
@@ -24,6 +24,6 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.2.3",
     "@types/jsonwebtoken": "^9.0.10",
-    "drizzle-kit": "^0.20.18"
+    "drizzle-kit": "^0.31.8"
   }
 }

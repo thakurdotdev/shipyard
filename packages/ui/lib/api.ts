@@ -202,4 +202,81 @@ export const api = {
     }
     return res.json();
   },
+
+  // Infrastructure Services
+  async getInfraServices() {
+    const res = await fetch(`${API_URL}/infra/services`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to fetch services' }));
+      throw new Error(error.error || error.message || 'Failed to fetch services');
+    }
+    return res.json();
+  },
+
+  async getInfraService(id: string) {
+    const res = await fetch(`${API_URL}/infra/services/${id}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to fetch service' }));
+      throw new Error(error.error || error.message || 'Failed to fetch service');
+    }
+    return res.json();
+  },
+
+  async createInfraService(data: {
+    name: string;
+    service_type: 'redis' | 'postgres';
+    version?: string;
+    bind_localhost?: boolean;
+  }) {
+    const res = await fetch(`${API_URL}/infra/services`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to create service' }));
+      throw new Error(error.error || error.message || 'Failed to create service');
+    }
+    return res.json();
+  },
+
+  async deleteInfraService(id: string) {
+    const res = await fetch(`${API_URL}/infra/services/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to delete service' }));
+      throw new Error(error.error || error.message || 'Failed to delete service');
+    }
+    return res.json();
+  },
+
+  async restartInfraService(id: string) {
+    const res = await fetch(`${API_URL}/infra/services/${id}/restart`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to restart service' }));
+      throw new Error(error.error || error.message || 'Failed to restart service');
+    }
+    return res.json();
+  },
+
+  async getInfraServiceLogs(id: string, tail: number = 100) {
+    const res = await fetch(`${API_URL}/infra/services/${id}/logs?tail=${tail}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to fetch logs' }));
+      throw new Error(error.error || error.message || 'Failed to fetch logs');
+    }
+    return res.json();
+  },
 };

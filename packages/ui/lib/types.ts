@@ -54,3 +54,30 @@ export interface LogEntry {
   message: string;
   timestamp: string;
 }
+
+// Infrastructure Services
+export type ServiceType = 'redis' | 'postgres';
+export type ServiceStatus = 'running' | 'stopped' | 'error' | 'starting';
+
+export interface InfraService {
+  id: string;
+  name: string;
+  service_type: ServiceType;
+  container_id: string | null;
+  container_name: string;
+  host: string;
+  port: number;
+  status: ServiceStatus;
+  version: string | null;
+  bind_localhost: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Only available when fetching single service
+  credentials?: {
+    password: string;
+    username?: string;
+    database?: string;
+  };
+  connection_url?: string;
+}
