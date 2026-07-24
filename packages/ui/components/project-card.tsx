@@ -1,11 +1,9 @@
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { GitBranch, Github, ExternalLink, Clock, MoreHorizontal } from 'lucide-react';
-import Link from 'next/link';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
+import { Card } from '@/components/ui/card';
 import { getFrameworkOption } from '@/lib/framework-config';
-import { cn } from '@/lib/utils';
 import { Project } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { ExternalLink, GitBranch } from 'lucide-react';
+import Link from 'next/link';
 
 // Framework Icons mapping
 const FrameworkIcon = ({ type, className }: { type: string; className?: string }) => {
@@ -149,7 +147,6 @@ export function ProjectCard({ project }: { project: Project }) {
         {/* Minimal Footer */}
         <div className="px-5 py-3 border-t bg-muted/30 flex items-center justify-between z-10 relative">
           <div className="flex items-center gap-2 hover:text-foreground transition-colors pointer-events-auto text-xs text-muted-foreground">
-            <Github className="h-3.5 w-3.5" />
             <a
               href={project.github_url}
               target="_blank"

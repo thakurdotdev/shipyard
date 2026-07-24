@@ -1,10 +1,9 @@
 'use client';
 
-import { Github, Plus } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Plus } from 'lucide-react';
 
 export interface GitInstallation {
   id: number;
@@ -92,7 +91,6 @@ export function InstallationSelector({
           onClick={onInstall}
           className="flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 hover:bg-zinc-900/40 transition-all duration-200 h-[66px]"
         >
-          <Github className="w-4 h-4" />
           <span className="text-sm font-medium">Connect New</span>
         </button>
       </div>
