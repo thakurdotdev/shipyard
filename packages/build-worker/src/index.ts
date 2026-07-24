@@ -18,6 +18,7 @@ BuildWorker.initialize().catch((err) => {
   process.exit(1);
 });
 
+const PORT = process.env.PORT || 4011;
 // HTTP server for health checks and fallback direct build triggering
 const app = new Elysia()
   .get('/', () => 'Build Worker is running')
@@ -42,11 +43,9 @@ const app = new Elysia()
       return { success: false, error: error.message };
     }
   })
-  .listen(4001);
+  .listen(PORT);
 
 console.log(`👷 Build Worker is running at ${app.server?.hostname}:${app.server?.port}`);
-console.log(`📋 Queue: Listening for jobs from Redis queue`);
-console.log(`🔌 HTTP: Fallback endpoint available at /build`);
 
 const gracefulShutdown = async (signal: string) => {
   console.log(`\nReceived ${signal}, shutting down gracefully...`);

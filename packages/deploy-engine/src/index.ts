@@ -6,6 +6,8 @@ import { InfraContainers } from './services/infra-containers';
 
 import { isPortAvailable } from './utils/port';
 
+const PORT = process.env.PORT || 4012;
+
 const app = new Elysia()
   .post('/ports/check', async ({ body }) => {
     const { port } = body as { port: number };
@@ -133,7 +135,7 @@ const app = new Elysia()
   .get('/*', () => {
     return DeployService.serveRequest();
   })
-  .listen(4002);
+  .listen(PORT);
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
 

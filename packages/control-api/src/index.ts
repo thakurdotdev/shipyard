@@ -149,9 +149,20 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 // 5. Attach Socket.IO to the server
 io.attach(server);
 
-// 7. Listen on port 4000
-server.listen(4000, () => {
-  console.log('Control API + Socket.IO running on port 4000 🚀');
+const PORT = process.env.PORT || 4010;
+
+server.on('error', (err: any) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Control API port ${PORT} is already in use.`);
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+  }
+});
+
+// 7. Listen on port
+server.listen(PORT, () => {
+  console.log(`Control API + Socket.IO running on port ${PORT} 🚀`);
 });
 
 // 8. Graceful shutdown

@@ -5,8 +5,8 @@
     "build": "bun build src/index.ts --outdir dist --target=bun",
     "start": "bun dist/index.js",
     "dev": "bun run --watch src/index.ts",
-    "migrate": "bun run src/db/migrate.ts",
-    "generate": "drizzle-kit generate:pg",
+    "migrate": "bunx drizzle-kit migrate",
+    "generate": "bunx drizzle-kit generate",
     "test": "bun test"
   },
   "dependencies": {
@@ -24,6 +24,6 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.2.3",
     "@types/jsonwebtoken": "^9.0.10",
-    "drizzle-kit": "^0.31.8"
+    "drizzle-kit": "^0.31.10"
   }
 }
