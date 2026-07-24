@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, Github, Play, Loader2, ExternalLink } from 'lucide-react';
+import { ChevronRight, Play, Loader2, ExternalLink } from 'lucide-react';
+import { Github } from '@/components/icons';
 import { toast } from 'sonner';
 
 interface ProjectHeaderProps {

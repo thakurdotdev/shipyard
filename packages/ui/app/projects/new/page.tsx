@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Github, Globe, ArrowLeft } from 'lucide-react';
+import { Globe, ArrowLeft } from 'lucide-react';
+import { Github } from '@/components/icons';
 import { ManualProjectForm } from '@/components/manual-project-form';
 
 export default function NewProject() {
