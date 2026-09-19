@@ -4,6 +4,8 @@ import { deployments, projects } from '../db/schema';
 import type { DeploymentStatus } from '../db/schema';
 import { EnvService } from './env-service';
 import { DomainService } from './domain-service';
+import { LogService } from './log-service';
+import { WebSocketService } from '../ws';
 
 const IS_PLATFORM_PROD =
   process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
@@ -42,7 +44,7 @@ export const DeploymentService = {
         deploymentId = existingDeployment.id;
       } else {
         // Create new deployment record
-        const [newDeployment] = await db
+        const [deployment] = await db
           .insert(deployments)
           .values({
             project_id: projectId,
@@ -52,10 +54,10 @@ export const DeploymentService = {
           })
           .returning();
 
-        deploymentId = newDeployment.id;
+        deploymentId = deployment.id;
       }
 
-      // Broadcast initial status
+      // Broadcast initial pending state
       await this.broadcastStatus(
         projectId,
         deploymentId,
@@ -102,7 +104,12 @@ export const DeploymentService = {
                 step as DeploymentStatus,
                 message,
               );
+              // Pipe to build log stream for real-time UI visibility
+              const logMsg = `🌐 ${message}\n`;
+              await LogService.persist(buildId, logMsg, 'deploy');
+              WebSocketService.broadcast(buildId, logMsg, 'deploy');
             },
+            buildId,
           );
 
           if (!result.success) {
@@ -118,6 +125,9 @@ export const DeploymentService = {
               'failed',
               result.error || 'Domain provisioning failed',
             );
+            const failMsg = `❌ Domain provisioning failed: ${result.error || 'Unknown error'}\n`;
+            await LogService.persist(buildId, failMsg, 'error');
+            WebSocketService.broadcast(buildId, failMsg, 'error');
 
             // Store which step failed for retry
             await db
@@ -127,6 +137,10 @@ export const DeploymentService = {
 
             throw new Error(result.error || 'Domain provisioning failed');
           }
+
+          const successMsg = `✅ Domain and SSL provisioned: https://${result.fullDomain}\n`;
+          await LogService.persist(buildId, successMsg, 'success');
+          WebSocketService.broadcast(buildId, successMsg, 'success');
         } catch (error: any) {
           if (
             error.message.includes('Domain provisioning failed') ||
@@ -149,6 +163,9 @@ export const DeploymentService = {
             'failed',
             `Domain provisioning error: ${error.message}`,
           );
+          const errMsg = `❌ Domain provisioning error: ${error.message}\n`;
+          await LogService.persist(buildId, errMsg, 'error');
+          WebSocketService.broadcast(buildId, errMsg, 'error');
           throw error;
         }
       } else {
@@ -165,6 +182,9 @@ export const DeploymentService = {
           'nginx_configured',
           'Domain already provisioned',
         );
+        const logMsg = `🌐 Domain already provisioned (${project.domain})\n`;
+        await LogService.persist(buildId, logMsg, 'info');
+        WebSocketService.broadcast(buildId, logMsg, 'info');
       }
     }
 
@@ -179,6 +199,9 @@ export const DeploymentService = {
       'app_starting',
       'Starting application...',
     );
+    const startingMsg = `🚀 Starting application process...\n`;
+    await LogService.persist(buildId, startingMsg, 'deploy');
+    WebSocketService.broadcast(buildId, startingMsg, 'deploy');
 
     const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
     try {

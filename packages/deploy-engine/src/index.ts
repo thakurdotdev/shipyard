@@ -135,10 +135,10 @@ const app = new Elysia()
   })
   // SSL certificate management endpoints
   .post('/ssl/issue', async ({ body }) => {
-    const { domain } = body as { domain: string };
+    const { domain, buildId } = body as { domain: string; buildId?: string };
     if (!domain) return new Response('domain required', { status: 400 });
     try {
-      const result = await SSLService.issueCertificate(domain);
+      const result = await SSLService.issueCertificate(domain, buildId);
       if (!result.success) {
         return new Response(JSON.stringify({ error: result.error }), {
           status: 500,

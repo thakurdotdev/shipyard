@@ -157,30 +157,33 @@ export const BuildService = {
     // Auto-activate on successful builds
     if (status === 'success' && updated) {
       const { LogService } = await import('./log-service');
+      const { WebSocketService } = await import('../ws');
 
       console.log(
         `[BuildService] Auto-activating successful build ${id} for project ${updated.project_id}`,
       );
 
       // Log deployment start to build logs
-      await LogService.persist(id, '🚀 Starting deployment activation...\n', 'deploy');
+      const startMsg = '🚀 Starting deployment activation...\n';
+      await LogService.persist(id, startMsg, 'deploy');
+      WebSocketService.broadcast(id, startMsg, 'deploy');
 
       try {
         await DeploymentService.activateBuild(updated.project_id, id);
         console.log(`[BuildService] Deployment activated successfully for build ${id}`);
 
         // Log success to build logs
-        await LogService.persist(id, '✅ Deployment activated successfully!\n', 'deploy');
+        const successMsg = '✅ Deployment activated successfully!\n';
+        await LogService.persist(id, successMsg, 'deploy');
+        WebSocketService.broadcast(id, successMsg, 'deploy');
       } catch (e: any) {
         const errorMsg = e?.message || 'Unknown error';
         console.error(`[BuildService] Auto-activation failed for build ${id}:`, e);
 
         // Log error to build logs so users can see it
-        await LogService.persist(
-          id,
-          `❌ Auto-deployment activation failed: ${errorMsg}\nPlease try activating manually.\n`,
-          'error',
-        );
+        const failMsg = `❌ Auto-deployment activation failed: ${errorMsg}\nPlease try activating manually.\n`;
+        await LogService.persist(id, failMsg, 'error');
+        WebSocketService.broadcast(id, failMsg, 'error');
 
         // Don't re-throw - build was successful, just activation failed
       }

@@ -2,8 +2,8 @@ import { Elysia, t } from 'elysia';
 import { CloudflareService } from '../services/cloudflare-service';
 import { DomainService } from '../services/domain-service';
 import { db } from '../db';
-import { projects } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { projects, builds, deployments } from '../db/schema';
+import { eq, and, desc } from 'drizzle-orm';
 
 export const domainsRoutes = new Elysia({ prefix: '/domains' })
   .get(
@@ -167,6 +167,28 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
       if (!result.success) {
         set.status = 500;
         return { error: result.error, failedAtStep: result.failedAtStep };
+      }
+
+      // If domain provisioning succeeded, auto-activate the latest successful build if deployment was stuck or failed
+      const latestSuccessBuild = await db.query.builds.findFirst({
+        where: and(eq(builds.project_id, projectId), eq(builds.status, 'success')),
+        orderBy: [desc(builds.created_at)],
+      });
+
+      if (latestSuccessBuild) {
+        const activeDeployment = await db.query.deployments.findFirst({
+          where: and(eq(deployments.project_id, projectId), eq(deployments.status, 'active')),
+        });
+
+        if (!activeDeployment) {
+          const { DeploymentService } = await import('../services/deployment-service');
+          console.log(
+            `[DomainRetry] Domain provision retry succeeded. Automatically activating latest successful build ${latestSuccessBuild.id}`,
+          );
+          DeploymentService.activateBuild(projectId, latestSuccessBuild.id).catch((e) => {
+            console.error(`[DomainRetry] Auto-activation after domain retry failed:`, e);
+          });
+        }
       }
 
       return {

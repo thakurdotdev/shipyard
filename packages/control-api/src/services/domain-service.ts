@@ -32,6 +32,7 @@ export const DomainService = {
     subdomain: string,
     port: number,
     onStatus?: (step: string, message: string) => Promise<void>,
+    buildId?: string,
   ): Promise<{
     success: boolean;
     provisionId?: string;
@@ -171,7 +172,7 @@ export const DomainService = {
         const sslRes = await fetch(`${DEPLOY_ENGINE_URL}/ssl/issue`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain: fullDomain }),
+          body: JSON.stringify({ domain: fullDomain, buildId }),
         });
 
         if (!sslRes.ok) {

@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { LogService } from './log-service';
 
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
 const CERTBOT_EMAIL = process.env.CERTBOT_EMAIL || 'admin@thakur.dev';
@@ -19,14 +20,21 @@ export const SSLService = {
    * Issue a Let's Encrypt SSL certificate for a domain using certbot webroot method.
    * Requires nginx to be running and serving /.well-known/acme-challenge/ from CERTBOT_WEBROOT.
    */
-  async issueCertificate(domain: string): Promise<SSLResult> {
+  async issueCertificate(domain: string, buildId?: string): Promise<SSLResult> {
     console.log(`[SSLService] Issuing certificate for ${domain}`);
 
     // Check if cert already exists
     const existing = await this.checkCertificate(domain);
     if (existing.success && existing.certPath) {
       console.log(`[SSLService] Certificate already exists for ${domain}`);
+      if (buildId) {
+        await LogService.success(buildId, `Existing SSL certificate found for ${domain}`);
+      }
       return existing;
+    }
+
+    if (buildId) {
+      await LogService.step(buildId, `Requesting Let's Encrypt SSL certificate for ${domain}`);
     }
 
     // Ensure webroot directory exists and is readable by Nginx
@@ -57,6 +65,9 @@ export const SSLService = {
       ];
 
       console.log(`[SSLService] Running: ${args.join(' ')}`);
+      if (buildId) {
+        await LogService.detail(buildId, `Running certbot HTTP-01 webroot challenge...`);
+      }
 
       const proc = Bun.spawn(args, {
         stdout: 'pipe',
@@ -75,9 +86,13 @@ export const SSLService = {
         console.error(`[SSLService] certbot failed (exit ${proc.exitCode})`);
         console.error(`[SSLService] stdout: ${stdout}`);
         console.error(`[SSLService] stderr: ${stderr}`);
+        const errMsg = `certbot failed: ${stderr || stdout}`.slice(0, 500);
+        if (buildId) {
+          await LogService.error(buildId, `Certbot failed: ${(stderr || stdout).trim()}`);
+        }
         return {
           success: false,
-          error: `certbot failed: ${stderr || stdout}`.slice(0, 500),
+          error: errMsg,
         };
       }
 
@@ -85,7 +100,7 @@ export const SSLService = {
       console.log(`[SSLService] stdout: ${stdout}`);
 
       // Ensure Nginx worker processes (www-data) can read certificates and keys
-      const chmodProc = Bun.spawn([
+      const chownProc = Bun.spawn([
         'sudo',
         'chmod',
         '-R',
@@ -93,12 +108,20 @@ export const SSLService = {
         '/etc/letsencrypt/live',
         '/etc/letsencrypt/archive',
       ]);
-      await chmodProc.exited;
+      await chownProc.exited;
+
+      if (buildId) {
+        await LogService.detail(buildId, `Certificate saved at /etc/letsencrypt/live/${domain}/`);
+        await LogService.success(buildId, `SSL certificate successfully installed for ${domain}`);
+      }
 
       // Verify cert was created
       return await this.checkCertificate(domain);
     } catch (error: any) {
       console.error(`[SSLService] Error issuing certificate:`, error);
+      if (buildId) {
+        await LogService.error(buildId, `SSL issuance error: ${error.message}`);
+      }
       return {
         success: false,
         error: error.message,
