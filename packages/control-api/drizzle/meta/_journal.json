@@ -8,6 +8,13 @@
       "when": 1784895625012,
       "tag": "0000_gigantic_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789801905569,
+      "tag": "0001_powerful_jackpot",
+      "breakpoints": true
     }
   ]
 }

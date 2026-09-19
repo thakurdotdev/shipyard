@@ -23,12 +23,15 @@ function ProjectDetailsContent() {
   const [builds, setBuilds] = useState<any[]>([]);
   const [activeDeployment, setActiveDeployment] = useState<any>(null);
   const [isDeploying, setIsDeploying] = useState(false);
+  const [domainProvision, setDomainProvision] = useState<any>(null);
+  const [deploymentStatus, setDeploymentStatus] = useState<any>(null);
 
   const refreshData = () => {
     if (!id) return;
     api.getProject(id).then(setProject).catch(console.error);
     api.getBuilds(id).then(setBuilds).catch(console.error);
     api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
+    api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
   };
 
   useEffect(() => {
@@ -58,6 +61,9 @@ function ProjectDetailsContent() {
     });
 
     socket.on('deployment_updated', (payload: any) => {
+      // Track real-time deployment status for pipeline visualization
+      setDeploymentStatus(payload);
+
       // Refresh builds to get updated deployment status (now included via JOIN)
       api.getBuilds(id).then(setBuilds).catch(console.error);
       api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
@@ -65,11 +71,24 @@ function ProjectDetailsContent() {
       // Show appropriate toast based on deployment status
       if (payload?.status === 'active') {
         toast.success('Deployment activated');
+        setDeploymentStatus(null); // Clear pipeline once active
+        // Refresh domain status too
+        api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
       } else if (payload?.status === 'failed') {
-        toast.error('Deployment failed');
-      } else if (payload?.status === 'activating') {
-        toast.info('Deployment starting...');
+        toast.error(payload?.status_message || 'Deployment failed');
+      } else if (payload?.status === 'dns_creating') {
+        toast.info('Setting up DNS...');
+      } else if (payload?.status === 'ssl_issuing') {
+        toast.info('Issuing SSL certificate...');
+      } else if (payload?.status === 'app_starting') {
+        toast.info('Starting application...');
       }
+    });
+
+    socket.on('domain_status', (payload: any) => {
+      // Update domain provision status in real-time
+      console.log('Domain status update:', payload);
+      api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
     });
 
     return () => {
@@ -181,6 +200,9 @@ function ProjectDetailsContent() {
               onStopDeployment={stopDeployment}
               onTriggerBuild={triggerBuild}
               onActivateBuild={activateBuild}
+              domainProvision={domainProvision}
+              deploymentStatus={deploymentStatus}
+              onRefreshDomain={refreshData}
             />
           </div>
 
@@ -189,6 +211,7 @@ function ProjectDetailsContent() {
               builds={builds}
               onActivateBuild={activateBuild}
               activeDeployment={activeDeployment}
+              deploymentStatus={deploymentStatus}
             />
           </div>
 

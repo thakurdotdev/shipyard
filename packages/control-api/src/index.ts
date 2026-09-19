@@ -14,6 +14,16 @@ import { infraRoutes } from './routes/infra';
 import { WebSocketService } from './ws';
 import { BuildQueue } from './queue';
 
+const publicRoutes = new Elysia().use(githubWebhook).use(githubRoutes).use(internalBuildRoutes);
+
+const protectedRoutes = new Elysia()
+  .use(projectsRoutes)
+  .use(buildsRoutes)
+  .use(envRoutes)
+  .use(deploymentsRoutes)
+  .use(domainsRoutes)
+  .use(infraRoutes);
+
 // 1. Create your Elysia app
 const app = new Elysia()
   .onError(({ code, error, set }) => {
@@ -48,10 +58,9 @@ const app = new Elysia()
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     }),
   )
-  .use(githubWebhook)
-  .use(githubRoutes)
-  .use(internalBuildRoutes)
   .mount(auth.handler)
+  .use(publicRoutes)
+  .group('/api', (app) => app.use(publicRoutes))
   .guard(
     {
       async beforeHandle({ request, set }) {
@@ -64,16 +73,10 @@ const app = new Elysia()
         }
       },
     },
-    (app) =>
-      app
-        .use(projectsRoutes)
-        .use(buildsRoutes)
-        .use(envRoutes)
-        .use(deploymentsRoutes)
-        .use(domainsRoutes)
-        .use(infraRoutes),
+    (app) => app.use(protectedRoutes).group('/api', (app) => app.use(protectedRoutes)),
   )
-  .get('/', () => 'Hello from Thakur Deploy');
+  .get('/', () => 'Hello from Thakur Deploy')
+  .get('/api', () => 'Hello from Thakur Deploy');
 
 // 2. Create Socket.IO server
 const io = new IOServer({
@@ -100,7 +103,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   try {
-    const protocol = 'http';
+    const protocol = (req.headers['x-forwarded-proto'] as string) || 'http';
     const host = req.headers.host || 'localhost';
     const url = new URL(req.url || '', `${protocol}://${host}`);
 

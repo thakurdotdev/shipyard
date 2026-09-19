@@ -41,4 +41,8 @@ export const WebSocketService = {
   broadcastDeploymentUpdate(projectId: string, payload: any) {
     io?.to(`project:${projectId}`).emit('deployment_updated', payload);
   },
+
+  broadcastDomainStatus(projectId: string, payload: any) {
+    io?.to(`project:${projectId}`).emit('domain_status', payload);
+  },
 };

@@ -21,14 +21,21 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { LogViewer } from '@/components/log-viewer/log-viewer';
+import { DeploymentPipeline } from './deployment-pipeline';
 
 interface DeploymentsTabProps {
   builds: any[];
   onActivateBuild: (buildId: string) => Promise<void> | void;
   activeDeployment?: any;
+  deploymentStatus?: any;
 }
 
-export function DeploymentsTab({ builds, onActivateBuild, activeDeployment }: DeploymentsTabProps) {
+export function DeploymentsTab({
+  builds,
+  onActivateBuild,
+  activeDeployment,
+  deploymentStatus,
+}: DeploymentsTabProps) {
   const [deployingBuildId, setDeployingBuildId] = useState<string | null>(null);
 
   const handleDeploy = async (buildId: string) => {
@@ -39,6 +46,41 @@ export function DeploymentsTab({ builds, onActivateBuild, activeDeployment }: De
     } finally {
       setDeployingBuildId(null);
     }
+  };
+
+  // Helper to check if a status is a pipeline in-progress status
+  const isPipelineStatus = (status: string) => {
+    return [
+      'dns_creating',
+      'dns_created',
+      'ssl_issuing',
+      'ssl_issued',
+      'nginx_configuring',
+      'nginx_configured',
+      'app_starting',
+      'health_checking',
+      'pending',
+    ].includes(status);
+  };
+
+  // Get display label for deployment status
+  const getDeployStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: 'Pending',
+      dns_creating: 'DNS Setup',
+      dns_created: 'DNS Ready',
+      ssl_issuing: 'SSL Issuing',
+      ssl_issued: 'SSL Ready',
+      nginx_configuring: 'Configuring',
+      nginx_configured: 'Configured',
+      app_starting: 'Starting',
+      health_checking: 'Health Check',
+      active: 'Active',
+      inactive: 'Inactive',
+      failed: 'Failed',
+      activating: 'Activating',
+    };
+    return labels[status] || status;
   };
 
   if (!builds || builds.length === 0) {
@@ -104,14 +146,16 @@ export function DeploymentsTab({ builds, onActivateBuild, activeDeployment }: De
                                     text-[10px] h-5 capitalize
                                     ${build.deployment_status === 'active' ? 'text-green-600 bg-green-500/10' : ''}
                                     ${build.deployment_status === 'failed' ? 'text-red-600 bg-red-500/10' : ''}
+                                    ${isPipelineStatus(build.deployment_status) ? 'text-blue-600 bg-blue-500/10 animate-pulse' : ''}
                                     ${build.deployment_status === 'activating' ? 'text-yellow-600 bg-yellow-500/10 animate-pulse' : ''}
                                     ${build.deployment_status === 'inactive' ? 'text-gray-600 bg-gray-500/10' : ''}
                                 `}
                           >
-                            {build.deployment_status === 'activating' && (
+                            {(isPipelineStatus(build.deployment_status) ||
+                              build.deployment_status === 'activating') && (
                               <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                             )}
-                            {build.deployment_status}
+                            {getDeployStatusLabel(build.deployment_status)}
                           </Badge>
                         </div>
                       )}

@@ -69,7 +69,9 @@ export const deployments = pgTable(
     build_id: uuid('build_id')
       .references(() => builds.id)
       .notNull(),
-    status: varchar('status', { length: 50 }).notNull(), // 'activating' | 'active' | 'inactive' | 'failed'
+    status: varchar('status', { length: 50 }).notNull(), // DeploymentStatus
+    status_message: text('status_message'), // Human-readable detail (e.g. "Creating DNS A record...")
+    failed_at_step: varchar('failed_at_step', { length: 50 }), // Which step failed, for retry logic
     activated_at: timestamp('activated_at').defaultNow().notNull(),
   },
   (table) => {
@@ -182,6 +184,38 @@ export const buildLogs = pgTable(
 // Log level type for type safety
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
+// Domain provisions table — tracks DNS/SSL lifecycle per project
+export const domainProvisions = pgTable(
+  'domain_provisions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    project_id: uuid('project_id')
+      .references(() => projects.id)
+      .notNull(),
+    subdomain: varchar('subdomain', { length: 255 }).notNull(),
+    full_domain: varchar('full_domain', { length: 255 }).notNull().unique(),
+    dns_record_id: text('dns_record_id'), // Cloudflare DNS record ID
+    dns_status: varchar('dns_status', { length: 20 }).notNull().default('pending'), // DomainDnsStatus
+    ssl_status: varchar('ssl_status', { length: 20 }).notNull().default('pending'), // DomainSslStatus
+    ssl_cert_path: text('ssl_cert_path'),
+    ssl_expiry: timestamp('ssl_expiry'),
+    server_ip: text('server_ip').notNull(),
+    error_message: text('error_message'), // Last error for retry UX
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      projectIdIdx: index('domain_provisions_project_id_idx').on(table.project_id),
+      domainIdx: index('domain_provisions_domain_idx').on(table.full_domain),
+    };
+  },
+);
+
+// Domain provision status types
+export type DomainDnsStatus = 'pending' | 'creating' | 'created' | 'proxied' | 'failed' | 'deleted';
+export type DomainSslStatus = 'pending' | 'issuing' | 'issued' | 'failed';
+
 // Infrastructure services table for standalone Redis/PostgreSQL instances
 export const infrastructureServices = pgTable(
   'infrastructure_services',
@@ -212,3 +246,18 @@ export const infrastructureServices = pgTable(
 // Service types
 export type ServiceType = 'redis' | 'postgres';
 export type ServiceStatus = 'running' | 'stopped' | 'error' | 'starting';
+
+// Deployment status — granular pipeline stages
+export type DeploymentStatus =
+  | 'pending'
+  | 'dns_creating'
+  | 'dns_created'
+  | 'ssl_issuing'
+  | 'ssl_issued'
+  | 'nginx_configuring'
+  | 'nginx_configured'
+  | 'app_starting'
+  | 'health_checking'
+  | 'active'
+  | 'inactive'
+  | 'failed';

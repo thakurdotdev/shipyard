@@ -213,8 +213,23 @@ export const ProjectService = {
       // Continue with DB deletion even if cleanup fails
     }
 
+    // 2.5. Deprovision domain (DNS + SSL cleanup)
+    try {
+      const { DomainService } = await import('./domain-service');
+      await DomainService.deprovision(id);
+      console.log(`[ProjectService] Domain deprovisioned.`);
+    } catch (e) {
+      console.error('[ProjectService] Failed to deprovision domain', e);
+      // Continue with DB deletion even if domain cleanup fails
+    }
+
     // 3. Cascade delete in DB
     console.log(`[ProjectService] Starting DB deletion...`);
+
+    // Delete domain provisions
+    const { domainProvisions } = await import('../db/schema');
+    await db.delete(domainProvisions).where(eq(domainProvisions.project_id, id));
+    console.log(`[ProjectService] Deleted domain provisions.`);
 
     // Delete env vars
     await db.delete(environmentVariables).where(eq(environmentVariables.project_id, id));

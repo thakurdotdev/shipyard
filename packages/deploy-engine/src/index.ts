@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { DeployService } from './services/deploy-service';
 import { NginxService } from './services/nginx-service';
+import { SSLService } from './services/ssl-service';
 import { DockerService } from './services/docker';
 import { InfraContainers } from './services/infra-containers';
 
@@ -132,19 +133,76 @@ const app = new Elysia()
     const containers = await InfraContainers.listAll();
     return { containers };
   })
+  // SSL certificate management endpoints
+  .post('/ssl/issue', async ({ body }) => {
+    const { domain } = body as { domain: string };
+    if (!domain) return new Response('domain required', { status: 400 });
+    try {
+      const result = await SSLService.issueCertificate(domain);
+      if (!result.success) {
+        return new Response(JSON.stringify({ error: result.error }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return result;
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .get('/ssl/status', async ({ query }) => {
+    const { domain } = query as { domain: string };
+    if (!domain) return new Response('domain required', { status: 400 });
+    const result = await SSLService.checkCertificate(domain);
+    return result;
+  })
+  .post('/ssl/revoke', async ({ body }) => {
+    const { domain } = body as { domain: string };
+    if (!domain) return new Response('domain required', { status: 400 });
+    try {
+      const result = await SSLService.revokeCertificate(domain);
+      return result;
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  // Nginx configuration management endpoints
+  .post('/nginx/http-only', async ({ body }) => {
+    const { subdomain, port } = body as { subdomain: string; port: number };
+    if (!subdomain || !port) return new Response('subdomain and port required', { status: 400 });
+    try {
+      await NginxService.createHttpOnlyConfig(subdomain, port);
+      return { success: true };
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .post('/nginx/upgrade-https', async ({ body }) => {
+    const { subdomain, port } = body as { subdomain: string; port: number };
+    if (!subdomain || !port) return new Response('subdomain and port required', { status: 400 });
+    try {
+      await NginxService.upgradeToHttps(subdomain, port);
+      return { success: true };
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .post('/nginx/remove', async ({ body }) => {
+    const { subdomain } = body as { subdomain: string };
+    if (!subdomain) return new Response('subdomain required', { status: 400 });
+    try {
+      await NginxService.removeConfig(subdomain);
+      return { success: true };
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
   .get('/*', () => {
     return DeployService.serveRequest();
   })
   .listen(PORT);
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
-
-// Initialize Nginx Default Config (Production Only)
-if (process.env.NODE_ENV === 'production') {
-  NginxService.createDefaultConfig().catch((e) => {
-    console.error('Failed to initialize Nginx default config:', e);
-  });
-}
 
 // Initialize Nginx Default Config (Production Only)
 if (process.env.NODE_ENV === 'production') {

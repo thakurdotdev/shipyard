@@ -5,6 +5,7 @@ import { join } from 'path';
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
 const AVAILABLE_DIR = '/etc/nginx/platform-sites';
 const ENABLED_DIR = '/etc/nginx/platform-sites';
+const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
 
 const RESERVED = [
   'www',
@@ -45,21 +46,34 @@ export const NginxService = {
     return true;
   },
 
+  /**
+   * Generate nginx config with per-domain SSL certificate paths.
+   * Uses the domain's own Let's Encrypt cert instead of a wildcard cert.
+   */
   generateConfig(sub: string, port: number) {
+    const fullDomain = `${sub}.${BASE_DOMAIN}`;
     return `
 server {
     listen 80;
-    server_name ${sub}.${BASE_DOMAIN};
+    server_name ${fullDomain};
 
-    return 301 https://$host$request_uri;
+    # ACME challenge for Let's Encrypt certificate renewal
+    location /.well-known/acme-challenge/ {
+        root ${CERTBOT_WEBROOT};
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {
     listen 443 ssl;
-    server_name ${sub}.${BASE_DOMAIN};
+    server_name ${fullDomain};
 
-    ssl_certificate     /etc/letsencrypt/live/${BASE_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${BASE_DOMAIN}/privkey.pem;
+    # Per-domain SSL certificate (issued by Let's Encrypt)
+    ssl_certificate     /etc/letsencrypt/live/${fullDomain}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${fullDomain}/privkey.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -83,6 +97,38 @@ server {
 `;
   },
 
+  /**
+   * Generate a temporary HTTP-only config for a subdomain.
+   * Used BEFORE SSL cert is issued — only serves ACME challenge + proxy.
+   * This allows certbot webroot validation to work.
+   */
+  generateHttpOnlyConfig(sub: string, port: number) {
+    const fullDomain = `${sub}.${BASE_DOMAIN}`;
+    return `
+server {
+    listen 80;
+    server_name ${fullDomain};
+
+    # ACME challenge for Let's Encrypt certificate issuance
+    location /.well-known/acme-challenge/ {
+        root ${CERTBOT_WEBROOT};
+    }
+
+    location / {
+        proxy_pass http://localhost:${port};
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+`;
+  },
+
   async createConfig(sub: string, port: number) {
     if (!this.isSubdomainAllowed(sub)) {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
@@ -97,6 +143,38 @@ server {
       await Bun.spawn(['ln', '-sf', available, enabled]).exited;
     }
 
+    await this.reload();
+  },
+
+  /**
+   * Create an HTTP-only nginx config (no SSL) for ACME challenge serving.
+   * Used during initial domain provisioning before SSL cert is issued.
+   */
+  async createHttpOnlyConfig(sub: string, port: number) {
+    if (!this.isSubdomainAllowed(sub)) {
+      throw new Error(`Invalid or reserved subdomain: ${sub}`);
+    }
+
+    const available = join(AVAILABLE_DIR, `${sub}.conf`);
+    const enabled = join(ENABLED_DIR, `${sub}.conf`);
+
+    await Bun.write(available, this.generateHttpOnlyConfig(sub, port));
+
+    if (!existsSync(enabled)) {
+      await Bun.spawn(['ln', '-sf', available, enabled]).exited;
+    }
+
+    await this.reload();
+  },
+
+  /**
+   * Upgrade an existing HTTP-only config to full HTTPS after SSL cert is issued.
+   */
+  async upgradeToHttps(sub: string, port: number) {
+    const available = join(AVAILABLE_DIR, `${sub}.conf`);
+
+    // Overwrite with the full HTTPS config
+    await Bun.write(available, this.generateConfig(sub, port));
     await this.reload();
   },
 
@@ -115,6 +193,12 @@ server {
 server {
     listen 80;
     server_name _ *.${BASE_DOMAIN};
+
+    # ACME challenge for Let's Encrypt
+    location /.well-known/acme-challenge/ {
+        root ${CERTBOT_WEBROOT};
+    }
+
     add_header Content-Type text/plain;
     return 404 "Unknown subdomain. No project deployed.\\n";
 }
@@ -123,6 +207,7 @@ server {
     listen 443 ssl;
     server_name _ *.${BASE_DOMAIN};
 
+    # Fallback wildcard cert (if available), otherwise self-signed
     ssl_certificate     /etc/letsencrypt/live/${BASE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${BASE_DOMAIN}/privkey.pem;
 

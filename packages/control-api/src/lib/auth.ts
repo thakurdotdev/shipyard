@@ -3,12 +3,16 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from '../db';
 import { account, session, user, verification } from '../db/schema';
 
+const authOrigin = process.env.BETTER_AUTH_URL
+  ? new URL(process.env.BETTER_AUTH_URL).origin
+  : undefined;
+
 export const auth = betterAuth({
   appName: 'Thakur Deploy',
-  baseURL: process.env.BETTER_AUTH_URL!,
-  basePath: '/auth',
+  baseURL: authOrigin!,
+  basePath: '/api/auth',
   secret: process.env.BETTER_AUTH_SECRET!,
-  trustedOrigins: [process.env.CLIENT_URL!],
+  trustedOrigins: [process.env.CLIENT_URL!].filter(Boolean),
   database: drizzleAdapter(db, {
     provider: 'pg',
     schema: {

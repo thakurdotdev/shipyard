@@ -279,4 +279,40 @@ export const api = {
     }
     return res.json();
   },
+
+  // Domain Provisioning
+  async getDomainStatus(projectId: string) {
+    const res = await fetch(`${API_URL}/domains/status/${projectId}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to fetch domain status' }));
+      throw new Error(error.error || error.message || 'Failed to fetch domain status');
+    }
+    return res.json();
+  },
+
+  async provisionDomain(projectId: string) {
+    const res = await fetch(`${API_URL}/domains/provision/${projectId}`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to provision domain' }));
+      throw new Error(error.error || error.message || 'Failed to provision domain');
+    }
+    return res.json();
+  },
+
+  async retryDomainProvision(projectId: string) {
+    const res = await fetch(`${API_URL}/domains/retry/${projectId}`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to retry domain provision' }));
+      throw new Error(error.error || error.message || 'Failed to retry domain provision');
+    }
+    return res.json();
+  },
 };
