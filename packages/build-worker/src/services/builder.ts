@@ -322,6 +322,7 @@ export const Builder = {
       'parcel', // Parcel bundler
       'vite build', // Vite build
       'next build', // Next.js build
+      'bun build', // Bun bundler
       'tsup', // tsup bundler
       'unbuild', // unbuild
       'ncc', // ncc compiler

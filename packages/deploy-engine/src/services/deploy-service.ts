@@ -83,7 +83,15 @@ export const DeployService = {
     await LogService.detail(buildId, `Framework: ${appType}`);
     await LogService.detail(buildId, `Port: ${port}`);
 
-    const hasExtractedDir = existsSync(paths.extractDir);
+    let effectiveExtractDir = paths.extractDir;
+    let hasExtractedDir = existsSync(paths.extractDir);
+    if (!hasExtractedDir) {
+      const directBuildDir = join(paths.projectDir, 'builds', buildId);
+      if (existsSync(directBuildDir)) {
+        hasExtractedDir = true;
+        effectiveExtractDir = directBuildDir;
+      }
+    }
     const hasArtifactTar = existsSync(paths.artifact);
 
     if (!hasExtractedDir && !hasArtifactTar) {
@@ -116,7 +124,7 @@ export const DeployService = {
     // Step 3: Update symlink for tracking
     await LogService.step(buildId, 'Updating deployment symlinks');
     try {
-      await retry(() => this.updateSymlink(paths.projectDir, paths.extractDir, buildId), {
+      await retry(() => this.updateSymlink(paths.projectDir, effectiveExtractDir, buildId), {
         name: 'symlink update',
       });
       await LogService.detail(buildId, 'Symlinks updated');
@@ -133,7 +141,7 @@ export const DeployService = {
       const result = await DockerService.deploy(
         projectId,
         buildId,
-        paths.extractDir,
+        effectiveExtractDir,
         port,
         appType,
         envVars,
@@ -155,7 +163,7 @@ export const DeployService = {
       // Start the application
       await LogService.step(buildId, `Starting ${appType} application`);
       await this.startApplication(
-        paths.extractDir,
+        effectiveExtractDir,
         port,
         appType,
         paths.projectDir,

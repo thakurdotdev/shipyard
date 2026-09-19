@@ -58,7 +58,7 @@ export const ArtifactService = {
     // ─── Fast-Path: Direct Local Placement (Single Server) ────────
     if (isLocalDeploy && localBaseDir && projectId) {
       const startTime = Date.now();
-      const targetDir = join(localBaseDir, projectId, 'builds', buildId);
+      const targetDir = join(localBaseDir, projectId, 'builds', buildId, 'extracted');
       console.log(`[ArtifactService] Fast path: copying directly to ${targetDir}`);
 
       if (onProgress) {
