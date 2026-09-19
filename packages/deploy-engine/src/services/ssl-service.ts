@@ -84,6 +84,17 @@ export const SSLService = {
       console.log(`[SSLService] Certificate issued successfully for ${domain}`);
       console.log(`[SSLService] stdout: ${stdout}`);
 
+      // Ensure Nginx worker processes (www-data) can read certificates and keys
+      const chmodProc = Bun.spawn([
+        'sudo',
+        'chmod',
+        '-R',
+        'a+rX',
+        '/etc/letsencrypt/live',
+        '/etc/letsencrypt/archive',
+      ]);
+      await chmodProc.exited;
+
       // Verify cert was created
       return await this.checkCertificate(domain);
     } catch (error: any) {
@@ -103,7 +114,13 @@ export const SSLService = {
     const certPath = join(certDir, 'fullchain.pem');
     const keyPath = join(certDir, 'privkey.pem');
 
-    if (!existsSync(certPath) || !existsSync(keyPath)) {
+    // Use sudo test -f because /etc/letsencrypt directories are 0700 root
+    const testCert = Bun.spawn(['sudo', 'test', '-f', certPath]);
+    await testCert.exited;
+    const testKey = Bun.spawn(['sudo', 'test', '-f', keyPath]);
+    await testKey.exited;
+
+    if (testCert.exitCode !== 0 || testKey.exitCode !== 0) {
       return { success: false, error: 'Certificate files not found' };
     }
 
@@ -128,10 +145,8 @@ export const SSLService = {
   async getCertExpiry(domain: string): Promise<Date | undefined> {
     const certPath = join(LETSENCRYPT_DIR, domain, 'fullchain.pem');
 
-    if (!existsSync(certPath)) return undefined;
-
     try {
-      const proc = Bun.spawn(['openssl', 'x509', '-enddate', '-noout', '-in', certPath], {
+      const proc = Bun.spawn(['sudo', 'openssl', 'x509', '-enddate', '-noout', '-in', certPath], {
         stdout: 'pipe',
         stderr: 'pipe',
       });
