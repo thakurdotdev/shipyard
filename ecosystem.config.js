@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'control-api',
-      script: 'src/index.ts',
+      script: 'dist/index.js',
       cwd: 'packages/control-api',
       interpreter: 'bun',
       max_memory_restart: '1G',
@@ -10,7 +10,7 @@ module.exports = {
     },
     {
       name: 'build-worker',
-      script: 'src/index.ts',
+      script: 'dist/index.js',
       cwd: 'packages/build-worker',
       interpreter: 'bun',
       max_memory_restart: '1G',
@@ -18,7 +18,7 @@ module.exports = {
     },
     {
       name: 'deploy-engine',
-      script: 'src/index.ts',
+      script: 'dist/index.js',
       cwd: 'packages/deploy-engine',
       interpreter: 'bun',
       max_memory_restart: '1G',
