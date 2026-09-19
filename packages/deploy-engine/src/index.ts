@@ -204,13 +204,6 @@ const app = new Elysia()
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
 
-// Initialize Nginx Default Config (Production Only)
-if (process.env.NODE_ENV === 'production') {
-  NginxService.createDefaultConfig().catch((e) => {
-    console.error('Failed to initialize Nginx default config:', e);
-  });
-}
-
 // Recover Docker log streams (for all envs)
 DockerService.recoverLogStreams().catch((e) => {
   console.error('Failed to recover Docker log streams:', e);
