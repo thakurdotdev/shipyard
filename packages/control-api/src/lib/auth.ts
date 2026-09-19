@@ -32,5 +32,8 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: true,
     },
+    ipAddress: {
+      ipAddressHeaders: ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'],
+    },
   },
 });

@@ -1,3 +1,4 @@
+import { promises as dnsPromises } from 'dns';
 import { db } from '../db';
 import { domainProvisions, projects } from '../db/schema';
 import type { DomainDnsStatus, DomainSslStatus } from '../db/schema';
@@ -129,19 +130,35 @@ export const DomainService = {
       });
 
       if (!httpConfigRes.ok) {
-        // Non-fatal — certbot might still work if nginx is already configured
-        console.warn(`[DomainService] HTTP-only nginx config failed, continuing...`);
+        const err = await httpConfigRes.text();
+        throw new Error(`Failed to configure HTTP proxy for ACME validation: ${err}`);
       }
     } catch (error: any) {
-      console.warn(`[DomainService] HTTP-only nginx config failed:`, error.message);
-      // Non-fatal
+      console.error(`[DomainService] HTTP-only nginx config failed:`, error.message);
+      await this.markError(provision.id, 'ssl', error.message);
+      return { success: false, error: error.message, failedAtStep: 'nginx_configuring' };
     }
 
     // ──────────────────────────────────────────────
-    // Step 3: Wait for DNS propagation (brief delay)
+    // Step 3: Wait for DNS propagation
     // ──────────────────────────────────────────────
-    await notify('ssl_issuing', `Waiting for DNS propagation...`);
-    await new Promise((r) => setTimeout(r, 5000)); // 5s initial delay
+    await notify('ssl_issuing', `Waiting for DNS propagation for ${fullDomain}...`);
+    let dnsResolved = false;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        const addresses = await dnsPromises.resolve4(fullDomain);
+        if (addresses && addresses.length > 0) {
+          dnsResolved = true;
+          break;
+        }
+      } catch {
+        // Retry
+      }
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+    if (!dnsResolved) {
+      console.warn(`[DomainService] DNS for ${fullDomain} not yet resolved locally, proceeding...`);
+    }
 
     // ──────────────────────────────────────────────
     // Step 4: Issue SSL certificate via Let's Encrypt

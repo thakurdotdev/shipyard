@@ -26,7 +26,6 @@ module.exports = {
         NODE_ENV: 'production',
         PLATFORM_ENV: 'production',
         PORT: 4012,
-        NGINX_SITES_DIR: '/etc/nginx/platform-sites',
       },
     },
     {

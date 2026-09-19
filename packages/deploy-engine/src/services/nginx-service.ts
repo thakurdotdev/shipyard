@@ -1,11 +1,76 @@
 import { existsSync } from 'fs';
-import { unlink } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
-const AVAILABLE_DIR = '/etc/nginx/platform-sites';
-const ENABLED_DIR = '/etc/nginx/platform-sites';
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
+
+function getNginxDirs(): { available: string; enabled: string } {
+  // If explicitly configured and not default platform-sites
+  if (process.env.NGINX_SITES_DIR && process.env.NGINX_SITES_DIR !== '/etc/nginx/platform-sites') {
+    return { available: process.env.NGINX_SITES_DIR, enabled: process.env.NGINX_SITES_DIR };
+  }
+
+  // Standard Ubuntu / Debian Nginx sites-available and sites-enabled
+  if (existsSync('/etc/nginx/sites-available') && existsSync('/etc/nginx/sites-enabled')) {
+    return { available: '/etc/nginx/sites-available', enabled: '/etc/nginx/sites-enabled' };
+  }
+
+  // If platform-sites directory already exists on host
+  if (existsSync('/etc/nginx/platform-sites')) {
+    return { available: '/etc/nginx/platform-sites', enabled: '/etc/nginx/platform-sites' };
+  }
+
+  // Default to standard Ubuntu sites-available / sites-enabled
+  return { available: '/etc/nginx/sites-available', enabled: '/etc/nginx/sites-enabled' };
+}
+
+async function writeNginxFile(targetPath: string, content: string): Promise<void> {
+  const dir = dirname(targetPath);
+  if (!existsSync(dir)) {
+    const mkdir = Bun.spawn(['sudo', 'mkdir', '-p', dir]);
+    await mkdir.exited;
+    const chown = Bun.spawn(['sudo', 'chmod', '755', dir]);
+    await chown.exited;
+  }
+
+  // Ensure CERTBOT_WEBROOT exists and is readable by Nginx
+  if (!existsSync(CERTBOT_WEBROOT)) {
+    const mkWebroot = Bun.spawn(['sudo', 'mkdir', '-p', CERTBOT_WEBROOT]);
+    await mkWebroot.exited;
+  }
+  const chWebroot = Bun.spawn(['sudo', 'chmod', '-R', '755', CERTBOT_WEBROOT]);
+  await chWebroot.exited;
+
+  try {
+    await Bun.write(targetPath, content);
+  } catch {
+    // If direct write fails (e.g. permission denied), write to /tmp and move with sudo
+    const tmpPath = `/tmp/nginx-${Date.now()}-${Math.random().toString(36).slice(2)}.conf`;
+    await Bun.write(tmpPath, content);
+    const mv = Bun.spawn(['sudo', 'mv', tmpPath, targetPath]);
+    await mv.exited;
+    const chmod = Bun.spawn(['sudo', 'chmod', '644', targetPath]);
+    await chmod.exited;
+  }
+}
+
+async function linkNginxFile(available: string, enabled: string): Promise<void> {
+  if (available === enabled) return;
+  const enabledDir = dirname(enabled);
+  if (!existsSync(enabledDir)) {
+    const mkdir = Bun.spawn(['sudo', 'mkdir', '-p', enabledDir]);
+    await mkdir.exited;
+  }
+  const proc = Bun.spawn(['sudo', 'ln', '-sf', available, enabled]);
+  await proc.exited;
+}
+
+async function removeNginxFile(filePath: string): Promise<void> {
+  if (existsSync(filePath)) {
+    const proc = Bun.spawn(['sudo', 'rm', '-f', filePath]);
+    await proc.exited;
+  }
+}
 
 const RESERVED = [
   'www',
@@ -134,15 +199,12 @@ server {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
     }
 
-    const available = join(AVAILABLE_DIR, `${sub}.conf`);
-    const enabled = join(ENABLED_DIR, `${sub}.conf`);
+    const { available, enabled } = getNginxDirs();
+    const availablePath = join(available, `${sub}.conf`);
+    const enabledPath = join(enabled, `${sub}.conf`);
 
-    await Bun.write(available, this.generateConfig(sub, port));
-
-    if (!existsSync(enabled)) {
-      await Bun.spawn(['ln', '-sf', available, enabled]).exited;
-    }
-
+    await writeNginxFile(availablePath, this.generateConfig(sub, port));
+    await linkNginxFile(availablePath, enabledPath);
     await this.reload();
   },
 
@@ -155,15 +217,12 @@ server {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
     }
 
-    const available = join(AVAILABLE_DIR, `${sub}.conf`);
-    const enabled = join(ENABLED_DIR, `${sub}.conf`);
+    const { available, enabled } = getNginxDirs();
+    const availablePath = join(available, `${sub}.conf`);
+    const enabledPath = join(enabled, `${sub}.conf`);
 
-    await Bun.write(available, this.generateHttpOnlyConfig(sub, port));
-
-    if (!existsSync(enabled)) {
-      await Bun.spawn(['ln', '-sf', available, enabled]).exited;
-    }
-
+    await writeNginxFile(availablePath, this.generateHttpOnlyConfig(sub, port));
+    await linkNginxFile(availablePath, enabledPath);
     await this.reload();
   },
 
@@ -171,19 +230,23 @@ server {
    * Upgrade an existing HTTP-only config to full HTTPS after SSL cert is issued.
    */
   async upgradeToHttps(sub: string, port: number) {
-    const available = join(AVAILABLE_DIR, `${sub}.conf`);
+    const { available } = getNginxDirs();
+    const availablePath = join(available, `${sub}.conf`);
 
     // Overwrite with the full HTTPS config
-    await Bun.write(available, this.generateConfig(sub, port));
+    await writeNginxFile(availablePath, this.generateConfig(sub, port));
     await this.reload();
   },
 
   async removeConfig(sub: string) {
-    const available = join(AVAILABLE_DIR, `${sub}.conf`);
-    const enabled = join(ENABLED_DIR, `${sub}.conf`);
+    const { available, enabled } = getNginxDirs();
+    const availablePath = join(available, `${sub}.conf`);
+    const enabledPath = join(enabled, `${sub}.conf`);
 
-    if (existsSync(enabled)) await unlink(enabled);
-    if (existsSync(available)) await unlink(available);
+    await removeNginxFile(enabledPath);
+    if (availablePath !== enabledPath) {
+      await removeNginxFile(availablePath);
+    }
 
     await this.reload();
   },
@@ -216,9 +279,10 @@ server {
 }
 `;
 
-    const file = join(AVAILABLE_DIR, '00-default.conf');
+    const { available } = getNginxDirs();
+    const file = join(available, '00-default.conf');
 
-    await Bun.write(file, content);
+    await writeNginxFile(file, content);
     await this.reload();
   },
 

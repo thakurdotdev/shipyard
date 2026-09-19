@@ -29,11 +29,13 @@ export const SSLService = {
       return existing;
     }
 
-    // Ensure webroot directory exists
+    // Ensure webroot directory exists and is readable by Nginx
     if (!existsSync(CERTBOT_WEBROOT)) {
       const mkdirProc = Bun.spawn(['sudo', 'mkdir', '-p', CERTBOT_WEBROOT]);
       await mkdirProc.exited;
     }
+    const chmodProc = Bun.spawn(['sudo', 'chmod', '-R', '755', CERTBOT_WEBROOT]);
+    await chmodProc.exited;
 
     try {
       const args = [
