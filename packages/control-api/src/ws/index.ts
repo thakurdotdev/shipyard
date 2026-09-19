@@ -17,7 +17,13 @@ export const WebSocketService = {
       });
 
       socket.on('subscribe_build', (buildId: string) => {
+        console.log(`[WS] Socket ${socket.id} joined build:${buildId}`);
         socket.join(`build:${buildId}`);
+      });
+
+      socket.on('unsubscribe_build', (buildId: string) => {
+        console.log(`[WS] Socket ${socket.id} left build:${buildId}`);
+        socket.leave(`build:${buildId}`);
       });
 
       socket.on('disconnect', () => {

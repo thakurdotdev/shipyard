@@ -50,7 +50,7 @@ export const LogStreamer = {
     const entriesToSend = [...buffer.entries];
     buffer.entries = []; // Clear buffer immediately
 
-    const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4000';
+    const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4010';
 
     // Send each entry individually for proper log level tracking
     // Batch into single request with combined message per level

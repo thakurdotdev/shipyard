@@ -43,6 +43,7 @@ describe('Build Worker', () => {
     expect(GitService.clone).toHaveBeenCalledWith(
       job.github_url,
       expect.stringContaining('test-build-id'),
+      undefined,
     );
     expect(Builder.runCommand).toHaveBeenCalledWith(
       'bun install',

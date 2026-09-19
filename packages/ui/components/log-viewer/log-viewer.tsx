@@ -142,15 +142,29 @@ export function LogViewer({ buildId }: LogViewerProps) {
   useEffect(() => {
     socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
     const socket = socketRef.current;
-    socket.on('connect', () => socket.emit('subscribe_build', buildId));
-    socket.on('build_log', (message: { buildId: string; data: string; level?: LogLevel }) => {
+
+    const subscribe = () => {
+      console.log(`[LogViewer] Subscribing to build: ${buildId}`);
+      socket.emit('subscribe_build', buildId);
+    };
+
+    if (socket.connected) {
+      subscribe();
+    }
+    socket.on('connect', subscribe);
+
+    const onBuildLog = (message: { buildId: string; data: string; level?: LogLevel }) => {
       if (message.buildId === buildId) {
         appendLog(buildId, message.data, message.level || 'info');
       }
-    });
+    };
+
+    socket.on('build_log', onBuildLog);
+
     return () => {
       socket.emit('unsubscribe_build', buildId);
-      socket.disconnect();
+      socket.off('connect', subscribe);
+      socket.off('build_log', onBuildLog);
     };
   }, [buildId, appendLog]);
 
@@ -196,7 +210,7 @@ export function LogViewer({ buildId }: LogViewerProps) {
       await api.clearBuildLogs(buildId);
       clearLogs(buildId);
       toast.success('Logs cleared');
-    } catch (error) {
+    } catch {
       toast.error('Failed to clear logs');
     } finally {
       setIsClearing(false);
@@ -211,7 +225,7 @@ export function LogViewer({ buildId }: LogViewerProps) {
         setLogs(buildId, freshLogs);
         toast.success('Logs refreshed');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to refresh logs');
     } finally {
       setIsRefreshing(false);

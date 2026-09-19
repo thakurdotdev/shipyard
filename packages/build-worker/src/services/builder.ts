@@ -4,7 +4,7 @@ import { join } from 'path';
 import { ArtifactService } from './artifact-service';
 import { GitService } from './git-service';
 import { WorkerGitHubService } from './github-service';
-import { LogStreamer, LogLevel } from './log-streamer';
+import { LogStreamer } from './log-streamer';
 import { AppType, isBackendFramework } from '../config/framework-config';
 
 interface BuildJob {
@@ -22,7 +22,7 @@ export const Builder = {
   async execute(job: BuildJob) {
     console.log(`[Builder] Starting execution for build ${job.build_id}`);
     const workDir = join(process.cwd(), 'workspace', job.build_id);
-    const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4000';
+    const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4010';
 
     const updateStatus = async (status: 'building' | 'success' | 'failed') => {
       try {
@@ -167,26 +167,14 @@ export const Builder = {
         );
       }
 
-      await LogStreamer.stream(
+      await ArtifactService.streamArtifact(
         job.build_id,
         job.project_id,
-        'Creating artifact package...\n',
-        'info',
-      );
-      await LogStreamer.stream(
-        job.build_id,
-        job.project_id,
-        'Streaming artifact to Deploy Engine...\n',
-        'info',
-      );
-
-      await ArtifactService.streamArtifact(job.build_id, projectDir, job.app_type);
-
-      await LogStreamer.stream(
-        job.build_id,
-        job.project_id,
-        'Artifact uploaded successfully!\n',
-        'success',
+        projectDir,
+        job.app_type,
+        async (msg) => {
+          await LogStreamer.stream(job.build_id, job.project_id, msg, 'info');
+        },
       );
 
       await updateStatus('success');

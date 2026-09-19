@@ -77,31 +77,40 @@ export const DeployService = {
   ) {
     const paths = this.getPaths(projectId, buildId);
 
-    // Step 1: Verify artifact exists
+    // Step 1: Verify artifact exists (pre-built fast path directory or remote tarball)
     await LogService.step(buildId, 'Starting deployment activation');
     await LogService.detail(buildId, `Project: ${projectId}`);
     await LogService.detail(buildId, `Framework: ${appType}`);
     await LogService.detail(buildId, `Port: ${port}`);
 
-    if (!existsSync(paths.artifact)) {
+    const hasExtractedDir = existsSync(paths.extractDir);
+    const hasArtifactTar = existsSync(paths.artifact);
+
+    if (!hasExtractedDir && !hasArtifactTar) {
       await LogService.error(buildId, `Artifact not found: ${paths.artifact}`);
       throw new Error(`Artifact not found: ${paths.artifact}`);
     }
-    await LogService.detail(buildId, 'Artifact verified');
 
-    // Step 2: Extract artifact
-    await LogService.step(buildId, 'Extracting build artifact');
-    mkdirSync(paths.extractDir, { recursive: true });
+    if (hasExtractedDir) {
+      await LogService.detail(
+        buildId,
+        'Pre-built artifact directory verified (fast path - zero-tar)',
+      );
+    } else {
+      // Step 2: Extract artifact (fallback for remote upload)
+      await LogService.step(buildId, 'Extracting build artifact');
+      mkdirSync(paths.extractDir, { recursive: true });
 
-    try {
-      await retry(() => this.extractArtifact(paths.artifact, paths.extractDir), {
-        name: 'artifact extraction',
-        timeoutMs: 8000,
-      });
-      await LogService.success(buildId, 'Artifact extracted successfully');
-    } catch (e: any) {
-      await LogService.error(buildId, `Failed to extract artifact: ${e.message}`);
-      throw e;
+      try {
+        await retry(() => this.extractArtifact(paths.artifact, paths.extractDir), {
+          name: 'artifact extraction',
+          timeoutMs: 8000,
+        });
+        await LogService.success(buildId, 'Artifact extracted successfully');
+      } catch (e: any) {
+        await LogService.error(buildId, `Failed to extract artifact: ${e.message}`);
+        throw e;
+      }
     }
 
     // Step 3: Update symlink for tracking
@@ -284,7 +293,7 @@ export const DeployService = {
             // Process already dead, that's fine
           }
         }
-      } catch (e) {
+      } catch {
         // Failed to read pid file or parse, just continue
         console.log(`[DeployService] Could not read/parse pid file, continuing...`);
       }
@@ -420,7 +429,6 @@ export const DeployService = {
   },
 
   async ensureDependenciesInstalled(cwd: string, buildId?: string) {
-    const nodeModulesPath = join(cwd, 'node_modules');
     const packageJsonPath = join(cwd, 'package.json');
 
     console.log(`[DeployService] ensureDependenciesInstalled called with cwd: ${cwd}`);
