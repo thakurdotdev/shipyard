@@ -1,6 +1,3 @@
-const path = require('path');
-const BASE_DIR = process.env.BASE_DIR || path.join(__dirname, 'packages/deploy-engine/apps');
-
 module.exports = {
   apps: [
     {
@@ -27,7 +24,6 @@ module.exports = {
         PORT: 4011,
         CONTROL_API_URL: 'http://localhost:4010',
         DEPLOY_ENGINE_URL: 'http://localhost:4012',
-        BASE_DIR,
       },
     },
     {
@@ -41,7 +37,6 @@ module.exports = {
         PLATFORM_ENV: 'production',
         PORT: 4012,
         CONTROL_API_URL: 'http://localhost:4010',
-        BASE_DIR,
       },
     },
     {
