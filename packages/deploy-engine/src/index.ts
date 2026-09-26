@@ -3,11 +3,13 @@ import { DeployService } from './services/deploy-service';
 import { NginxService } from './services/nginx-service';
 import { SSLService } from './services/ssl-service';
 import { DockerService } from './services/docker';
+import { PM0Service } from './services/pm0';
 import { InfraContainers } from './services/infra-containers';
 
-import { isPortAvailable } from './utils/port';
+import { isPortAvailable, findAvailablePort } from './utils/port';
 
 const PORT = process.env.PORT || 4012;
+const USE_DOCKER = process.env.USE_DOCKER === 'true';
 
 const app = new Elysia()
   .post('/ports/check', async ({ body }) => {
@@ -15,6 +17,21 @@ const app = new Elysia()
     if (!port) return new Response('Port required', { status: 400 });
     const available = await isPortAvailable(port);
     return { available };
+  })
+  .post('/ports/allocate', async ({ body }) => {
+    const { startPort, endPort } = (body || {}) as { startPort?: number; endPort?: number };
+    try {
+      const port = await findAvailablePort(startPort, endPort);
+      if (!port) {
+        return new Response(JSON.stringify({ error: 'No available ports in range' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return { port, available: true };
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
   })
   .post('/artifacts/upload', async ({ query, request }) => {
     const buildId = query.buildId;
@@ -204,7 +221,13 @@ const app = new Elysia()
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
 
-// Recover Docker log streams (for all envs)
-DockerService.recoverLogStreams().catch((e) => {
-  console.error('Failed to recover Docker log streams:', e);
-});
+// Recover managed processes on startup
+if (USE_DOCKER) {
+  DockerService.recoverLogStreams().catch((e) => {
+    console.error('Failed to recover Docker log streams:', e);
+  });
+} else {
+  PM0Service.recoverProcesses().catch((e) => {
+    console.error('Failed to recover PM0 processes:', e);
+  });
+}

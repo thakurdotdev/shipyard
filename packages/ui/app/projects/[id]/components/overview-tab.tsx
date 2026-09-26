@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Layout } from 'lucide-react';
+import { Layout, Server } from 'lucide-react';
 import { ActiveDeploymentCard } from './active-deployment-card';
 import { ActivityList } from './activity-list';
 import { DomainStatusCard } from './domain-status-card';
@@ -61,7 +61,7 @@ export function OverviewTab({
       />
 
       {/* Project Specs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="border-border/50 shadow-sm bg-muted/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
@@ -79,11 +79,27 @@ export function OverviewTab({
         <Card className="border-border/50 shadow-sm bg-muted/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              Port
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-emerald-400" />
+              <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300">
+                {project.port ? `:${project.port}` : 'Auto'}
+              </code>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50 shadow-sm bg-muted/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
               Build Command
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300">
+            <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300 truncate block">
               {project.build_command}
             </code>
           </CardContent>
@@ -104,7 +120,7 @@ export function OverviewTab({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300">
+              <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300 truncate block">
                 {project.root_directory || './'}
               </code>
             </CardContent>

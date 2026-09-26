@@ -8,6 +8,7 @@ export interface Project {
   build_command: string;
   app_type: AppType;
   domain: string | null;
+  port?: number | null;
   github_repo_id: string | null;
   github_repo_full_name: string | null;
   github_branch: string | null;

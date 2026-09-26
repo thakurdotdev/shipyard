@@ -49,21 +49,38 @@ export function SettingsTab({ project }: SettingsTabProps) {
   const [buildCommand, setBuildCommand] = useState(project.build_command);
   const [appType, setAppType] = useState<AppType>(project.app_type);
   const [rootDirectory, setRootDirectory] = useState(project.root_directory || './');
+  const [port, setPort] = useState(project.port ? String(project.port) : '');
   const [savingBuildSettings, setSavingBuildSettings] = useState(false);
 
   // Check if build settings have changed
   const buildSettingsChanged =
     buildCommand !== project.build_command ||
     appType !== project.app_type ||
-    rootDirectory !== (project.root_directory || './');
+    rootDirectory !== (project.root_directory || './') ||
+    port !== (project.port ? String(project.port) : '');
 
   const handleSaveBuildSettings = async () => {
     setSavingBuildSettings(true);
     try {
+      let parsedPort: number | undefined = undefined;
+      if (port.trim()) {
+        parsedPort = parseInt(port, 10);
+        if (isNaN(parsedPort) || parsedPort < 1024 || parsedPort > 65535) {
+          throw new Error('Port must be between 1024 and 65535');
+        }
+        if (parsedPort !== project.port) {
+          const check = await api.checkPortAvailability(parsedPort);
+          if (!check.available) {
+            throw new Error(check.reason || `Port ${parsedPort} is not available`);
+          }
+        }
+      }
+
       await api.updateProject(project.id, {
         build_command: buildCommand,
         app_type: appType,
         root_directory: rootDirectory,
+        port: parsedPort,
       });
       toast.success('Build settings saved', {
         description: 'Changes will apply to your next build.',
@@ -172,18 +189,36 @@ export function SettingsTab({ project }: SettingsTabProps) {
                 <p className="text-xs text-muted-foreground">Framework used for your project</p>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="root-directory">Root Directory</Label>
-              <Input
-                id="root-directory"
-                value={rootDirectory}
-                onChange={(e) => setRootDirectory(e.target.value)}
-                placeholder="./"
-                className="font-mono text-sm max-w-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Directory containing your package.json (for monorepos)
-              </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="root-directory">Root Directory</Label>
+                <Input
+                  id="root-directory"
+                  value={rootDirectory}
+                  onChange={(e) => setRootDirectory(e.target.value)}
+                  placeholder="./"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Directory containing your package.json (for monorepos)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="port">Port</Label>
+                <Input
+                  id="port"
+                  type="number"
+                  min={1024}
+                  max={65535}
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  placeholder="Auto-assigned"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Assigned port on server (1024-65535)
+                </p>
+              </div>
             </div>
             <div className="flex justify-end pt-2">
               <Button

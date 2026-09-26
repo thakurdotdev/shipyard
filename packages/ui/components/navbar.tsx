@@ -1,6 +1,5 @@
 'use client';
 
-import { ModeToggle } from '@/components/theme-toggle';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
-import { FolderGit2, LayoutDashboard, LogOut, Server } from 'lucide-react';
+import { FolderGit2, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -30,12 +29,6 @@ export function Navbar() {
       label: 'New Project',
       icon: FolderGit2,
       active: pathname === '/projects/new',
-    },
-    {
-      href: '/services',
-      label: 'Services',
-      icon: Server,
-      active: pathname === '/services',
     },
   ];
 

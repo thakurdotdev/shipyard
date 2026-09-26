@@ -32,6 +32,7 @@ export function ManualProjectForm() {
     app_type: 'nextjs' as AppType,
     root_directory: '',
     domain: '',
+    port: '',
   });
 
   const handleAppTypeChange = (value: AppType) => {
@@ -66,6 +67,36 @@ export function ManualProjectForm() {
     }
   };
 
+  const [portStatus, setPortStatus] = useState<'idle' | 'loading' | 'available' | 'unavailable'>(
+    'idle',
+  );
+  const [portError, setPortError] = useState('');
+
+  const checkPort = async (): Promise<boolean> => {
+    if (!formData.port) return true;
+    const portNum = parseInt(formData.port, 10);
+    if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
+      setPortStatus('unavailable');
+      setPortError('Port must be between 1024 and 65535');
+      return false;
+    }
+    setPortStatus('loading');
+    setPortError('');
+    try {
+      const res = await api.checkPortAvailability(portNum);
+      setPortStatus(res.available ? 'available' : 'unavailable');
+      if (!res.available) {
+        setPortError(res.reason || 'Port is already in use');
+      }
+      return res.available;
+    } catch (e: any) {
+      console.error(e);
+      setPortStatus('idle');
+      setPortError(e.message || 'Failed to check port');
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -96,6 +127,16 @@ export function ManualProjectForm() {
           return;
         }
       }
+
+      if (formData?.port?.trim()) {
+        const isPortFree = await checkPort();
+        if (!isPortFree) {
+          toast.error(portError || 'Port is unavailable');
+          setLoading(false);
+          return;
+        }
+      }
+
       const envVarsRecord = envVars.reduce(
         (acc, curr) => {
           if (curr.key) acc[curr.key] = curr.value;
@@ -106,13 +147,14 @@ export function ManualProjectForm() {
 
       const project = await api.createProject({
         ...formData,
+        port: formData.port ? parseInt(formData.port, 10) : undefined,
         domain: formData.domain ? `${formData.domain}.thakur.dev` : '',
         env_vars: envVarsRecord,
       });
       router.push(`/projects/${project.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error('Failed to create project');
+      toast.error(error.message || 'Failed to create project');
     } finally {
       if (!formData?.domain?.trim() || subdomainStatus !== 'unavailable') {
         setLoading(false);
@@ -242,6 +284,53 @@ export function ManualProjectForm() {
                 </p>
               )}
               {subdomainError && <p className="text-sm text-destructive">{subdomainError}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="port">Port (Optional)</Label>
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 flex max-w-sm items-center space-x-2">
+                  <Input
+                    id="port"
+                    type="number"
+                    min={1024}
+                    max={65535}
+                    placeholder="Auto-assigned (5000-6000)"
+                    value={formData.port}
+                    onChange={(e) => {
+                      setFormData({ ...formData, port: e.target.value });
+                      setPortStatus('idle');
+                      setPortError('');
+                    }}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={checkPort}
+                  disabled={!formData.port || portStatus === 'loading'}
+                >
+                  {portStatus === 'loading' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Check'
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Leave empty for automatic port assignment, or specify a custom port (1024-65535).
+              </p>
+              {portStatus === 'available' && (
+                <p className="text-sm text-green-500 flex items-center gap-1">
+                  <Check className="h-3 w-3" /> Port is available
+                </p>
+              )}
+              {portStatus === 'unavailable' && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <X className="h-3 w-3" /> {portError || 'Port is already taken'}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'fs';
 import { rm, unlink } from 'fs/promises';
-import { join } from 'path';
+import { basename, join } from 'path';
 import {
   AppType,
   FRAMEWORKS,
@@ -11,6 +11,7 @@ import {
 import { LogService } from './log-service';
 import { NginxService } from './nginx-service';
 import { DockerService } from './docker';
+import { PM0Service } from './pm0';
 
 const BASE_DIR = process.env.BASE_DIR || join(process.cwd(), 'apps');
 const ARTIFACTS_DIR = join(BASE_DIR, 'artifacts');
@@ -153,8 +154,9 @@ export const DeployService = {
       }
       await LogService.success(buildId, 'Container started successfully');
     } else {
-      // Legacy: direct process execution
+      // PM0 managed process execution
       await LogService.step(buildId, 'Preparing application environment');
+      await LogService.detail(buildId, 'Using pm0 process manager');
 
       // Stop any existing process
       await LogService.detail(buildId, 'Stopping previous deployment if exists');
@@ -169,6 +171,7 @@ export const DeployService = {
         paths.projectDir,
         buildId,
         envVars,
+        projectId,
       );
     }
 
@@ -205,8 +208,8 @@ export const DeployService = {
         if (buildId) await LogService.detail(buildId, 'Stopping Docker container');
         await DockerService.stop(projectId, buildId);
       } else {
-        if (buildId) await LogService.detail(buildId, 'Stopping application process');
-        await this.killProjectProcess(projectId, port);
+        if (buildId) await LogService.detail(buildId, 'Stopping managed process via pm0');
+        await PM0Service.delete(projectId);
       }
     } else {
       await this.ensurePortFree(port);
@@ -222,8 +225,8 @@ export const DeployService = {
     // Stop and cleanup Docker resources
     if (USE_DOCKER) {
       await DockerService.cleanup(projectId, buildIds);
-    } else if (port) {
-      await this.killProjectProcess(projectId, port);
+    } else {
+      await PM0Service.delete(projectId);
     }
 
     // Cleanup filesystem
@@ -278,37 +281,15 @@ export const DeployService = {
   },
 
   async killProjectProcess(projectId: string, port: number) {
-    const pidFile = join(BASE_DIR, projectId, 'server.pid');
+    // Use PM0 to stop and delete the managed process
+    await PM0Service.delete(projectId);
 
-    if (existsSync(pidFile)) {
-      let pid: number | undefined;
-      try {
-        pid = parseInt(await Bun.file(pidFile).text(), 10);
-        if (!isNaN(pid)) {
-          // Try graceful shutdown first
-          try {
-            process.kill(pid, 'SIGTERM');
-            await new Promise((r) => setTimeout(r, 300));
-          } catch {
-            // Process might already be dead, that's fine
-          }
-
-          // Check if still running, if so force kill
-          try {
-            process.kill(pid, 0); // Test if process exists
-            process.kill(pid, 'SIGKILL');
-          } catch {
-            // Process already dead, that's fine
-          }
-        }
-      } catch {
-        // Failed to read pid file or parse, just continue
-        console.log(`[DeployService] Could not read/parse pid file, continuing...`);
-      }
-      await unlink(pidFile).catch(() => {});
+    // Safety net: ensure port is actually freed after pm0 delete
+    try {
+      await this.ensurePortFree(port);
+    } catch {
+      // Port might already be free, that's fine
     }
-
-    await this.ensurePortFree(port);
   },
 
   async ensurePortFree(port: number) {
@@ -333,6 +314,7 @@ export const DeployService = {
     projectDir: string,
     buildId?: string,
     envVars: Record<string, string> = {},
+    projectId?: string,
   ) {
     const framework = FRAMEWORKS[appType];
     const useStaticServer = shouldUseStaticServer(appType, cwd);
@@ -371,50 +353,30 @@ export const DeployService = {
     console.log(`[DeployService] Starting app with command: ${startCmd.join(' ')}`);
     console.log(`[DeployService] Working directory: ${workingDir}`);
 
-    const appProc = Bun.spawn(startCmd, {
+    const resolvedProjectId = projectId || basename(projectDir);
+
+    const startResult = await PM0Service.start({
+      projectId: resolvedProjectId,
+      buildId: buildId || '',
+      startCmd,
       cwd: workingDir,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      detached: true,
-      env: {
-        ...process.env,
-        ...envVars, // Inject project-specific env vars
+      port,
+      envVars: {
+        ...envVars,
         NODE_ENV: 'production',
         PLATFORM_ENV: 'production',
-        PORT: port.toString(),
       },
     });
 
-    // Log app output for debugging (but don't stream to user - too verbose)
-    const logAppOutput = async (stream: ReadableStream<Uint8Array> | null, label: string) => {
-      if (!stream) return;
-      const reader = stream.getReader();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = new TextDecoder().decode(value);
-          console.log(`[App ${label}]`, text);
-          // Only log errors to user to avoid noise
-          if (label === 'stderr' && buildId && text.trim()) {
-            // Log only significant errors, not normal startup messages
-            if (text.toLowerCase().includes('error') || text.toLowerCase().includes('fatal')) {
-              await LogService.warning(buildId, `App stderr: ${text.slice(0, 200)}`);
-            }
-          }
-        }
-      } catch {
-        // Stream closed, that's fine
+    if (!startResult.success) {
+      if (buildId) {
+        await LogService.error(buildId, `Process start failed: ${startResult.error}`);
       }
-    };
+      throw new Error(`PM0 start failed: ${startResult.error}`);
+    }
 
-    // Start logging app output in background (don't await)
-    logAppOutput(appProc.stdout, 'stdout');
-    logAppOutput(appProc.stderr, 'stderr');
-
-    const pidFile = join(projectDir, 'server.pid');
-    await Bun.write(pidFile, appProc.pid.toString());
-    appProc.unref();
+    // Save pm0 state for recovery on restart
+    await PM0Service.save();
 
     if (buildId) {
       await LogService.step(buildId, 'Performing health check');

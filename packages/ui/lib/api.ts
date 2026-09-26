@@ -177,6 +177,29 @@ export const api = {
     }
     return res.json() as Promise<{ available: boolean }>;
   },
+  async checkPortAvailability(port: number) {
+    const res = await fetch(`${API_URL}/projects/check-port`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port }),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to check port' }));
+      throw new Error(err.error || err.message || 'Failed to check port');
+    }
+    return res.json() as Promise<{ port: number; available: boolean; reason?: string }>;
+  },
+  async getNextAvailablePort() {
+    const res = await fetch(`${API_URL}/projects/next-port`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to allocate port' }));
+      throw new Error(err.error || err.message || 'Failed to allocate port');
+    }
+    return res.json() as Promise<{ port: number; available: boolean }>;
+  },
 
   // GitHub Integration
   async getGithubInstallations() {

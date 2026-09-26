@@ -20,6 +20,31 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     return await ProjectService.getAll();
   })
   .post(
+    '/check-port',
+    async ({ body, set }) => {
+      try {
+        return await ProjectService.checkPortAvailability(body.port);
+      } catch (e: any) {
+        set.status = 400;
+        return { error: e.message };
+      }
+    },
+    {
+      body: t.Object({
+        port: t.Number({ error: 'Port must be a number' }),
+      }),
+    },
+  )
+  .get('/next-port', async ({ set }) => {
+    try {
+      const port = await ProjectService.allocateNextPort();
+      return { port, available: true };
+    } catch (e: any) {
+      set.status = 503;
+      return { error: e.message };
+    }
+  })
+  .post(
     '/',
     async ({ body, set }) => {
       try {
@@ -42,6 +67,13 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         app_type: appTypeSchema,
         root_directory: t.Optional(t.String()),
         domain: t.Optional(t.String()),
+        port: t.Optional(
+          t.Integer({
+            minimum: 1024,
+            maximum: 65535,
+            error: 'Port must be between 1024 and 65535',
+          }),
+        ),
         env_vars: t.Optional(t.Record(t.String(), t.String())),
         github_repo_id: t.Optional(t.String()),
         github_repo_full_name: t.Optional(t.String()),
@@ -57,8 +89,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       set.status = 404;
       return { error: 'Project not found' };
     }
-    const { port, ...safeProject } = project;
-    return safeProject;
+    return project;
   })
   .put(
     '/:id',
@@ -85,6 +116,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         app_type: t.Optional(appTypeSchema),
         root_directory: t.Optional(t.String()),
         domain: t.Optional(t.String()),
+        port: t.Optional(t.Integer({ minimum: 1024, maximum: 65535 })),
         auto_deploy: t.Optional(t.Boolean()),
       }),
     },

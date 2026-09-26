@@ -48,6 +48,7 @@ export interface ProjectConfig {
   buildCommand: string;
   rootDirectory: string;
   domain?: string;
+  port?: number;
   envVars: Record<string, string>;
   autoDeploy: boolean;
 }
@@ -63,6 +64,7 @@ export function ProjectConfigForm({
   const [name, setName] = useState(repo.name.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
   const [rootDirectory, setRootDirectory] = useState(initialRootDirectory);
   const [domain, setDomain] = useState('');
+  const [port, setPort] = useState('');
   const detectedAppType = (initialFramework as AppType) || 'nextjs';
   const [appType, setAppType] = useState<AppType>(detectedAppType);
   const [buildCommand, setBuildCommand] = useState(getDefaultBuildCommand(detectedAppType));
@@ -100,6 +102,36 @@ export function ProjectConfigForm({
     }
   };
 
+  const [portStatus, setPortStatus] = useState<'idle' | 'loading' | 'available' | 'unavailable'>(
+    'idle',
+  );
+  const [portError, setPortError] = useState('');
+
+  const checkPort = async (): Promise<boolean> => {
+    if (!port) return true;
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1024 || portNum > 65535) {
+      setPortStatus('unavailable');
+      setPortError('Port must be between 1024 and 65535');
+      return false;
+    }
+    setPortStatus('loading');
+    setPortError('');
+    try {
+      const res = await api.checkPortAvailability(portNum);
+      setPortStatus(res.available ? 'available' : 'unavailable');
+      if (!res.available) {
+        setPortError(res.reason || 'Port is already in use');
+      }
+      return res.available;
+    } catch (e: any) {
+      console.error(e);
+      setPortStatus('idle');
+      setPortError(e.message || 'Failed to check port');
+      return false;
+    }
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) return toast.error('Project Name is required');
     if (!buildCommand.trim()) return toast.error('Build Command is required');
@@ -108,6 +140,13 @@ export function ProjectConfigForm({
       const isAvailable = await checkSubdomain();
       if (!isAvailable) {
         return toast.error(subdomainError || 'Domain is unavailable');
+      }
+    }
+
+    if (port.trim()) {
+      const isPortFree = await checkPort();
+      if (!isPortFree) {
+        return toast.error(portError || 'Port is unavailable');
       }
     }
 
@@ -125,6 +164,7 @@ export function ProjectConfigForm({
       buildCommand,
       rootDirectory,
       domain,
+      port: port.trim() ? parseInt(port, 10) : undefined,
       envVars: envVarsRecord,
       autoDeploy,
     });
@@ -342,6 +382,55 @@ export function ProjectConfigForm({
             </p>
           )}
           {subdomainError && <p className="text-sm text-red-400">{subdomainError}</p>}
+        </div>
+
+        {/* Port Configuration */}
+        <div className="space-y-3 pt-2 border-t border-zinc-800/50">
+          <Label className="text-zinc-300">Port (Optional)</Label>
+          <div className="flex gap-2 items-center">
+            <div className="flex-1 flex items-center">
+              <Input
+                type="number"
+                min={1024}
+                max={65535}
+                value={port}
+                onChange={(e) => {
+                  setPort(e.target.value);
+                  setPortStatus('idle');
+                  setPortError('');
+                }}
+                placeholder="Auto-assigned (5000-6000)"
+                className="bg-zinc-950/50 border-zinc-700/50"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={checkPort}
+              disabled={!port || portStatus === 'loading'}
+              className="h-10 border-zinc-700/50 hover:bg-zinc-800 text-zinc-300"
+            >
+              {portStatus === 'loading' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Check Availability'
+              )}
+            </Button>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Leave blank for auto-assignment, or specify a custom port (1024-65535).
+          </p>
+          {portStatus === 'available' && (
+            <p className="text-sm text-zinc-300 flex items-center gap-1">
+              <Check className="h-3 w-3 text-emerald-400" /> Port is available
+            </p>
+          )}
+          {portStatus === 'unavailable' && (
+            <p className="text-sm text-red-400 flex items-center gap-1">
+              <X className="h-3 w-3" /> {portError || 'Port is already taken'}
+            </p>
+          )}
         </div>
 
         {/* Footer Actions */}
