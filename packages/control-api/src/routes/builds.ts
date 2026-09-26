@@ -54,7 +54,16 @@ export const buildsRoutes = new Elysia()
           notFound: position === -1,
         };
       })
-      .get('/:id/logs', async ({ params: { id } }) => {
+      .get('/:id/logs', async ({ params: { id }, query }) => {
+        // `?since=<ISO timestamp>` returns only lines persisted after that
+        // point so clients can backfill what they missed over a flaky transport.
+        const since = (query as { since?: string } | undefined)?.since;
+        if (since) {
+          const ts = new Date(since);
+          if (!Number.isNaN(ts.getTime())) {
+            return await LogService.getLogsSince(id, ts);
+          }
+        }
         return await LogService.getLogs(id);
       })
       .delete('/:id/logs', async ({ params: { id } }) => {
@@ -67,8 +76,13 @@ export const internalBuildRoutes = new Elysia().group('/builds', (app) =>
   app
     .post('/:id/logs', async ({ params: { id }, body }) => {
       const { logs, level } = body as { logs: string; level?: LogLevel };
-      await LogService.persist(id, logs, level || 'info');
-      WebSocketService.broadcast(id, logs, level || 'info');
+      // Persist first so the DB is the source of truth, then broadcast with the
+      // real row id/timestamp so clients can de-duplicate on backfill.
+      const row = await LogService.persist(id, logs, level || 'info');
+      WebSocketService.broadcast(id, logs, level || 'info', {
+        id: row.id,
+        timestamp: row.timestamp.toISOString(),
+      });
       return { success: true };
     })
     .put('/:id', async ({ params: { id }, body }) => {

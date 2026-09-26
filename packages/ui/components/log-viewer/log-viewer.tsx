@@ -19,7 +19,7 @@ interface LogViewerProps {
 }
 
 export function LogViewer({ buildId }: LogViewerProps) {
-  const { logs, appendLog, setLogs, clearLogs } = useLogStore();
+  const { logs, appendLog, setLogs, mergeLogs, clearLogs } = useLogStore();
   const logEntries = logs[buildId] || [];
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentMatchRef = useRef<HTMLDivElement>(null);
@@ -115,37 +115,64 @@ export function LogViewer({ buildId }: LogViewerProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showSearch, matchingIndices, currentMatchIndex, goToMatch]);
 
-  // Fetch initial logs
+  // The socket only connects once the persisted history is loaded, so the
+  // initial fetch can never wipe out lines that arrived over the socket.
+  const [historyReady, setHistoryReady] = useState(false);
+
+  // Fetch initial logs (source of truth: DB)
   useEffect(() => {
     let mounted = true;
+    setHistoryReady(false);
+    setIsLoading(true);
     const fetchLogs = async () => {
       try {
-        if (logEntries.length === 0) {
-          const existingLogs = await api.getBuildLogs(buildId);
-          if (mounted && existingLogs) {
-            setLogs(buildId, existingLogs);
-          }
+        const existingLogs = await api.getBuildLogs(buildId);
+        if (mounted && existingLogs) {
+          setLogs(buildId, existingLogs);
         }
       } catch (error) {
         console.error('Failed to fetch logs', error);
       } finally {
-        if (mounted) setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+          setHistoryReady(true);
+        }
       }
     };
     fetchLogs();
     return () => {
       mounted = false;
     };
-  }, [buildId, setLogs, logEntries.length]);
+  }, [buildId, setLogs]);
 
-  // Socket connection
+  // Socket connection (history-first, with backfill on every connect)
   useEffect(() => {
+    if (!historyReady) return;
+
     socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
     const socket = socketRef.current;
+
+    // Backfill anything persisted between the history fetch and the room join
+    // (and anything missed across reconnects). Merges by id so live lines are
+    // never rendered twice: WS payloads now carry the real row id/timestamp.
+    const backfill = async () => {
+      try {
+        const entries = useLogStore.getState().logs[buildId] || [];
+        const last = entries[entries.length - 1];
+        if (!last?.timestamp) return;
+        const missing = await api.getBuildLogsSince(buildId, last.timestamp);
+        if (missing && missing.length > 0) {
+          mergeLogs(buildId, missing);
+        }
+      } catch {
+        // Non-fatal: the next reconnect or manual refresh will pick these up.
+      }
+    };
 
     const subscribe = () => {
       console.log(`[LogViewer] Subscribing to build: ${buildId}`);
       socket.emit('subscribe_build', buildId);
+      void backfill();
     };
 
     if (socket.connected) {
@@ -153,9 +180,18 @@ export function LogViewer({ buildId }: LogViewerProps) {
     }
     socket.on('connect', subscribe);
 
-    const onBuildLog = (message: { buildId: string; data: string; level?: LogLevel }) => {
+    const onBuildLog = (message: {
+      buildId: string;
+      data: string;
+      level?: LogLevel;
+      id?: string;
+      timestamp?: string;
+    }) => {
       if (message.buildId === buildId) {
-        appendLog(buildId, message.data, message.level || 'info');
+        appendLog(buildId, message.data, message.level || 'info', {
+          id: message.id,
+          timestamp: message.timestamp,
+        });
       }
     };
 
@@ -165,8 +201,13 @@ export function LogViewer({ buildId }: LogViewerProps) {
       socket.emit('unsubscribe_build', buildId);
       socket.off('connect', subscribe);
       socket.off('build_log', onBuildLog);
+      // Close the socket instead of leaving a connected-but-unlistened one
+      // behind; a leaked socket per Sheet open hangs one long-poll open and
+      // can exhaust browser/proxy connection pools on flaky networks.
+      socket.disconnect();
+      if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [buildId, appendLog]);
+  }, [buildId, historyReady, appendLog, mergeLogs]);
 
   // Auto-scroll effect
   useEffect(() => {

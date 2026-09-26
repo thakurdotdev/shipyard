@@ -68,6 +68,20 @@ export const api = {
     if (!res.ok) throw new Error('Failed to fetch build logs');
     return res.json();
   },
+  /**
+   * Fetch only the lines persisted after `since` (ISO timestamp). Used to
+   * backfill lines missed over a flaky transport (e.g. polling reconnects).
+   */
+  getBuildLogsSince: async (buildId: string, since: string): Promise<LogEntry[]> => {
+    const res = await fetch(
+      `${API_URL}/builds/${buildId}/logs?since=${encodeURIComponent(since)}`,
+      {
+        credentials: 'include',
+      },
+    );
+    if (!res.ok) throw new Error('Failed to fetch build logs');
+    return res.json();
+  },
   clearBuildLogs: async (buildId: string) => {
     const res = await fetch(`${API_URL}/builds/${buildId}/logs`, {
       method: 'DELETE',

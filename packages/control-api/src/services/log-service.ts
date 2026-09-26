@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { buildLogs, LogLevel } from '../db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { and, asc, eq, gt } from 'drizzle-orm';
 
 export interface LogEntry {
   id: string;
@@ -10,16 +10,32 @@ export interface LogEntry {
   timestamp: Date;
 }
 
+function toLogEntry(log: typeof buildLogs.$inferSelect): LogEntry {
+  return {
+    id: log.id,
+    build_id: log.build_id,
+    level: log.level as LogLevel,
+    message: log.message,
+    timestamp: log.timestamp,
+  };
+}
+
 export const LogService = {
   /**
-   * Persist a structured log entry to the database
+   * Persist a structured log entry to the database.
+   * Returns the inserted row so callers can forward its id/timestamp in the
+   * WebSocket broadcast (lets clients de-duplicate when backfilling).
    */
-  async persist(buildId: string, message: string, level: LogLevel = 'info') {
-    await db.insert(buildLogs).values({
-      build_id: buildId,
-      level,
-      message,
-    });
+  async persist(buildId: string, message: string, level: LogLevel = 'info'): Promise<LogEntry> {
+    const [row] = await db
+      .insert(buildLogs)
+      .values({
+        build_id: buildId,
+        level,
+        message,
+      })
+      .returning();
+    return toLogEntry(row);
   },
 
   /**
@@ -32,13 +48,22 @@ export const LogService = {
       .where(eq(buildLogs.build_id, buildId))
       .orderBy(asc(buildLogs.timestamp));
 
-    return logs.map((log) => ({
-      id: log.id,
-      build_id: log.build_id,
-      level: log.level as LogLevel,
-      message: log.message,
-      timestamp: log.timestamp,
-    }));
+    return logs.map(toLogEntry);
+  },
+
+  /**
+   * Get only logs persisted after `since` (strictly greater), ordered by
+   * timestamp. Used by clients to backfill lines missed over a flaky
+   * transport (e.g. long-polling reconnects).
+   */
+  async getLogsSince(buildId: string, since: Date): Promise<LogEntry[]> {
+    const logs = await db
+      .select()
+      .from(buildLogs)
+      .where(and(eq(buildLogs.build_id, buildId), gt(buildLogs.timestamp, since)))
+      .orderBy(asc(buildLogs.timestamp));
+
+    return logs.map(toLogEntry);
   },
 
   /**
