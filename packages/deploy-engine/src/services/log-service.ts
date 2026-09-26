@@ -4,7 +4,7 @@ const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://localhost:4010';
 
 /**
  * Streams deployment logs to the control-api for persistence and WebSocket broadcast.
- * Uses the same endpoint as build-worker, so logs appear in the same build log stream.
+ * Uses the same endpoint as the build pipeline, so logs appear in the same build log stream.
  */
 export const LogService = {
   /**

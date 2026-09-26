@@ -1,12 +1,13 @@
 /**
- * Queue configuration for build worker
+ * Queue configuration for the in-engine build worker.
+ * Must match control-api's QUEUE_CONFIG.name (packages/control-api/src/queue/config.ts).
  */
 export const QUEUE_CONFIG = {
   name: 'build-queue',
 
   // Worker settings
   worker: {
-    concurrency: 1, // Process one build at a time to protect server
+    concurrency: 1, // Process one build at a time to protect the server
   },
 };
 

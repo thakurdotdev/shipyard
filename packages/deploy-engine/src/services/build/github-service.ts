@@ -2,12 +2,6 @@ import jwt from 'jsonwebtoken';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
 
-// Debug: Log environment at module load time
-console.log(
-  '[github-service] Module loaded. GITHUB_APP_ID:',
-  process.env.GITHUB_APP_ID ? 'SET' : 'NOT SET',
-);
-
 interface GitHubInstallationToken {
   token: string;
   expires_at: string;
@@ -15,14 +9,24 @@ interface GitHubInstallationToken {
 
 /**
  * Resolves the path to the GitHub App private key file.
- * Priority: GITHUB_APP_PRIVATE_KEY_PATH env var > default project root location
+ * Priority: GITHUB_APP_PRIVATE_KEY_PATH env var > repo root > home dir.
  */
 function getPrivateKeyPath(): string {
   if (process.env.GITHUB_APP_PRIVATE_KEY_PATH) {
     return resolve(process.env.GITHUB_APP_PRIVATE_KEY_PATH);
   }
-  // Default: project root (4 levels up from services dir)
-  return join(__dirname, '..', '..', '..', '..', 'github-app.pem');
+
+  // __dirname is packages/deploy-engine/src/services/build, so the repo root is 5 levels up.
+  const candidates = [
+    join(__dirname, '..', '..', '..', '..', '..', 'github-app.pem'),
+    join(process.env.HOME || '/root', 'github-app.pem'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return candidates[0];
 }
 
 /**

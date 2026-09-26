@@ -11,11 +11,10 @@ export const QUEUE_CONFIG = {
 
   // Default job options
   defaultJobOptions: {
-    attempts: 3, // Retry failed jobs up to 3 times
-    backoff: {
-      type: 'exponential' as const,
-      delay: 5000, // Start with 5 second delay
-    },
+    // Builds run in-place in the deploy engine, so a BullMQ retry would re-clone
+    // and rebuild from scratch (duplicate work). Re-trigger builds manually
+    // until the pipeline is fully resumable.
+    attempts: 1,
     removeOnComplete: {
       count: 100, // Keep last 100 completed jobs
     },

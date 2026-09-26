@@ -14,6 +14,11 @@ interface LogBuffer {
 
 const buffers: Record<string, LogBuffer> = {};
 
+/**
+ * Streams build logs to the control-api for persistence and WebSocket broadcast.
+ * Entries are buffered and flushed per level so chatty build output does not
+ * generate one HTTP request per line.
+ */
 export const LogStreamer = {
   /**
    * Stream a log message with a specific level
@@ -52,8 +57,7 @@ export const LogStreamer = {
 
     const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4010';
 
-    // Send each entry individually for proper log level tracking
-    // Batch into single request with combined message per level
+    // Batch into a single request with combined message per level
     const byLevel = new Map<LogLevel, string>();
     for (const entry of entriesToSend) {
       const existing = byLevel.get(entry.level) || '';

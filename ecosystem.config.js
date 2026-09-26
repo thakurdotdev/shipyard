@@ -9,34 +9,23 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 4010,
-        BUILD_WORKER_URL: 'http://localhost:4011',
         DEPLOY_ENGINE_URL: 'http://localhost:4012',
       },
     },
     {
-      name: 'build-worker',
-      script: 'dist/index.js',
-      cwd: 'packages/build-worker',
-      interpreter: 'bun',
-      max_memory_restart: '1G',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 4011,
-        CONTROL_API_URL: 'http://localhost:4010',
-        DEPLOY_ENGINE_URL: 'http://localhost:4012',
-      },
-    },
-    {
+      // Deploy engine also runs the build worker: it clones, installs and builds
+      // in place, then activates the build on the same server.
       name: 'deploy-engine',
       script: 'dist/index.js',
       cwd: 'packages/deploy-engine',
       interpreter: 'bun',
-      max_memory_restart: '1G',
+      max_memory_restart: '2G',
       env: {
         NODE_ENV: 'production',
         PLATFORM_ENV: 'production',
         PORT: 4012,
         CONTROL_API_URL: 'http://localhost:4010',
+        REDIS_URL: 'redis://localhost:6379/0',
       },
     },
     {

@@ -5,6 +5,7 @@ import { SSLService } from './services/ssl-service';
 import { DockerService } from './services/docker';
 import { PM0Service } from './services/pm0';
 import { InfraContainers } from './services/infra-containers';
+import { BuildWorker } from './queue';
 
 import { isPortAvailable, findAvailablePort } from './utils/port';
 
@@ -44,7 +45,7 @@ const app = new Elysia()
   .post(
     '/activate',
     async ({ body }: { body: any }) => {
-      const { projectId, buildId, port, appType, subdomain, envVars } = body;
+      const { projectId, buildId, port, appType, subdomain, rootDirectory, envVars } = body;
 
       try {
         await DeployService.activateDeployment(
@@ -54,6 +55,7 @@ const app = new Elysia()
           appType,
           subdomain,
           envVars || {},
+          rootDirectory,
         );
         return { success: true };
       } catch (e: any) {
@@ -73,6 +75,7 @@ const app = new Elysia()
           t.Literal('elysia'),
         ]),
         subdomain: t.String(),
+        rootDirectory: t.Optional(t.String()),
         envVars: t.Optional(t.Record(t.String(), t.String())),
       }),
     },
@@ -221,6 +224,11 @@ const app = new Elysia()
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
 
+// Start the in-engine build worker (consumes the shared BullMQ build queue)
+BuildWorker.initialize().catch((err) => {
+  console.error('[BuildWorker] Failed to initialize:', err);
+});
+
 // Recover managed processes on startup
 if (USE_DOCKER) {
   DockerService.recoverLogStreams().catch((e) => {
@@ -231,3 +239,19 @@ if (USE_DOCKER) {
     console.error('Failed to recover PM0 processes:', e);
   });
 }
+
+// Graceful shutdown
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\nReceived ${signal}, shutting down gracefully...`);
+
+  try {
+    await BuildWorker.shutdown();
+    process.exit(0);
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+    process.exit(1);
+  }
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

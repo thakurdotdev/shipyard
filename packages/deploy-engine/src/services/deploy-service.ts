@@ -12,9 +12,8 @@ import { LogService } from './log-service';
 import { NginxService } from './nginx-service';
 import { DockerService } from './docker';
 import { PM0Service } from './pm0';
+import { ARTIFACTS_DIR, BASE_DIR, getBuildExtractDir, getProjectDir } from '../config/paths';
 
-const BASE_DIR = process.env.BASE_DIR || join(process.cwd(), 'apps');
-const ARTIFACTS_DIR = join(BASE_DIR, 'artifacts');
 const IS_PLATFORM_PROD = process.env.PLATFORM_ENV === 'production';
 
 /**
@@ -22,11 +21,6 @@ const IS_PLATFORM_PROD = process.env.PLATFORM_ENV === 'production';
  * Set USE_DOCKER=true to enable containerized deployments.
  */
 const USE_DOCKER = process.env.USE_DOCKER === 'true';
-
-// Ensure base dirs exist
-if (!existsSync(ARTIFACTS_DIR)) {
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
-}
 
 // Bounded retry with wall-clock timeout
 async function retry<T>(
@@ -75,6 +69,7 @@ export const DeployService = {
     appType: AppType,
     subdomain: string,
     envVars: Record<string, string> = {},
+    rootDirectory?: string,
   ) {
     const paths = this.getPaths(projectId, buildId);
 
@@ -134,6 +129,24 @@ export const DeployService = {
       throw e;
     }
 
+    // Resolve app directory if monorepo / subfolder deployment
+    const isMonorepo = Boolean(
+      rootDirectory &&
+      rootDirectory !== '.' &&
+      rootDirectory !== './' &&
+      rootDirectory.trim() !== '',
+    );
+    const effectiveAppDir = isMonorepo
+      ? join(effectiveExtractDir, rootDirectory!)
+      : effectiveExtractDir;
+
+    if (isMonorepo) {
+      await LogService.detail(
+        buildId,
+        `Monorepo setup: Application located at "${rootDirectory}" with access to root repository`,
+      );
+    }
+
     // Step 4: Start application (Docker or direct)
     if (USE_DOCKER) {
       await LogService.step(buildId, 'Starting containerized deployment');
@@ -142,7 +155,7 @@ export const DeployService = {
       const result = await DockerService.deploy(
         projectId,
         buildId,
-        effectiveExtractDir,
+        effectiveAppDir,
         port,
         appType,
         envVars,
@@ -165,13 +178,14 @@ export const DeployService = {
       // Start the application
       await LogService.step(buildId, `Starting ${appType} application`);
       await this.startApplication(
-        effectiveExtractDir,
+        effectiveAppDir,
         port,
         appType,
         paths.projectDir,
         buildId,
         envVars,
         projectId,
+        effectiveExtractDir,
       );
     }
 
@@ -256,11 +270,11 @@ export const DeployService = {
   // -------- helpers --------
 
   getPaths(projectId: string, buildId: string) {
-    const projectDir = join(BASE_DIR, projectId);
+    const projectDir = getProjectDir(projectId);
     return {
       artifact: join(ARTIFACTS_DIR, `${buildId}.tar.gz`),
       projectDir,
-      extractDir: join(projectDir, 'builds', buildId, 'extracted'),
+      extractDir: getBuildExtractDir(projectId, buildId),
     };
   },
 
@@ -315,6 +329,7 @@ export const DeployService = {
     buildId?: string,
     envVars: Record<string, string> = {},
     projectId?: string,
+    repoRootDir?: string,
   ) {
     const framework = FRAMEWORKS[appType];
     const useStaticServer = shouldUseStaticServer(appType, cwd);
@@ -334,6 +349,13 @@ export const DeployService = {
       if (framework.requiresInstall) {
         if (buildId) {
           await LogService.step(buildId, 'Installing production dependencies');
+        }
+        // In monorepos: if repoRootDir has a package.json and is different from cwd, install workspace deps at root first
+        if (repoRootDir && repoRootDir !== cwd && existsSync(join(repoRootDir, 'package.json'))) {
+          if (buildId) {
+            await LogService.detail(buildId, 'Installing root workspace dependencies...');
+          }
+          await this.ensureDependenciesInstalled(repoRootDir, buildId);
         }
         await this.ensureDependenciesInstalled(cwd, buildId);
         if (buildId) {
@@ -400,8 +422,22 @@ export const DeployService = {
 
   async ensureDependenciesInstalled(cwd: string, buildId?: string) {
     const packageJsonPath = join(cwd, 'package.json');
+    const nodeModulesPath = join(cwd, 'node_modules');
 
     console.log(`[DeployService] ensureDependenciesInstalled called with cwd: ${cwd}`);
+
+    // Builds run in-place, so dependencies were already installed during the build.
+    // Reusing them avoids a second install (and the downtime it used to cause).
+    if (existsSync(nodeModulesPath)) {
+      console.log(`[DeployService] node_modules already present in ${cwd}, skipping install`);
+      if (buildId) {
+        await LogService.detail(
+          buildId,
+          'Dependencies already installed (built in place), skipping install',
+        );
+      }
+      return;
+    }
 
     // Check if package.json exists
     if (!existsSync(packageJsonPath)) {

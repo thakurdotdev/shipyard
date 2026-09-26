@@ -1,28 +1,22 @@
 import { Worker, Job } from 'bullmq';
 import { getRedisConnection, QUEUE_CONFIG } from './config';
-import { Builder } from '../services/builder';
-import { AppType } from '../config/framework-config';
+import { Builder, type BuildJob } from '../services/build';
 
 /**
  * Build job data structure (must match control-api's BuildJobData)
  */
-export interface BuildJobData {
-  build_id: string;
-  project_id: string;
-  github_url: string;
-  build_command: string;
-  root_directory: string;
-  app_type: AppType;
-  env_vars: Record<string, string>;
-  installation_id?: string;
-}
+export type BuildJobData = BuildJob;
 
 // Singleton worker instance
 let buildWorker: Worker<BuildJobData> | null = null;
 
 /**
  * Build Worker Service
- * Processes build jobs from BullMQ queue
+ *
+ * Consumes build jobs from the BullMQ queue and runs them inside the deploy
+ * engine. Because the build happens in the final deployment directory, the
+ * subsequent activation reuses the installed dependencies instead of
+ * re-installing them.
  */
 export const BuildWorker = {
   /**
@@ -41,16 +35,12 @@ export const BuildWorker = {
       async (job: Job<BuildJobData>) => {
         console.log(`[BuildWorker] Processing job ${job.id} for build ${job.data.build_id}`);
 
-        try {
-          // Execute the build using existing Builder
-          await Builder.execute(job.data);
+        // Builder handles status updates + log streaming back to the control-api.
+        // control-api auto-activates the build when it receives status=success.
+        await Builder.execute(job.data);
 
-          console.log(`[BuildWorker] Job ${job.id} completed successfully`);
-          return { success: true };
-        } catch (error: any) {
-          console.error(`[BuildWorker] Job ${job.id} failed:`, error.message);
-          throw error; // Re-throw to mark job as failed
-        }
+        console.log(`[BuildWorker] Job ${job.id} completed successfully`);
+        return { success: true };
       },
       {
         connection,

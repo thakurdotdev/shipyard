@@ -221,6 +221,7 @@ export const DeploymentService = {
           port: project.port,
           appType: project.app_type,
           subdomain,
+          rootDirectory: project.root_directory,
           envVars: envVarsObject,
         }),
       });

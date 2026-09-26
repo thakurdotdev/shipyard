@@ -1,13 +1,18 @@
 import { spawn } from 'child_process';
+import { existsSync, mkdirSync } from 'fs';
 import { rm } from 'fs/promises';
 import { join } from 'path';
-import { ArtifactService } from './artifact-service';
+import { AppType, isBackendFramework } from '../../config/framework-config';
+import { getBuildExtractDir } from '../../config/paths';
 import { GitService } from './git-service';
 import { WorkerGitHubService } from './github-service';
 import { LogStreamer } from './log-streamer';
-import { AppType, isBackendFramework } from '../config/framework-config';
 
-interface BuildJob {
+/**
+ * Build job payload. Must stay in sync with control-api's BuildJobData
+ * (packages/control-api/src/queue/build-queue.ts).
+ */
+export interface BuildJob {
   build_id: string;
   project_id: string;
   github_url: string;
@@ -18,11 +23,24 @@ interface BuildJob {
   installation_id?: string;
 }
 
+/** Written once a build completes so retries/re-triggers can short-circuit. */
+const BUILT_SENTINEL = '.shipyard-built';
+
 export const Builder = {
+  /**
+   * Runs the full build pipeline for a job.
+   *
+   * The repository is cloned straight into the deployment directory
+   * (`{BASE_DIR}/{projectId}/builds/{buildId}/extracted`) and dependencies are
+   * installed exactly once. The deploy engine reuses those `node_modules` when it
+   * activates the build, so no artifact copy and no second install are needed.
+   */
   async execute(job: BuildJob) {
     console.log(`[Builder] Starting execution for build ${job.build_id}`);
-    const workDir = join(process.cwd(), 'workspace', job.build_id);
+
+    const buildDir = getBuildExtractDir(job.project_id, job.build_id);
     const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4010';
+    const sentinelPath = join(buildDir, BUILT_SENTINEL);
 
     const updateStatus = async (status: 'building' | 'success' | 'failed') => {
       try {
@@ -39,16 +57,20 @@ export const Builder = {
     try {
       await updateStatus('building');
 
-      // 1. Clone
-      await LogStreamer.stream(
-        job.build_id,
-        job.project_id,
-        `Starting build for ${job.build_id}\n`,
-        'info',
-      );
+      // Idempotency guard: never rebuild output that already completed.
+      if (existsSync(sentinelPath)) {
+        await LogStreamer.stream(
+          job.build_id,
+          job.project_id,
+          'Build output already exists - reusing previous result.\n',
+          'info',
+        );
+        await LogStreamer.ensureFlushed(job.build_id);
+        return;
+      }
 
+      // 1. Authenticate (only for projects connected through a GitHub App installation)
       let token: string | undefined;
-      // Resolve installation token if installation_id exists
       if (job.installation_id) {
         try {
           await LogStreamer.stream(
@@ -65,31 +87,106 @@ export const Builder = {
             `GitHub Auth Failed: ${e.message}\n`,
             'error',
           );
-          // Proceed? No build will fail if private.
           throw e;
         }
       }
 
+      // 2. Clone directly into the final deployment directory (no copy step)
+      await LogStreamer.stream(
+        job.build_id,
+        job.project_id,
+        `Starting build for ${job.build_id}\n`,
+        'info',
+      );
       await LogStreamer.stream(job.build_id, job.project_id, 'Cloning repository...\n', 'info');
-      await GitService.clone(job.github_url, workDir, token);
+      await GitService.clone(job.github_url, buildDir, token);
 
-      const projectDir = join(workDir, job.root_directory);
+      const isMonorepo = Boolean(
+        job.root_directory &&
+          job.root_directory !== '.' &&
+          job.root_directory !== './' &&
+          job.root_directory.trim() !== '',
+      );
+      const projectDir = isMonorepo ? join(buildDir, job.root_directory) : buildDir;
 
-      // Handle differently based on framework category
+      // 3. Monorepos: install workspace dependencies at the repository root first
+      if (isMonorepo && existsSync(join(buildDir, 'package.json'))) {
+        await LogStreamer.stream(
+          job.build_id,
+          job.project_id,
+          `Monorepo detected: Installing workspace dependencies at root (${buildDir})...\n`,
+          'info',
+        );
+        await this.runCommand(
+          'bun install',
+          buildDir,
+          job.build_id,
+          job.project_id,
+          job.env_vars,
+        );
+      }
+
+      // 4. Install dependencies once, then build when the app needs compilation
       if (isBackendFramework(job.app_type)) {
-        // Backend apps: Check if build command does real compilation AND script exists
         const buildCommand = job.build_command.toLowerCase().trim();
         const needsBuild = this.needsCompilationStep(buildCommand);
         const hasBuildScript = await this.hasScript(projectDir, 'build');
 
+        // Always install for backends so the deploy engine can reuse node_modules.
+        if (existsSync(join(projectDir, 'package.json'))) {
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Installing dependencies in project directory...\n',
+            'info',
+          );
+          await this.runCommand(
+            'bun install',
+            projectDir,
+            job.build_id,
+            job.project_id,
+            job.env_vars,
+          );
+        }
+
         if (needsBuild && hasBuildScript) {
-          // TypeScript/compiled backend: Install deps and run build
           await LogStreamer.stream(
             job.build_id,
             job.project_id,
             'TypeScript backend detected - running build step...\n',
             'info',
           );
+          await LogStreamer.stream(job.build_id, job.project_id, 'Building project...\n', 'info');
+          await this.runCommand(
+            job.build_command,
+            projectDir,
+            job.build_id,
+            job.project_id,
+            job.env_vars,
+          );
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Build completed successfully!\n',
+            'success',
+          );
+        } else {
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Backend project detected - skipping build step...\n',
+            'info',
+          );
+          await LogStreamer.stream(
+            job.build_id,
+            job.project_id,
+            'Dependencies installed and will be reused at deploy time.\n',
+            'info',
+          );
+        }
+      } else {
+        // Frontend apps: install dependencies and run the build command
+        if (existsSync(join(projectDir, 'package.json'))) {
           await LogStreamer.stream(
             job.build_id,
             job.project_id,
@@ -103,52 +200,7 @@ export const Builder = {
             job.project_id,
             job.env_vars,
           );
-
-          await LogStreamer.stream(job.build_id, job.project_id, 'Building project...\n', 'info');
-          await this.runCommand(
-            job.build_command,
-            projectDir,
-            job.build_id,
-            job.project_id,
-            job.env_vars,
-          );
-
-          await LogStreamer.stream(
-            job.build_id,
-            job.project_id,
-            'Build completed successfully!\n',
-            'success',
-          );
-        } else {
-          // Plain JS/TS backend or no build script: Just package source code
-          await LogStreamer.stream(
-            job.build_id,
-            job.project_id,
-            'Backend project detected - skipping build step...\n',
-            'info',
-          );
-          await LogStreamer.stream(
-            job.build_id,
-            job.project_id,
-            'Source code will be packaged and dependencies installed at deploy time.\n',
-            'info',
-          );
         }
-      } else {
-        // Frontend apps: Install dependencies and run build command
-        await LogStreamer.stream(
-          job.build_id,
-          job.project_id,
-          'Installing dependencies...\n',
-          'info',
-        );
-        await this.runCommand(
-          'bun install',
-          projectDir,
-          job.build_id,
-          job.project_id,
-          job.env_vars,
-        );
 
         await LogStreamer.stream(job.build_id, job.project_id, 'Building project...\n', 'info');
         await this.runCommand(
@@ -167,16 +219,12 @@ export const Builder = {
         );
       }
 
-      await ArtifactService.streamArtifact(
-        job.build_id,
-        job.project_id,
-        projectDir,
-        job.app_type,
-        async (msg) => {
-          await LogStreamer.stream(job.build_id, job.project_id, msg, 'info');
-        },
-      );
+      // 5. Drop git metadata (not needed at runtime) and mark the build complete
+      await rm(join(buildDir, '.git'), { recursive: true, force: true }).catch(() => {});
+      mkdirSync(buildDir, { recursive: true });
+      await Bun.write(sentinelPath, new Date().toISOString());
 
+      await LogStreamer.ensureFlushed(job.build_id);
       await updateStatus('success');
     } catch (error: any) {
       await LogStreamer.stream(
@@ -185,16 +233,14 @@ export const Builder = {
         `Build failed: ${error.message}\n`,
         'error',
       );
-      await updateStatus('failed');
-      throw error;
-    } finally {
       await LogStreamer.ensureFlushed(job.build_id);
-      try {
-        await rm(workDir, { recursive: true, force: true });
-        console.log(`Cleaned up workspace: ${workDir}`);
-      } catch (e) {
-        console.error(`Failed to cleanup workspace: ${workDir}`, e);
-      }
+      await updateStatus('failed');
+
+      // Clean the partial build so a retry starts from a clean checkout
+      await rm(buildDir, { recursive: true, force: true }).catch((e) =>
+        console.error(`[Builder] Failed to clean partial build dir ${buildDir}:`, e),
+      );
+      throw error;
     }
   },
 
