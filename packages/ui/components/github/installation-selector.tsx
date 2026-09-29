@@ -31,20 +31,15 @@ export function InstallationSelector({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+        <h2 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
           GitHub Account
         </h2>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onInstall}
-          className="text-zinc-400 hover:text-white h-7"
-        >
-          <Plus className="w-4 h-4 mr-1" /> Add Account
+        <Button variant="ghost" size="sm" onClick={onInstall} className="h-7">
+          <Plus className="mr-1 size-4" /> Add Account
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         {installations.map((inst) => {
           const isSelected = selectedId === inst.id;
           // Use provided avatar or fallback to constructed URL using ID
@@ -57,31 +52,35 @@ export function InstallationSelector({
               key={inst.id}
               onClick={() => onSelect(inst.id)}
               className={cn(
-                'group relative flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200',
+                'group relative flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-colors duration-200',
                 isSelected
-                  ? 'bg-zinc-800/80 border-zinc-600 ring-1 ring-zinc-500'
-                  : 'bg-zinc-900/40 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700',
+                  ? 'border-border-strong bg-surface'
+                  : 'border-border bg-surface-muted/40 hover:border-border-strong hover:bg-surface',
               )}
             >
-              <Avatar className="w-10 h-10 border border-zinc-800">
+              <Avatar className="size-10 border border-border">
                 <AvatarImage src={avatarUrl} alt={inst.account.login} />
                 <AvatarFallback>{inst.account.login.slice(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
 
-              <div className="flex flex-col min-w-0">
+              <div className="flex min-w-0 flex-col">
                 <span
                   className={cn(
-                    'font-medium text-sm truncate',
-                    isSelected ? 'text-white' : 'text-zinc-300 group-hover:text-white',
+                    'truncate text-sm',
+                    isSelected
+                      ? 'font-medium text-foreground'
+                      : 'text-foreground/80 group-hover:text-foreground',
                   )}
                 >
                   {inst.account.login}
                 </span>
-                <span className="text-xs text-zinc-500 capitalize">{inst.account.type}</span>
+                <span className="text-xs capitalize text-muted-foreground">
+                  {inst.account.type}
+                </span>
               </div>
 
               {isSelected && (
-                <div className="absolute right-3 top-3 w-2 h-2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.4)]" />
+                <span className="absolute top-3 right-3 size-1.5 rounded-full bg-brand-500" />
               )}
             </div>
           );
@@ -89,9 +88,9 @@ export function InstallationSelector({
 
         <button
           onClick={onInstall}
-          className="flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 hover:bg-zinc-900/40 transition-all duration-200 h-[66px]"
+          className="flex h-[66px] items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:border-border-strong hover:bg-surface-muted/40 hover:text-foreground"
         >
-          <span className="text-sm font-medium">Connect New</span>
+          <span>Connect New</span>
         </button>
       </div>
     </div>

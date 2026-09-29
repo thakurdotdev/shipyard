@@ -40,7 +40,7 @@ export function LogActions({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        className="h-7 w-7 text-console-muted hover:text-console-foreground hover:bg-console-surface"
         onClick={onOpenSearch}
         title="Find in logs (⌘F)"
       >
@@ -50,7 +50,7 @@ export function LogActions({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        className="h-7 w-7 text-console-muted hover:text-console-foreground hover:bg-console-surface"
         onClick={onRefresh}
         title="Refresh logs"
         disabled={isRefreshing}
@@ -65,7 +65,7 @@ export function LogActions({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        className="h-7 w-7 text-console-muted hover:text-console-foreground hover:bg-console-surface"
         onClick={onCopy}
         title="Copy logs"
         disabled={disabled}
@@ -75,7 +75,7 @@ export function LogActions({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        className="h-7 w-7 text-console-muted hover:text-console-foreground hover:bg-console-surface"
         onClick={onDownload}
         title="Download logs"
         disabled={disabled}
@@ -87,7 +87,7 @@ export function LogActions({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-zinc-500 hover:text-red-400 hover:bg-zinc-800"
+            className="h-7 w-7 text-console-muted hover:text-red-400 hover:bg-console-surface"
             title="Clear logs"
             disabled={disabled || isClearing}
           >
@@ -107,7 +107,10 @@ export function LogActions({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onClear} className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction
+              onClick={onClear}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Clear Logs
             </AlertDialogAction>
           </AlertDialogFooter>

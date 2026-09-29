@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { CardShell } from '@/components/ui/card-shell';
 import { authClient } from '@/lib/auth-client';
 import { useState } from 'react';
 
@@ -17,17 +18,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40">
-      <div className="w-full max-w-sm bg-background border rounded-xl shadow-sm p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold">Welcome back</h1>
-          <p className="text-muted-foreground mt-2">Sign in to your account to continue</p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6">
+      {/* Editorial backdrop: grid + a very quiet brand wash. */}
+      <div aria-hidden="true" className="bg-grid pointer-events-none absolute inset-0" />
+      <div
+        aria-hidden="true"
+        className="glow-brand pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+      />
+
+      <CardShell className="relative w-full max-w-sm" innerClassName="p-8">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-extrabold tracking-[-0.035em]">Welcome back</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Sign in to your account to continue</p>
         </div>
 
         <div className="space-y-4">
           <Button
             variant="outline"
-            className="w-full h-11"
+            className="h-11 w-full"
             onClick={handleGitHubLogin}
             disabled={loading}
           >
@@ -38,7 +46,7 @@ export default function LoginPage() {
             {loading ? 'Connecting...' : 'Continue with GitHub'}
           </Button>
         </div>
-      </div>
+      </CardShell>
     </div>
   );
 }

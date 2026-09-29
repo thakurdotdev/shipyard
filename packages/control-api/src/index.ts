@@ -75,8 +75,8 @@ const app = new Elysia()
     },
     (app) => app.use(protectedRoutes).group('/api', (app) => app.use(protectedRoutes)),
   )
-  .get('/', () => 'Hello from Thakur Deploy')
-  .get('/api', () => 'Hello from Thakur Deploy');
+  .get('/', () => 'Hello from ShipYard')
+  .get('/api', () => 'Hello from ShipYard');
 
 // 2. Create Socket.IO server
 const io = new IOServer({

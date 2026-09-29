@@ -8,7 +8,7 @@ const authOrigin = process.env.BETTER_AUTH_URL
   : undefined;
 
 export const auth = betterAuth({
-  appName: 'Thakur Deploy',
+  appName: 'ShipYard',
   baseURL: authOrigin!,
   basePath: '/api/auth',
   secret: process.env.BETTER_AUTH_SECRET!,

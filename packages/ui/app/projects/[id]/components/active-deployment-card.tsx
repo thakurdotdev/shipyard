@@ -87,9 +87,9 @@ export function ActiveDeploymentCard({
 
   if (!activeDeployment) {
     return (
-      <Card className="border-dashed bg-muted/40">
+      <Card className="border-dashed bg-surface-muted/40">
         <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
-          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+          <div className="w-12 h-12 rounded-full bg-surface-muted flex items-center justify-center mb-4">
             <AlertCircle className="w-6 h-6 opacity-50" />
           </div>
           <h3 className="text-lg font-semibold text-foreground mb-1">No Active Deployment</h3>
@@ -110,25 +110,27 @@ export function ActiveDeploymentCard({
       <div className="space-y-4">
         <h2 className="text-xl font-semibold tracking-tight">Production Deployment</h2>
 
-        <Card className="overflow-hidden border-zinc-800 bg-black">
+        <Card className="overflow-hidden border-border bg-surface">
           <div className="flex flex-col md:flex-row h-auto md:min-h-80 box-border">
             {/* Left: Preview */}
-            <div className="w-full md:w-[60%] bg-zinc-900/50 relative group border-b md:border-b-0 md:border-r border-zinc-800 min-h-[320px] md:min-h-0">
+            <div className="w-full md:w-[60%] bg-surface-muted/50 relative group border-b md:border-b-0 md:border-r border-border min-h-[320px] md:min-h-0">
               <div className="w-full h-full relative overflow-hidden">
                 {/* Fallback State (Error) */}
                 {iframeError ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-20 text-center p-6">
-                    <div className="h-12 w-12 rounded-full bg-zinc-800 flex items-center justify-center mb-3">
-                      <Globe className="w-6 h-6 text-zinc-400" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface z-20 text-center p-6">
+                    <div className="h-12 w-12 rounded-full bg-surface-muted flex items-center justify-center mb-3">
+                      <Globe className="w-6 h-6 text-muted-foreground" />
                     </div>
-                    <h3 className="text-sm font-medium text-zinc-200 mb-1">Preview Unavailable</h3>
-                    <p className="text-xs text-zinc-500 mb-4 max-w-[200px]">
+                    <h3 className="text-sm font-medium text-foreground mb-1">
+                      Preview Unavailable
+                    </h3>
+                    <p className="text-xs text-muted-foreground mb-4 max-w-[200px]">
                       The deployment could not be embedded or failed to load.
                     </p>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2 h-8 text-xs border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white"
+                      className="gap-2 h-8 text-xs border-border bg-surface-muted text-foreground/90 hover:bg-surface-muted hover:text-foreground"
                       asChild
                     >
                       <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
@@ -140,8 +142,8 @@ export function ActiveDeploymentCard({
                   <>
                     {/* Loading State */}
                     {iframeLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 border-zinc-800 z-10">
-                        <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-surface border-border z-10">
+                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                       </div>
                     )}
 
@@ -149,6 +151,8 @@ export function ActiveDeploymentCard({
                     <div
                       className={`w-[200%] h-[200%] origin-top-left transform scale-50 select-none absolute inset-0 ${iframeLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
                     >
+                      {/* The preview frame is intentionally a white canvas: it renders a
+                          real deployed website, not app chrome. */}
                       <iframe
                         src={deploymentUrl}
                         className="w-full h-full border-0 bg-white pointer-events-none"
@@ -180,18 +184,18 @@ export function ActiveDeploymentCard({
             </div>
 
             {/* Right: Details */}
-            <div className="w-full md:w-[40%] p-5 flex flex-col justify-between bg-zinc-950/30">
+            <div className="w-full md:w-[40%] p-5 flex flex-col justify-between bg-surface-muted/40">
               <div className="space-y-4">
                 {/* Deployment Info */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
                     Deployment
                   </span>
                   <a
                     href={deploymentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline truncate transition-colors"
+                    className="block text-sm font-medium text-foreground hover:underline truncate transition-colors"
                   >
                     {deploymentUrl.replace(/^https?:\/\//, '')}
                   </a>
@@ -199,7 +203,7 @@ export function ActiveDeploymentCard({
 
                 {/* Domains */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
                     Domains
                   </span>
                   <div className="flex items-center gap-2">
@@ -209,17 +213,17 @@ export function ActiveDeploymentCard({
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 group/link"
                     >
-                      <span className="text-sm text-zinc-300 font-mono truncate group-hover/link:text-white group-hover/link:underline transition-colors">
+                      <span className="text-sm text-foreground/90 font-mono truncate group-hover/link:text-foreground group-hover/link:underline transition-colors">
                         {project.domain || `localhost:${project.port}`}
                       </span>
-                      <ExternalLink className="w-3 h-3 text-zinc-600 group-hover/link:text-zinc-400 transition-colors" />
+                      <ExternalLink className="w-3 h-3 text-muted-foreground group-hover/link:text-muted-foreground transition-colors" />
                     </a>
                   </div>
                 </div>
 
                 {/* Status */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
                     Status
                   </span>
                   <div className="flex items-center gap-2">
@@ -228,7 +232,7 @@ export function ActiveDeploymentCard({
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                     </div>
                     <span className="text-sm font-medium text-emerald-400">Ready</span>
-                    <span className="text-xs text-zinc-500 ml-1">
+                    <span className="text-xs text-muted-foreground ml-1">
                       {Math.floor(
                         (Date.now() - new Date(activeDeployment.activated_at).getTime()) /
                           (1000 * 60),
@@ -240,23 +244,23 @@ export function ActiveDeploymentCard({
 
                 {/* Source */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
                     Source
                   </span>
-                  <div className="flex items-center gap-2 text-sm text-zinc-300">
-                    <GitBranch className="w-4 h-4 text-zinc-500" />
+                  <div className="flex items-center gap-2 text-sm text-foreground/90">
+                    <GitBranch className="w-4 h-4 text-muted-foreground" />
                     <span className="font-mono">{project.github_branch || 'main'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="pt-4 mt-4 border-t border-zinc-800 flex justify-end">
+              <div className="pt-4 mt-4 border-t border-border flex justify-end">
                 <Button
                   variant="ghost"
                   size="sm"
                   type="button"
-                  className="text-zinc-400 hover:text-red-400 hover:bg-red-950/30 h-8 text-xs gap-1.5"
+                  className="text-muted-foreground hover:text-red-400 hover:bg-red-950/30 h-8 text-xs gap-1.5"
                   onClick={(e) => {
                     e.stopPropagation();
                     setStopDialogOpen(true);
@@ -284,7 +288,7 @@ export function ActiveDeploymentCard({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleStop}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-red-600 text-foreground hover:bg-red-700"
             >
               Stop Deployment
             </AlertDialogAction>

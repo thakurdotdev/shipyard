@@ -26,22 +26,23 @@ export default function Home() {
   );
 
   return (
-    <div className="pb-10">
-      <header className="border-b bg-background/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4 max-w-7xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Overview</h1>
+    <div className="pb-24">
+      {/* Sits below the 68px sticky navbar rather than sliding under it. */}
+      <header className="sticky top-[68px] z-10 border-b border-border bg-background/70 backdrop-blur-xl">
+        <div className="mx-auto max-w-6xl px-6 py-4">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <h1 className="text-2xl font-bold tracking-[-0.02em] text-foreground">Overview</h1>
             <div className="flex items-center gap-3">
               <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search projects..."
-                  className="pl-9 h-9"
+                  className="h-9 pl-9"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <Button asChild size="sm" className="h-9 gap-2">
+              <Button asChild className="h-9 gap-2">
                 <Link href="/projects/new">
                   <Plus className="h-4 w-4" />
                   <span className="hidden sm:inline">Add New...</span>
@@ -53,18 +54,18 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-8 px-6 py-12">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed rounded-xl bg-muted/20">
-            <div className="p-4 rounded-full bg-muted mb-4 border">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-muted/20 py-24 text-center">
+            <div className="mb-4 grid size-14 place-items-center rounded-full border border-border bg-surface-muted">
               <Search className="h-6 w-6 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-medium">No projects found</h3>
-            <p className="text-muted-foreground mb-6 max-w-sm">
+            <h3 className="text-lg font-semibold tracking-tight">No projects found</h3>
+            <p className="mb-6 max-w-sm text-muted-foreground">
               {search
                 ? `No projects matching "${search}"`
                 : 'Get started by creating your first project.'}
@@ -80,7 +81,7 @@ export default function Home() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredProjects.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}

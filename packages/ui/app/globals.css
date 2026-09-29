@@ -1,114 +1,167 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Light is the SECONDARY theme — dark is the default (see ThemeProvider in
+   app/layout.tsx). Everything below is deliberately low-contrast and quiet:
+   surfaces live within a few percent of the background and borders are
+   hairlines at 6–16% alpha, never opaque gray.
+   --------------------------------------------------------------------------- */
 :root {
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0 0 0);
-  --popover: oklch(0.99 0 0);
-  --popover-foreground: oklch(0 0 0);
-  --primary: oklch(0 0 0);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.44 0 0);
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.63 0.19 23.03);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.92 0 0);
-  --input: oklch(0.94 0 0);
-  --ring: oklch(0 0 0);
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+
+  /* The single accent hue in the product. brand-500 is the on-screen colour
+     (buttons, focus rings, accents), brand-300 the highlight/glow tint, and
+     brand-800 the deep tone for shadows. Change these three and the whole UI
+     re-skins. Never hard-code an accent colour anywhere else. */
+  --brand-300: #bef264;
+  --brand-500: #65a30d;
+  --brand-800: #365314;
+
+  --primary: var(--brand-500);
+  /* White on --brand-500 is only 3.1:1, so brand surfaces take dark text. */
+  --primary-foreground: #0a0a0b;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  /* Hairline borders keep the UI editorial instead of skeuomorphic. */
+  --border: rgba(10, 10, 10, 0.08);
+  --border-strong: rgba(10, 10, 10, 0.16);
+  --input: rgba(10, 10, 10, 0.08);
+  --ring: var(--brand-500);
+
   --chart-1: oklch(0.81 0.17 75.35);
   --chart-2: oklch(0.55 0.22 264.53);
   --chart-3: oklch(0.72 0 0);
   --chart-4: oklch(0.92 0 0);
   --chart-5: oklch(0.56 0 0);
-  --sidebar: oklch(0.99 0 0);
-  --sidebar-foreground: oklch(0 0 0);
-  --sidebar-primary: oklch(0 0 0);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.94 0 0);
-  --sidebar-accent-foreground: oklch(0 0 0);
-  --sidebar-border: oklch(0.94 0 0);
-  --sidebar-ring: oklch(0 0 0);
-  --font-sans: Geist, sans-serif;
+
+  --sidebar: #fafafa;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: var(--brand-500);
+  --sidebar-primary-foreground: #0a0a0b;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: rgba(10, 10, 10, 0.08);
+  --sidebar-ring: var(--brand-500);
+
+  /* One family for everything — headlines, body, UI. Swap the source here if
+     you move off Geist (e.g. Cabinet Grotesk via @font-face). */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --font-serif: Georgia, serif;
-  --font-mono: Geist Mono, monospace;
-  --radius: 0.5rem;
-  --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 2px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0.18;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
-  --shadow-xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
-  --shadow-sm: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
-  --shadow: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
-  --shadow-md: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 2px 4px -1px hsl(0 0% 0% / 0.18);
-  --shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 4px 6px -1px hsl(0 0% 0% / 0.18);
-  --shadow-xl: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 8px 10px -1px hsl(0 0% 0% / 0.18);
-  --shadow-2xl: 0px 1px 2px 0px hsl(0 0% 0% / 0.45);
+
+  --radius: 0.625rem;
+
+  /* Texture intensity for .bg-grid */
+  --pattern-fg: rgba(10, 10, 10, 0.07);
+
+  /* Faded-wordmark ink: needs a higher alpha in light to read the same as dark. */
+  --wordmark-alpha: 10%;
+
+  /* The build console stays dark in BOTH themes: ANSI output is designed for a
+     dark background. Token-driven so nothing hard-codes a colour. */
+  --console: #0a0a0b;
+  --console-surface: #18181b;
+  --console-foreground: #e4e4e7;
+  --console-muted: #71717a;
+  --console-border: rgba(255, 255, 255, 0.08);
+
+  --shadow-2xs: 0 1px 2px 0 hsl(0 0% 0% / 0.03);
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.04);
+  --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 1px 3px -1px hsl(0 0% 0% / 0.04);
+  --shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 1px 3px -1px hsl(0 0% 0% / 0.04);
+  --shadow-md: 0 2px 4px -1px hsl(0 0% 0% / 0.06), 0 4px 8px -2px hsl(0 0% 0% / 0.05);
+  --shadow-lg: 0 4px 8px -2px hsl(0 0% 0% / 0.07), 0 12px 24px -6px hsl(0 0% 0% / 0.06);
+  --shadow-xl: 0 8px 16px -4px hsl(0 0% 0% / 0.08), 0 20px 40px -8px hsl(0 0% 0% / 0.07);
+  --shadow-2xl: 0 24px 56px -12px hsl(0 0% 0% / 0.16);
   --tracking-normal: 0em;
-  --spacing: 0.25rem;
 }
 
+/* Dark is the default theme. Surfaces stay within a few percent of the
+   background so the page reads as one near-black plane with hairline seams. */
 .dark {
-  --background: oklch(0 0 0);
-  --foreground: oklch(1 0 0);
-  --card: oklch(0.14 0 0);
-  --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.18 0 0);
-  --popover-foreground: oklch(1 0 0);
-  --primary: oklch(1 0 0);
-  --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.25 0 0);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.23 0 0);
-  --muted-foreground: oklch(0.72 0 0);
-  --accent: oklch(0.32 0 0);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.69 0.2 23.91);
-  --destructive-foreground: oklch(0 0 0);
-  --border: oklch(0.26 0 0);
-  --input: oklch(0.32 0 0);
-  --ring: oklch(0.72 0 0);
+  --background: #0a0a0b;
+  --foreground: #f5f5f6;
+  --card: #111113;
+  --card-foreground: #f5f5f6;
+  --popover: #18181b;
+  --popover-foreground: #f5f5f6;
+
+  --primary: var(--brand-500);
+  --primary-foreground: #0a0a0b;
+  --secondary: #18181b;
+  --secondary-foreground: #f5f5f6;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: #1f1f23;
+  --accent-foreground: #f5f5f6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.06);
+  /* brand-300 instead of brand-500 so focus rings stay visible on near-black. */
+  --ring: var(--brand-300);
+
   --chart-1: oklch(0.81 0.17 75.35);
   --chart-2: oklch(0.58 0.21 260.84);
   --chart-3: oklch(0.56 0 0);
   --chart-4: oklch(0.44 0 0);
   --chart-5: oklch(0.92 0 0);
-  --sidebar: oklch(0.18 0 0);
-  --sidebar-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(1 0 0);
-  --sidebar-primary-foreground: oklch(0 0 0);
-  --sidebar-accent: oklch(0.32 0 0);
-  --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.32 0 0);
-  --sidebar-ring: oklch(0.72 0 0);
-  --font-sans: Geist, sans-serif;
+
+  --sidebar: #111113;
+  --sidebar-foreground: #f5f5f6;
+  --sidebar-primary: var(--brand-500);
+  --sidebar-primary-foreground: #0a0a0b;
+  --sidebar-accent: #1f1f23;
+  --sidebar-accent-foreground: #f5f5f6;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: var(--brand-300);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --font-serif: Georgia, serif;
-  --font-mono: Geist Mono, monospace;
-  --radius: 0.5rem;
-  --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 2px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0.18;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
-  --shadow-xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
-  --shadow-sm: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
-  --shadow: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
-  --shadow-md: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 2px 4px -1px hsl(0 0% 0% / 0.18);
-  --shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 4px 6px -1px hsl(0 0% 0% / 0.18);
-  --shadow-xl: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 8px 10px -1px hsl(0 0% 0% / 0.18);
-  --shadow-2xl: 0px 1px 2px 0px hsl(0 0% 0% / 0.45);
+
+  --radius: 0.625rem;
+
+  --pattern-fg: rgba(255, 255, 255, 0.06);
+  --wordmark-alpha: 5%;
+
+  /* Intentionally identical to :root — the console never inverts. */
+  --console: #0a0a0b;
+  --console-surface: #18181b;
+  --console-foreground: #e4e4e7;
+  --console-muted: #71717a;
+  --console-border: rgba(255, 255, 255, 0.08);
+
+  --shadow-2xs: 0 1px 2px 0 hsl(0 0% 0% / 0.24);
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.28);
+  --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.32), 0 1px 3px -1px hsl(0 0% 0% / 0.28);
+  --shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.32), 0 1px 3px -1px hsl(0 0% 0% / 0.28);
+  --shadow-md: 0 2px 4px -1px hsl(0 0% 0% / 0.36), 0 4px 8px -2px hsl(0 0% 0% / 0.32);
+  --shadow-lg: 0 4px 8px -2px hsl(0 0% 0% / 0.4), 0 12px 24px -6px hsl(0 0% 0% / 0.36);
+  --shadow-xl: 0 8px 16px -4px hsl(0 0% 0% / 0.44), 0 20px 40px -8px hsl(0 0% 0% / 0.4);
+  --shadow-2xl: 0 24px 56px -12px hsl(0 0% 0% / 0.6);
+  --tracking-normal: 0em;
 }
 
 @theme inline {
@@ -131,6 +184,23 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  /* Brand ramp — the only accent in the UI. */
+  --color-brand-300: var(--brand-300);
+  --color-brand-500: var(--brand-500);
+  --color-brand-800: var(--brand-800);
+  --color-border-strong: var(--border-strong);
+  /* Surface vocabulary aliases: bg-surface / bg-surface-muted read the same as
+     bg-card / bg-muted. Prefer these in new markup. */
+  --color-surface: var(--card);
+  --color-surface-muted: var(--muted);
+
+  /* Console palette — constant across themes (see :root). */
+  --color-console: var(--console);
+  --color-console-surface: var(--console-surface);
+  --color-console-foreground: var(--console-foreground);
+  --color-console-muted: var(--console-muted);
+  --color-console-border: var(--console-border);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -146,6 +216,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
@@ -166,6 +237,11 @@
 
 body {
   letter-spacing: var(--tracking-normal);
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer base {
@@ -175,5 +251,89 @@ body {
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  ::selection {
+    background: var(--brand-300);
+    color: var(--primary-foreground);
+  }
+}
+
+@layer utilities {
+  /* -------------------------------------------------------------------------
+     Texture. Everything here is a CSS background — no SVG or image files.
+     ------------------------------------------------------------------------- */
+
+  /* Faint 48px grid, radially masked so it dissolves toward the edges.
+     Dial the intensity with --pattern-fg. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--pattern-fg) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--pattern-fg) 1px, transparent 1px);
+    background-size: 48px 48px;
+    -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+
+  /* Very subtle brand wash for behind a hero or a closing CTA. */
+  .glow-brand {
+    background: radial-gradient(
+      60% 50% at 50% 0%,
+      color-mix(in oklab, var(--brand-500) 28%, transparent),
+      transparent 70%
+    );
+  }
+
+  /* Hairline divider lit at its centre. */
+  .divider-glow {
+    position: relative;
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .divider-glow::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 50%;
+    height: 1px;
+    transform: translateX(-50%);
+    background: linear-gradient(
+      to right,
+      transparent,
+      color-mix(in oklab, var(--foreground) 35%, transparent),
+      transparent
+    );
+  }
+
+  /* The oversized, barely-there product wordmark in the footer. */
+  .wordmark-faded {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.06em;
+    line-height: 0.8;
+    color: color-mix(in oklab, var(--foreground) var(--wordmark-alpha), transparent);
+    user-select: none;
+    pointer-events: none;
+  }
+}
+
+/* Respect the OS setting: no decorative motion, but keep progress spinners
+   turning slowly so a loading state never looks frozen. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
   }
 }

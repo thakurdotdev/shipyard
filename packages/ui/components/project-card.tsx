@@ -1,4 +1,4 @@
-import { Card } from '@/components/ui/card';
+import { CardShell } from '@/components/ui/card-shell';
 import { getFrameworkOption } from '@/lib/framework-config';
 import { Project } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -66,7 +66,10 @@ export function ProjectCard({ project }: { project: Project }) {
   const framework = getFrameworkOption(project.app_type);
 
   return (
-    <Card className="group relative flex flex-col justify-between overflow-hidden border bg-card hover:border-sidebar-accent hover:shadow-md transition-all duration-200">
+    <CardShell
+      className="group relative transition-colors duration-200 hover:border-border-strong"
+      innerClassName="justify-between overflow-hidden"
+    >
       <Link
         href={`/projects/${project.id}`}
         className="absolute inset-0 z-0"
@@ -77,7 +80,7 @@ export function ProjectCard({ project }: { project: Project }) {
         <div className="p-5 flex-1">
           {/* Header */}
           <div className="flex items-start gap-4 mb-6">
-            <div className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-muted border border-border">
+            <div className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-surface-muted border border-border">
               <FrameworkIcon type={project.app_type} className="w-5 h-5 text-foreground" />
             </div>
             <div className="min-w-0 flex-1">
@@ -135,7 +138,7 @@ export function ProjectCard({ project }: { project: Project }) {
             </div>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full border border-border/50 max-w-[120px]">
+              <div className="flex items-center gap-1 bg-surface-muted px-2 py-0.5 rounded-full border border-border max-w-[120px]">
                 <GitBranch className="w-3 h-3 opacity-70" />
                 <span className="font-mono truncate">{project.github_branch || 'main'}</span>
               </div>
@@ -145,7 +148,7 @@ export function ProjectCard({ project }: { project: Project }) {
         </div>
 
         {/* Minimal Footer */}
-        <div className="px-5 py-3 border-t bg-muted/30 flex items-center justify-between z-10 relative">
+        <div className="relative z-10 flex items-center justify-between border-t border-border bg-surface-muted/30 px-5 py-3">
           <div className="flex items-center gap-2 hover:text-foreground transition-colors pointer-events-auto text-xs text-muted-foreground">
             <a
               href={project.github_url}
@@ -159,7 +162,7 @@ export function ProjectCard({ project }: { project: Project }) {
           </div>
         </div>
       </div>
-    </Card>
+    </CardShell>
   );
 }
 

@@ -1,12 +1,14 @@
 'use client';
 
 import { MonitorIcon, MoonStarIcon, SunIcon } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { useTheme } from 'next-themes';
 import type { JSX } from 'react';
 import { useSyncExternalStore } from 'react';
 
 import { cn } from '@/lib/utils';
+
+const SPRING = { type: 'spring' as const, bounce: 0.3, duration: 0.6 };
 
 function ThemeOption({
   icon,
@@ -19,26 +21,26 @@ function ThemeOption({
   isActive?: boolean;
   onClick: (value: string) => void;
 }) {
+  const reduceMotion = useReducedMotion();
+
   return (
     <button
       className={cn(
-        'relative flex size-8 cursor-default items-center justify-center rounded-full transition-[color] [&_svg]:size-4',
-        isActive
-          ? 'text-zinc-950 dark:text-zinc-50'
-          : 'text-zinc-400 hover:text-zinc-950 dark:text-zinc-500 dark:hover:text-zinc-50',
+        'relative flex size-8 cursor-pointer items-center justify-center rounded-lg transition-[color] duration-200 outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-4',
+        isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
       )}
       role="radio"
       aria-checked={isActive}
       aria-label={`Switch to ${value} theme`}
       onClick={() => onClick(value)}
     >
-      {icon}
+      <span className="relative z-10 flex">{icon}</span>
 
       {isActive && (
         <motion.div
           layoutId="theme-option"
-          transition={{ type: 'spring', bounce: 0.3, duration: 0.6 }}
-          className="absolute inset-0 rounded-full border border-zinc-200 dark:border-zinc-700"
+          transition={reduceMotion ? { duration: 0 } : SPRING}
+          className="absolute inset-0 rounded-lg border border-border-strong bg-surface shadow-xs"
         />
       )}
     </button>
@@ -62,6 +64,7 @@ const THEME_OPTIONS = [
 
 function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
+  const reduceMotion = useReducedMotion();
 
   const isMounted = useSyncExternalStore(
     () => () => {},
@@ -70,7 +73,8 @@ function ThemeSwitcher() {
   );
 
   if (!isMounted) {
-    return <div className="flex h-8 w-24" />;
+    // Reserve the same footprint the control will take, so the bar never jumps.
+    return <div className="h-[38px] w-[106px]" />;
   }
 
   return (
@@ -78,8 +82,8 @@ function ThemeSwitcher() {
       key={String(isMounted)}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="inline-flex items-center overflow-hidden rounded-full bg-white ring-1 ring-zinc-200 ring-inset dark:bg-zinc-950 dark:ring-zinc-700"
+      transition={{ duration: reduceMotion ? 0 : 0.3 }}
+      className="inline-flex items-center gap-0.5 overflow-hidden rounded-xl border border-border bg-surface-muted p-0.5"
       role="radiogroup"
     >
       {THEME_OPTIONS.map((option) => (

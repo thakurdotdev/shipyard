@@ -32,7 +32,7 @@ export function LogLine({ entry, searchTerm, isCurrentMatch, lineRef }: LogLineP
     const parts = message.split(new RegExp(`(${escapedTerm})`, 'gi'));
     return parts.map((part, i) =>
       part.toLowerCase() === searchTerm.toLowerCase() ? (
-        <mark key={i} className="bg-yellow-500/50 text-white rounded px-0.5">
+        <mark key={i} className="bg-brand-300 text-primary-foreground rounded px-0.5">
           {part}
         </mark>
       ) : (
@@ -45,11 +45,11 @@ export function LogLine({ entry, searchTerm, isCurrentMatch, lineRef }: LogLineP
     <div
       ref={lineRef as React.RefObject<HTMLDivElement>}
       className={cn(
-        'flex font-mono text-xs leading-5 hover:bg-zinc-800/30',
+        'flex font-mono text-xs leading-5 hover:bg-console-surface/40',
         getLogLineStyle(entry.level, isCurrentMatch),
       )}
     >
-      <span className="text-zinc-600 select-none shrink-0 pr-4 tabular-nums">{timestamp}</span>
+      <span className="text-console-muted select-none shrink-0 pr-4 tabular-nums">{timestamp}</span>
       <span className="whitespace-pre-wrap break-all flex-1">{highlightedMessage}</span>
     </div>
   );

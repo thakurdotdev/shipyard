@@ -33,37 +33,42 @@ export function Navbar() {
   ];
 
   return (
-    <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="font-bold text-xl flex items-center gap-2">
-            <Image src="/logo.png" alt="Logo" width={30} height={30} />
-            Thakur Deploy
+    <nav className="sticky top-0 z-50 border-b border-border bg-background/70 backdrop-blur-xl">
+      <div className="mx-auto flex h-[68px] max-w-[1400px] items-center justify-between px-6">
+        <div className="flex items-center gap-7">
+          <Link href="/" className="flex items-center gap-2.5 text-[15px] font-bold tracking-tight">
+            <Image src="/logo.png" alt="Logo" width={30} height={30} className="rounded-lg" />
+            ShipYard
           </Link>
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden items-center gap-7 md:flex">
             {session &&
               routes.map((route) => (
                 <Link
                   key={route.href}
                   href={route.href}
                   className={cn(
-                    'text-sm font-medium transition-colors hover:text-primary flex items-center gap-2',
-                    route.active ? 'text-foreground' : 'text-muted-foreground',
+                    'flex items-center gap-2 text-sm transition-colors duration-200',
+                    route.active
+                      ? 'font-medium text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  <route.icon className="w-4 h-4" />
+                  <route.icon className="size-4" />
                   {route.label}
                 </Link>
               ))}
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <ThemeSwitcher />
           {session ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-8 w-8">
+                <Button
+                  variant="ghost"
+                  className="relative size-9 rounded-xl border border-border bg-surface-muted p-0 hover:border-border-strong hover:bg-surface-muted/70"
+                >
+                  <Avatar className="size-7">
                     <AvatarImage src={session.user.image || ''} alt={session.user.name} />
                     <AvatarFallback>{session.user.name.charAt(0)}</AvatarFallback>
                   </Avatar>

@@ -27,7 +27,7 @@ function StatusBadge({ status, type }: { status: string; type: 'dns' | 'ssl' }) 
       case 'failed':
         return 'bg-red-500/10 text-red-400 border-red-500/20';
       default:
-        return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
+        return 'bg-surface-muted text-muted-foreground border-border';
     }
   };
 
@@ -79,10 +79,10 @@ export function DomainStatusCard({ projectId, domainProvision, onRefresh }: Doma
   };
 
   return (
-    <Card className="border-border/50 shadow-sm bg-muted/20">
+    <Card className="border-border shadow-sm bg-surface-muted/20">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          <CardTitle className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
             Domain Status
           </CardTitle>
           {hasFailed && (
@@ -106,13 +106,13 @@ export function DomainStatusCard({ projectId, domainProvision, onRefresh }: Doma
       <CardContent className="space-y-3">
         {/* Domain name */}
         <div className="flex items-center gap-2">
-          <Globe className="w-4 h-4 text-zinc-400" />
-          <span className="text-sm font-mono text-zinc-300">{domainProvision.full_domain}</span>
+          <Globe className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-mono text-foreground">{domainProvision.full_domain}</span>
         </div>
 
         {/* DNS Status */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Globe className="w-3.5 h-3.5" />
             <span>DNS Record</span>
           </div>
@@ -121,7 +121,7 @@ export function DomainStatusCard({ projectId, domainProvision, onRefresh }: Doma
 
         {/* SSL Status */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Shield className="w-3.5 h-3.5" />
             <span>SSL Certificate</span>
           </div>
@@ -131,11 +131,11 @@ export function DomainStatusCard({ projectId, domainProvision, onRefresh }: Doma
         {/* SSL Expiry */}
         {domainProvision.ssl_expiry && (
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="w-3.5 h-3.5" />
               <span>Cert Expires</span>
             </div>
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-muted-foreground">
               {new Date(domainProvision.ssl_expiry).toLocaleDateString()}
             </span>
           </div>

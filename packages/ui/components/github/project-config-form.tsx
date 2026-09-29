@@ -175,10 +175,10 @@ export function ProjectConfigForm({
       {/* Configure Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Configure Project</h2>
-          <p className="text-zinc-400 text-sm">
+          <h2 className="text-xl font-semibold text-foreground">Configure Project</h2>
+          <p className="text-muted-foreground text-sm">
             Deploying{' '}
-            <span className="text-zinc-200 font-mono bg-zinc-800 px-1 py-0.5 rounded text-xs">
+            <span className="text-foreground font-mono bg-surface-muted px-1 py-0.5 rounded-md text-xs">
               {repo.full_name}
             </span>
           </p>
@@ -187,25 +187,25 @@ export function ProjectConfigForm({
           variant="ghost"
           size="sm"
           onClick={onBack}
-          className="text-zinc-400 hover:text-white"
+          className="text-muted-foreground hover:text-foreground"
         >
           Change Repo
         </Button>
       </div>
 
-      <div className="space-y-6 bg-zinc-900/40 border border-zinc-800 rounded-xl p-6">
+      <div className="space-y-6 bg-surface-muted/40 border border-border rounded-2xl p-6">
         {/* Project Name */}
         <div className="space-y-3">
-          <Label className="text-zinc-300">Project Name</Label>
+          <Label className="text-foreground/90">Project Name</Label>
           <div className="flex gap-2">
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="my-project"
-              className="bg-zinc-950/50 border-zinc-700/50 focus-visible:ring-zinc-500/20"
+              className="bg-surface-muted/60 border-border "
             />
           </div>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Used as the unique identifier and default subdomain.
           </p>
         </div>
@@ -213,9 +213,9 @@ export function ProjectConfigForm({
         {/* Framework & Directory */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-3">
-            <Label className="text-zinc-300">Framework Preset</Label>
+            <Label className="text-foreground/90">Framework Preset</Label>
             <Select value={appType} onValueChange={handleAppTypeChange}>
-              <SelectTrigger className="bg-zinc-950/50 border-zinc-700/50">
+              <SelectTrigger className="bg-surface-muted/60 border-border">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -240,14 +240,14 @@ export function ProjectConfigForm({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-zinc-300">Root Directory</Label>
+            <Label className="text-foreground/90">Root Directory</Label>
             <div className="relative">
-              <FolderGit2 className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+              <FolderGit2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 value={rootDirectory}
                 onChange={(e) => setRootDirectory(e.target.value)}
                 placeholder="./"
-                className="pl-9 bg-zinc-950/50 border-zinc-700/50"
+                className="pl-9 bg-surface-muted/60 border-border"
               />
             </div>
           </div>
@@ -257,47 +257,49 @@ export function ProjectConfigForm({
         <Collapsible
           open={isBuildSettingsOpen}
           onOpenChange={setIsBuildSettingsOpen}
-          className="bg-zinc-950/30 border border-zinc-800/50 rounded-lg"
+          className="bg-surface-muted/40 border border-border rounded-xl"
         >
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="w-full flex justify-between items-center p-4 h-auto hover:bg-zinc-800/50"
+              className="w-full flex justify-between items-center p-4 h-auto hover:bg-surface-muted"
             >
               <div className="flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-zinc-400" />
-                <span className="font-medium text-zinc-300">Build Settings</span>
+                <Settings2 className="w-4 h-4 text-muted-foreground" />
+                <span className="font-medium text-foreground/90">Build Settings</span>
               </div>
               {isBuildSettingsOpen ? (
-                <ChevronDown className="w-4 h-4 text-zinc-500" />
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
               ) : (
-                <ChevronRight className="w-4 h-4 text-zinc-500" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               )}
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="p-4 pt-0 space-y-4">
             <div className="space-y-3 pt-2">
-              <Label className="text-zinc-400 text-xs uppercase tracking-wide">Build Command</Label>
+              <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                Build Command
+              </Label>
               <div className="relative">
-                <Terminal className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                <Terminal className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={buildCommand}
                   onChange={(e) => setBuildCommand(e.target.value)}
-                  className="pl-9 bg-zinc-950/50 border-zinc-700/50 font-mono text-sm"
+                  className="pl-9 bg-surface-muted/60 border-border font-mono text-sm"
                 />
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="text-zinc-400 text-xs uppercase tracking-wide">
+              <Label className="text-muted-foreground text-xs uppercase tracking-wide">
                 Output Directory (Optional)
               </Label>
               <div className="relative">
-                <Box className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                <Box className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="dist, build, or public"
-                  className="pl-9 bg-zinc-950/50 border-zinc-700/50"
+                  className="pl-9 bg-surface-muted/60 border-border"
                 />
               </div>
             </div>
@@ -308,25 +310,25 @@ export function ProjectConfigForm({
         <Collapsible
           open={isEnvVarsOpen}
           onOpenChange={setIsEnvVarsOpen}
-          className="bg-zinc-950/30 border border-zinc-800/50 rounded-lg"
+          className="bg-surface-muted/40 border border-border rounded-xl"
         >
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="w-full flex justify-between items-center p-4 h-auto hover:bg-zinc-800/50"
+              className="w-full flex justify-between items-center p-4 h-auto hover:bg-surface-muted"
             >
               <div className="flex items-center gap-2">
-                <Box className="w-4 h-4 text-zinc-400" />
-                <span className="font-medium text-zinc-300">Environment Variables</span>
-                <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+                <Box className="w-4 h-4 text-muted-foreground" />
+                <span className="font-medium text-foreground/90">Environment Variables</span>
+                <span className="text-xs text-muted-foreground bg-surface-muted px-2 py-0.5 rounded-full">
                   {envVars.length}
                 </span>
               </div>
               {isEnvVarsOpen ? (
-                <ChevronDown className="w-4 h-4 text-zinc-500" />
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
               ) : (
-                <ChevronRight className="w-4 h-4 text-zinc-500" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               )}
             </Button>
           </CollapsibleTrigger>
@@ -338,8 +340,8 @@ export function ProjectConfigForm({
         </Collapsible>
 
         {/* Advanced: Domain */}
-        <div className="space-y-3 pt-2 border-t border-zinc-800/50">
-          <Label className="text-zinc-300">Custom Subdomain (Optional)</Label>
+        <div className="space-y-3 pt-2 border-t border-border">
+          <Label className="text-foreground/90">Custom Subdomain (Optional)</Label>
           <div className="flex gap-2 items-center">
             <div className="flex-1 flex items-center">
               <Input
@@ -350,10 +352,10 @@ export function ProjectConfigForm({
                   setSubdomainError('');
                 }}
                 placeholder="my-app"
-                className="text-right bg-zinc-950/50 border-zinc-700/50 rounded-r-none border-r-0 focus-visible:ring-0"
+                className="text-right bg-surface-muted/60 border-border rounded-r-none rounded-l-xl border-r-0"
               />
-              <div className="bg-zinc-900 border border-l-0 border-zinc-700/50 px-3 h-10 flex items-center rounded-r-md">
-                <span className="text-zinc-500 text-sm whitespace-nowrap">.thakur.dev</span>
+              <div className="bg-surface-muted border border-border border-l-0 px-3 h-10 flex items-center rounded-r-xl">
+                <span className="text-muted-foreground text-sm whitespace-nowrap">.thakur.dev</span>
               </div>
             </div>
             <Button
@@ -362,7 +364,7 @@ export function ProjectConfigForm({
               size="sm"
               onClick={checkSubdomain}
               disabled={!domain || subdomainStatus === 'loading'}
-              className="h-10 border-zinc-700/50 hover:bg-zinc-800 text-zinc-300"
+              className="h-10 border-border hover:bg-surface-muted text-foreground/90"
             >
               {subdomainStatus === 'loading' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -372,21 +374,21 @@ export function ProjectConfigForm({
             </Button>
           </div>
           {subdomainStatus === 'available' && (
-            <p className="text-sm text-zinc-300 flex items-center gap-1">
+            <p className="text-sm text-foreground/90 flex items-center gap-1">
               <Check className="h-3 w-3" /> Available
             </p>
           )}
           {subdomainStatus === 'unavailable' && (
-            <p className="text-sm text-red-400 flex items-center gap-1">
+            <p className="text-sm text-destructive flex items-center gap-1">
               <X className="h-3 w-3" /> Domain is taken
             </p>
           )}
-          {subdomainError && <p className="text-sm text-red-400">{subdomainError}</p>}
+          {subdomainError && <p className="text-sm text-destructive">{subdomainError}</p>}
         </div>
 
         {/* Port Configuration */}
-        <div className="space-y-3 pt-2 border-t border-zinc-800/50">
-          <Label className="text-zinc-300">Port (Optional)</Label>
+        <div className="space-y-3 pt-2 border-t border-border">
+          <Label className="text-foreground/90">Port (Optional)</Label>
           <div className="flex gap-2 items-center">
             <div className="flex-1 flex items-center">
               <Input
@@ -400,7 +402,7 @@ export function ProjectConfigForm({
                   setPortError('');
                 }}
                 placeholder="Auto-assigned (5000-6000)"
-                className="bg-zinc-950/50 border-zinc-700/50"
+                className="bg-surface-muted/60 border-border"
               />
             </div>
             <Button
@@ -409,7 +411,7 @@ export function ProjectConfigForm({
               size="sm"
               onClick={checkPort}
               disabled={!port || portStatus === 'loading'}
-              className="h-10 border-zinc-700/50 hover:bg-zinc-800 text-zinc-300"
+              className="h-10 border-border hover:bg-surface-muted text-foreground/90"
             >
               {portStatus === 'loading' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -418,16 +420,16 @@ export function ProjectConfigForm({
               )}
             </Button>
           </div>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Leave blank for auto-assignment, or specify a custom port (1024-65535).
           </p>
           {portStatus === 'available' && (
-            <p className="text-sm text-zinc-300 flex items-center gap-1">
+            <p className="text-sm text-foreground/90 flex items-center gap-1">
               <Check className="h-3 w-3 text-emerald-400" /> Port is available
             </p>
           )}
           {portStatus === 'unavailable' && (
-            <p className="text-sm text-red-400 flex items-center gap-1">
+            <p className="text-sm text-destructive flex items-center gap-1">
               <X className="h-3 w-3" /> {portError || 'Port is already taken'}
             </p>
           )}
@@ -437,16 +439,12 @@ export function ProjectConfigForm({
         <div className="pt-6 flex flex-col gap-4">
           <div className="flex items-center space-x-2">
             <Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={setAutoDeploy} />
-            <Label htmlFor="auto-deploy" className="text-zinc-300 font-normal">
+            <Label htmlFor="auto-deploy" className="text-foreground/90 font-normal">
               Auto Deploy on push
             </Label>
           </div>
 
-          <Button
-            className="w-full h-12 text-base font-medium bg-white text-black hover:bg-zinc-200"
-            onClick={handleSubmit}
-            disabled={loading}
-          >
+          <Button className="w-full h-12 text-base" onClick={handleSubmit} disabled={loading}>
             {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             Deploy Project
           </Button>

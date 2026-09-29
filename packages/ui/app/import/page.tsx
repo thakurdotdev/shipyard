@@ -32,13 +32,16 @@ export default function ImportPage() {
   const [repositories, setRepositories] = useState<GitRepository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<GitRepository | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
+  // Resolved from the API: the install page of THIS server's GitHub App.
+  const [githubApp, setGithubApp] = useState<{ installUrl: string } | null>(null);
 
   // Initial Fetch & URL Handling
   useEffect(() => {
     const init = async () => {
       try {
-        const data = await api.getGithubInstallations();
+        const [data, app] = await Promise.all([api.getGithubInstallations(), api.getGithubApp()]);
         setInstallations(data.installations);
+        setGithubApp(app);
 
         // Check URL for installation_id (Redirect from GitHub App Install)
         const params = new URLSearchParams(window.location.search);
@@ -130,73 +133,82 @@ export default function ImportPage() {
   };
 
   const handleInstallApp = () => {
-    window.open('https://github.com/apps/thakur-deploy/installations/new', '_blank');
+    if (!githubApp?.installUrl) {
+      toast.error('GitHub App install page is not available right now.');
+      return;
+    }
+    window.open(githubApp.installUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <div className="container mx-auto py-12 max-w-3xl px-4 min-h-[calc(100vh-64px)]">
-      <div className="mb-10 text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white glow-text">
+    <div className="relative mx-auto max-w-4xl px-6 py-20 min-h-[calc(100vh-68px)]">
+      {/* Editorial backdrop: a faint grid that dissolves toward the edges. */}
+      <div
+        aria-hidden="true"
+        className="bg-grid pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+      />
+      <div className="relative mb-10 text-center space-y-2">
+        <h1 className="text-foreground text-4xl font-extrabold tracking-[-0.035em] md:text-5xl">
           Import Git Repository
         </h1>
-        <p className="text-zinc-400 max-w-lg mx-auto">
+        <p className="text-muted-foreground mx-auto max-w-lg">
           Deploy your GitHub repositories instantly. Connect your account, select a project, and
           we'll handle the rest.
         </p>
       </div>
 
       {/* Progress Steps (Visual only) */}
-      <div className="mb-10 flex justify-center items-center gap-4 text-sm font-medium">
+      <div className="relative mb-10 flex items-center justify-center gap-4 text-sm font-medium">
         <div
           className={cn(
             'flex items-center gap-2',
-            step === 'installations' ? 'text-white' : 'text-zinc-500',
+            step === 'installations' ? 'text-foreground' : 'text-muted-foreground',
           )}
         >
           <div
             className={cn(
               'w-8 h-8 rounded-full flex items-center justify-center border',
               step === 'installations'
-                ? 'border-white bg-white/10 text-white'
-                : 'border-zinc-800 bg-zinc-900',
+                ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
+                : 'border-border bg-surface-muted',
             )}
           >
             <User className="w-4 h-4" />
           </div>
           <span>Account</span>
         </div>
-        <div className="w-8 h-px bg-zinc-800" />
+        <div className="w-8 h-px bg-surface-muted" />
         <div
           className={cn(
             'flex items-center gap-2',
-            step === 'repos' ? 'text-white' : 'text-zinc-500',
+            step === 'repos' ? 'text-foreground' : 'text-muted-foreground',
           )}
         >
           <div
             className={cn(
               'w-8 h-8 rounded-full flex items-center justify-center border',
               step === 'repos'
-                ? 'border-white bg-white/10 text-white'
-                : 'border-zinc-800 bg-zinc-900',
+                ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
+                : 'border-border bg-surface-muted',
             )}
           >
             <GitBranch className="w-4 h-4" />
           </div>
           <span>Repository</span>
         </div>
-        <div className="w-8 h-px bg-zinc-800" />
+        <div className="w-8 h-px bg-surface-muted" />
         <div
           className={cn(
             'flex items-center gap-2',
-            step === 'config' ? 'text-white' : 'text-zinc-500',
+            step === 'config' ? 'text-foreground' : 'text-muted-foreground',
           )}
         >
           <div
             className={cn(
               'w-8 h-8 rounded-full flex items-center justify-center border',
               step === 'config'
-                ? 'border-white bg-white/10 text-white'
-                : 'border-zinc-800 bg-zinc-900',
+                ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
+                : 'border-border bg-surface-muted',
             )}
           >
             <Settings2 className="w-4 h-4" />

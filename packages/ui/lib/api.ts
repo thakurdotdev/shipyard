@@ -229,6 +229,22 @@ export const api = {
     return res.json();
   },
 
+  /**
+   * Identity of the server's GitHub App: slug, name and the URL to install it.
+   * The UI reads the install URL from here rather than hard-coding
+   * `github.com/apps/<slug>/…`, so dev and production just work.
+   */
+  async getGithubApp(): Promise<{ id: string; slug: string; name: string; installUrl: string }> {
+    const res = await fetch(`${API_URL}/github/app`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to fetch GitHub App info' }));
+      throw new Error(error.error || error.message || 'Failed to fetch GitHub App info');
+    }
+    return res.json();
+  },
+
   async getGithubRepositories(installationId: number) {
     const res = await fetch(`${API_URL}/github/installations/${installationId}/repositories`, {
       credentials: 'include',

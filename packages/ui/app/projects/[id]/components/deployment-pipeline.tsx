@@ -79,8 +79,8 @@ function StageIcon({ state, Icon }: { state: StageState; Icon: any }) {
       );
     default:
       return (
-        <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-          <Icon className="w-4 h-4 text-zinc-500" />
+        <div className="w-8 h-8 rounded-full bg-surface-muted border border-border flex items-center justify-center">
+          <Icon className="w-4 h-4 text-muted-foreground" />
         </div>
       );
   }
@@ -94,7 +94,7 @@ function ConnectorLine({ state }: { state: StageState }) {
         state === 'completed' && 'bg-emerald-500/50',
         state === 'in_progress' && 'bg-blue-500/30 animate-pulse',
         state === 'failed' && 'bg-red-500/30',
-        state === 'pending' && 'bg-zinc-800',
+        state === 'pending' && 'bg-surface-muted',
       )}
     />
   );
@@ -136,7 +136,7 @@ export function DeploymentPipeline({ status, statusMessage }: DeploymentPipeline
                     state === 'completed' && 'text-emerald-400',
                     state === 'in_progress' && 'text-blue-400',
                     state === 'failed' && 'text-red-400',
-                    state === 'pending' && 'text-zinc-500',
+                    state === 'pending' && 'text-muted-foreground',
                   )}
                 >
                   {stage.label}
@@ -159,14 +159,14 @@ export function DeploymentPipeline({ status, statusMessage }: DeploymentPipeline
               </div>
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-              <Circle className="w-4 h-4 text-zinc-500" />
+            <div className="w-8 h-8 rounded-full bg-surface-muted border border-border flex items-center justify-center">
+              <Circle className="w-4 h-4 text-muted-foreground" />
             </div>
           )}
           <span
             className={cn(
               'text-[10px] font-medium',
-              isActive ? 'text-emerald-400' : 'text-zinc-500',
+              isActive ? 'text-emerald-400' : 'text-muted-foreground',
             )}
           >
             Live

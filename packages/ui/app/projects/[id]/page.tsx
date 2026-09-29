@@ -160,7 +160,7 @@ function ProjectDetailsContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-10">
+    <div className="min-h-screen bg-background pb-24">
       <ProjectHeader
         project={project}
         activeDeployment={activeDeployment}
@@ -168,24 +168,24 @@ function ProjectDetailsContent() {
         onTriggerBuild={triggerBuild}
       />
 
-      <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-8 px-6 py-12">
         <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="mb-8 w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
             <TabsTrigger
               value="overview"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+              className="rounded-none border-b-2 border-transparent px-4 py-2 text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
             >
               Overview
             </TabsTrigger>
             <TabsTrigger
               value="deployments"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+              className="rounded-none border-b-2 border-transparent px-4 py-2 text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
             >
               Deployments
             </TabsTrigger>
             <TabsTrigger
               value="settings"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2"
+              className="rounded-none border-b-2 border-transparent px-4 py-2 text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
             >
               Settings
             </TabsTrigger>

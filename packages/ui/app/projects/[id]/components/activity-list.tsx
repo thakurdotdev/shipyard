@@ -35,7 +35,7 @@ export function ActivityList({ builds, activeDeployment, onActivateBuild }: Acti
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
         <Activity className="w-5 h-5" /> Recent Activity
       </h3>
-      <Card className="border-border/50 shadow-sm overflow-hidden">
+      <Card className="border-border shadow-sm overflow-hidden">
         <ScrollArea className="h-[400px]">
           <div className="divide-y">
             {builds.length === 0 ? (
@@ -44,7 +44,7 @@ export function ActivityList({ builds, activeDeployment, onActivateBuild }: Acti
               builds.map((build) => (
                 <div
                   key={build.id}
-                  className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors group"
+                  className="p-4 flex items-center justify-between hover:bg-surface-muted/30 transition-colors group"
                 >
                   <div className="flex items-center gap-4">
                     <StatusIcon status={build.status} />
@@ -110,13 +110,13 @@ export function ActivityList({ builds, activeDeployment, onActivateBuild }: Acti
                         </Button>
                       </SheetTrigger>
                       <SheetContent className="sm:max-w-[800px] w-full p-0 flex flex-col gap-0 border-l">
-                        <SheetHeader className="p-4 border-b bg-muted/10">
+                        <SheetHeader className="p-4 border-b bg-surface-muted/10">
                           <SheetTitle className="font-mono text-base">
                             Build #{build.id.slice(0, 8)}
                           </SheetTitle>
                           <SheetDescription>Logs for build execution</SheetDescription>
                         </SheetHeader>
-                        <div className="flex-1 bg-black text-white font-mono text-xs overflow-hidden">
+                        <div className="flex-1 bg-console text-console-foreground font-mono text-xs overflow-hidden">
                           <LogViewer buildId={build.id} />
                         </div>
                       </SheetContent>

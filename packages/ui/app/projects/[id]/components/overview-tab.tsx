@@ -39,7 +39,7 @@ export function OverviewTab({
         deploymentStatus.status !== 'inactive' && (
           <Card className="border-blue-500/20 bg-blue-500/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-blue-400 uppercase tracking-wider">
+              <CardTitle className="text-[11px] font-medium text-blue-400 uppercase tracking-[0.14em]">
                 Deployment Progress
               </CardTitle>
             </CardHeader>
@@ -62,44 +62,44 @@ export function OverviewTab({
 
       {/* Project Specs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border-border/50 shadow-sm bg-muted/20">
+        <Card className="border-border shadow-sm bg-surface-muted/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
               Framework
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <Layout className="w-5 h-5 text-zinc-400" />
+              <Layout className="w-5 h-5 text-muted-foreground" />
               <span className="capitalize font-semibold text-lg">{project.app_type}</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-sm bg-muted/20">
+        <Card className="border-border shadow-sm bg-surface-muted/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
               Port
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               <Server className="w-4 h-4 text-emerald-400" />
-              <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300">
+              <code className="bg-surface-muted/60 border border-border px-3 py-1.5 rounded text-sm font-mono text-foreground/90">
                 {project.port ? `:${project.port}` : 'Auto'}
               </code>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-sm bg-muted/20">
+        <Card className="border-border shadow-sm bg-surface-muted/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
               Build Command
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300 truncate block">
+            <code className="bg-surface-muted/60 border border-border px-3 py-1.5 rounded text-sm font-mono text-foreground/90 truncate block">
               {project.build_command}
             </code>
           </CardContent>
@@ -113,14 +113,14 @@ export function OverviewTab({
             onRefresh={onRefreshDomain || (() => {})}
           />
         ) : (
-          <Card className="border-border/50 shadow-sm bg-muted/20">
+          <Card className="border-border shadow-sm bg-surface-muted/20">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              <CardTitle className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
                 Root Directory
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <code className="bg-black/50 border border-zinc-800 px-3 py-1.5 rounded text-sm font-mono text-zinc-300 truncate block">
+              <code className="bg-surface-muted/60 border border-border px-3 py-1.5 rounded text-sm font-mono text-foreground/90 truncate block">
                 {project.root_directory || './'}
               </code>
             </CardContent>

@@ -30,7 +30,7 @@ export function LogFilter({
           'h-6 text-xs gap-1 px-2',
           isFiltered('error')
             ? 'bg-red-950/50 text-red-400 hover:bg-red-950/70'
-            : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800',
+            : 'text-console-muted hover:text-console-foreground hover:bg-console-surface',
         )}
         onClick={() => onToggleFilter('error')}
       >
@@ -46,7 +46,7 @@ export function LogFilter({
           'h-6 text-xs gap-1 px-2',
           isFiltered('warning')
             ? 'bg-amber-950/50 text-amber-400 hover:bg-amber-950/70'
-            : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800',
+            : 'text-console-muted hover:text-console-foreground hover:bg-console-surface',
         )}
         onClick={() => onToggleFilter('warning')}
       >

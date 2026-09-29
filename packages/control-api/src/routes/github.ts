@@ -199,6 +199,23 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
       return { error: e.message || 'Internal Server Error' };
     }
   })
+  /**
+   * Public identity of THIS server's GitHub App: slug, name and the URL a
+   * user must visit to install it. The UI fetches this instead of hard-coding
+   * `https://github.com/apps/<slug>/installations/new` per environment.
+   *
+   * Session-gated, but there is no cross-user state here — the answer is a
+   * property of the server's own GITHUB_APP_ID / PEM key, cached for an hour.
+   */
+  .get('/app', async ({ set }) => {
+    try {
+      return await GitHubService.getAppInstallInfo();
+    } catch (e: any) {
+      console.error('[GitHub] Failed to resolve App info:', e?.message);
+      set.status = 502;
+      return { error: 'Could not resolve the GitHub App install page. Try again shortly.' };
+    }
+  })
   .get('/installations/:id/repositories', async ({ params, user, set }) => {
     try {
       const installationId = params.id;

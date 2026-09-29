@@ -121,7 +121,7 @@ export function EnvVarEditor({ vars, onChange }: EnvVarEditorProps) {
         ))}
         {vars.length === 0 && (
           <div
-            className="text-sm text-muted-foreground text-center py-8 border border-dashed rounded-lg cursor-text hover:bg-muted/50 transition-colors"
+            className="text-sm text-muted-foreground text-center py-8 border border-dashed rounded-lg cursor-text hover:bg-surface-muted/50 transition-colors"
             onClick={addEnvVar}
           >
             Click to add or paste .env content here

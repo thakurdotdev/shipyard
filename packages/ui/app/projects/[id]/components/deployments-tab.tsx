@@ -148,7 +148,7 @@ export function DeploymentsTab({
                                     ${build.deployment_status === 'failed' ? 'text-red-600 bg-red-500/10' : ''}
                                     ${isPipelineStatus(build.deployment_status) ? 'text-blue-600 bg-blue-500/10 animate-pulse' : ''}
                                     ${build.deployment_status === 'activating' ? 'text-yellow-600 bg-yellow-500/10 animate-pulse' : ''}
-                                    ${build.deployment_status === 'inactive' ? 'text-gray-600 bg-gray-500/10' : ''}
+                                    ${build.deployment_status === 'inactive' ? 'text-muted-foreground bg-surface-muted' : ''}
                                 `}
                           >
                             {(isPipelineStatus(build.deployment_status) ||
@@ -226,13 +226,13 @@ export function DeploymentsTab({
                           </Button>
                         </SheetTrigger>
                         <SheetContent className="sm:max-w-[800px] w-full p-0 flex flex-col gap-0 border-l">
-                          <SheetHeader className="p-4 border-b bg-muted/10">
+                          <SheetHeader className="p-4 border-b bg-surface-muted/10">
                             <SheetTitle className="font-mono text-base">
                               Build #{build.id.slice(0, 8)}
                             </SheetTitle>
                             <SheetDescription>Logs for build execution</SheetDescription>
                           </SheetHeader>
-                          <div className="flex-1 bg-black text-white font-mono text-xs overflow-hidden">
+                          <div className="flex-1 bg-console text-console-foreground font-mono text-xs overflow-hidden">
                             <LogViewer buildId={build.id} />
                           </div>
                         </SheetContent>
