@@ -1,18 +1,21 @@
 'use client';
 
-import { Card, CardContent } from '@/components/ui/card';
+import { useEffect, useState } from 'react';
+import {
+  Activity,
+  ArrowUpRight,
+  ExternalLink,
+  GitBranch,
+  Globe,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  StopCircle,
+} from 'lucide-react';
+import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Globe,
-  GitBranch,
-  Clock,
-  ExternalLink,
-  StopCircle,
-  RefreshCw,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,9 +26,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useState, useEffect, useRef } from 'react';
-import { cn } from '@/lib/utils';
-import { AppType } from '@/lib/framework-config';
 
 interface ActiveDeploymentCardProps {
   activeDeployment: any;
@@ -41,256 +41,230 @@ export function ActiveDeploymentCard({
   onTriggerBuild,
 }: ActiveDeploymentCardProps) {
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [frameLoading, setFrameLoading] = useState(true);
+  const [frameKey, setFrameKey] = useState(0);
+
   const deploymentUrl = project.domain
     ? `https://${project.domain}`
-    : `http://localhost:${project.port}`;
+    : project.port
+      ? `http://localhost:${project.port}`
+      : null;
 
-  const [iframeLoading, setIframeLoading] = useState(true);
-  const [iframeError, setIframeError] = useState(false);
-  const isLoadedRef = useRef(false);
-
-  // Reset states when URL changes
   useEffect(() => {
-    setIframeLoading(true);
-    setIframeError(false);
-    isLoadedRef.current = false;
-
-    // If loading takes too long (e.g. 15s), show fallback
-    const timer = setTimeout(() => {
-      if (!isLoadedRef.current) {
-        setIframeLoading(false);
-        setIframeError(true);
-      }
-    }, 10000);
-
-    return () => clearTimeout(timer);
-  }, [deploymentUrl]);
-
-  const handleIframeLoad = () => {
-    // Only update if not already error-ed out
-    if (!isLoadedRef.current) {
-      isLoadedRef.current = true;
-      setIframeLoading(false);
+    let cancelled = false;
+    if (!activeDeployment) {
+      setPreviewState('unavailable');
+      return;
     }
-  };
 
-  const handleIframeError = () => {
-    isLoadedRef.current = false;
-    setIframeLoading(false);
-    setIframeError(true);
-  };
+    setPreviewState('loading');
+    setFrameLoading(true);
+    api
+      .configureProjectPreview(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setPreviewUrl(result.preview_url);
+        setPreviewState(result.embeddable && result.preview_url ? 'ready' : 'unavailable');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreviewUrl(null);
+        setPreviewState('unavailable');
+      });
 
-  const handleStop = () => {
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDeployment?.id, project.id]);
+
+  const stopDeployment = () => {
     onStopDeployment();
     setStopDialogOpen(false);
   };
 
   if (!activeDeployment) {
     return (
-      <Card className="border-dashed bg-surface-muted/40">
-        <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
-          <div className="w-12 h-12 rounded-full bg-surface-muted flex items-center justify-center mb-4">
-            <AlertCircle className="w-6 h-6 opacity-50" />
+      <Card className="overflow-hidden border-dashed bg-card">
+        <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-surface-muted text-muted-foreground">
+            <Activity className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-semibold text-foreground mb-1">No Active Deployment</h3>
-          <p className="max-w-xs mx-auto mb-6 text-sm">
-            Your project hasn't been deployed yet. Trigger a build to get your application live.
+          <h2 className="text-lg font-semibold">No production deployment</h2>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Build and deploy this project to bring its live status, domain, and preview here.
           </p>
-          <Button onClick={onTriggerBuild} className="gap-2">
-            <RefreshCw className="w-4 h-4" />
-            Deploy Now
+          <Button onClick={onTriggerBuild} className="mt-5 gap-2">
+            <RefreshCw className="h-4 w-4" /> Deploy project
           </Button>
-        </CardContent>
+        </div>
       </Card>
     );
   }
 
   return (
     <>
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight">Production Deployment</h2>
-
-        <Card className="overflow-hidden border-border bg-surface">
-          <div className="flex flex-col md:flex-row h-auto md:min-h-80 box-border">
-            {/* Left: Preview */}
-            <div className="w-full md:w-[60%] bg-surface-muted/50 relative group border-b md:border-b-0 md:border-r border-border min-h-[320px] md:min-h-0">
-              <div className="w-full h-full relative overflow-hidden">
-                {/* Fallback State (Error) */}
-                {iframeError ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface z-20 text-center p-6">
-                    <div className="h-12 w-12 rounded-full bg-surface-muted flex items-center justify-center mb-3">
-                      <Globe className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                    <h3 className="text-sm font-medium text-foreground mb-1">
-                      Preview Unavailable
-                    </h3>
-                    <p className="text-xs text-muted-foreground mb-4 max-w-[200px]">
-                      The deployment could not be embedded or failed to load.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 h-8 text-xs border-border bg-surface-muted text-foreground/90 hover:bg-surface-muted hover:text-foreground"
-                      asChild
-                    >
-                      <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
-                        Open Website <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    {/* Loading State */}
-                    {iframeLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-surface border-border z-10">
-                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                      </div>
-                    )}
-
-                    {/* Iframe Preview */}
-                    <div
-                      className={`w-[200%] h-[200%] origin-top-left transform scale-50 select-none absolute inset-0 ${iframeLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
-                    >
-                      {/* The preview frame is intentionally a white canvas: it renders a
-                          real deployed website, not app chrome. */}
-                      <iframe
-                        src={deploymentUrl}
-                        className="w-full h-full border-0 bg-white pointer-events-none"
-                        title="Preview"
-                        sandbox="allow-scripts allow-same-origin"
-                        onLoad={handleIframeLoad}
-                        onError={handleIframeError}
-                      />
-                    </div>
-
-                    {/* Overlay for interaction */}
-                    {!iframeLoading && (
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center z-20">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0 gap-2 shadow-lg"
-                          asChild
-                        >
-                          <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
-                            Visit Live <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )}
+      <Card className="overflow-hidden border-border bg-card shadow-sm">
+        <div className="flex flex-col border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold">Production</h2>
+                <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10">
+                  Live
+                </Badge>
               </div>
-            </div>
-
-            {/* Right: Details */}
-            <div className="w-full md:w-[40%] p-5 flex flex-col justify-between bg-surface-muted/40">
-              <div className="space-y-4">
-                {/* Deployment Info */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
-                    Deployment
-                  </span>
-                  <a
-                    href={deploymentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-sm font-medium text-foreground hover:underline truncate transition-colors"
-                  >
-                    {deploymentUrl.replace(/^https?:\/\//, '')}
-                  </a>
-                </div>
-
-                {/* Domains */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
-                    Domains
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={deploymentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 group/link"
-                    >
-                      <span className="text-sm text-foreground/90 font-mono truncate group-hover/link:text-foreground group-hover/link:underline transition-colors">
-                        {project.domain || `localhost:${project.port}`}
-                      </span>
-                      <ExternalLink className="w-3 h-3 text-muted-foreground group-hover/link:text-muted-foreground transition-colors" />
-                    </a>
-                  </div>
-                </div>
-
-                {/* Status */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
-                    Status
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                    </div>
-                    <span className="text-sm font-medium text-emerald-400">Ready</span>
-                    <span className="text-xs text-muted-foreground ml-1">
-                      {Math.floor(
-                        (Date.now() - new Date(activeDeployment.activated_at).getTime()) /
-                          (1000 * 60),
-                      )}
-                      m ago
-                    </span>
-                  </div>
-                </div>
-
-                {/* Source */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
-                    Source
-                  </span>
-                  <div className="flex items-center gap-2 text-sm text-foreground/90">
-                    <GitBranch className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-mono">{project.github_branch || 'main'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="pt-4 mt-4 border-t border-border flex justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  className="text-muted-foreground hover:text-red-400 hover:bg-red-950/30 h-8 text-xs gap-1.5"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setStopDialogOpen(true);
-                  }}
-                >
-                  <StopCircle className="w-3.5 h-3.5" />
-                  Stop
-                </Button>
-              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Released {new Date(activeDeployment.activated_at).toLocaleString()}
+              </p>
             </div>
           </div>
-        </Card>
-      </div>
+          <div className="mt-3 flex items-center gap-2 sm:mt-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2"
+              onClick={() => {
+                setFrameLoading(true);
+                setFrameKey((value) => value + 1);
+              }}
+              disabled={previewState !== 'ready'}
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Refresh preview
+            </Button>
+            {deploymentUrl && (
+              <Button variant="secondary" size="sm" className="h-8 gap-2" asChild>
+                <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
+                  Visit live <ArrowUpRight className="h-3.5 w-3.5" />
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-[minmax(0,1.7fr)_minmax(260px,0.8fr)]">
+          <div className="relative min-h-[300px] overflow-hidden bg-white sm:min-h-[390px]">
+            {previewState === 'ready' && previewUrl ? (
+              <>
+                {frameLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-muted">
+                    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                <iframe
+                  key={frameKey}
+                  src={previewUrl}
+                  title={`${project.name} live preview`}
+                  className="absolute inset-0 h-full min-h-[300px] w-full border-0 bg-white sm:min-h-[390px]"
+                  sandbox="allow-scripts allow-same-origin allow-forms"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  onLoad={() => setFrameLoading(false)}
+                />
+              </>
+            ) : (
+              <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center sm:min-h-[390px]">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground">
+                  {previewState === 'loading' ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Globe className="h-5 w-5" />
+                  )}
+                </div>
+                <h3 className="font-medium text-foreground">
+                  {previewState === 'loading'
+                    ? 'Preparing live preview'
+                    : 'Preview is not available'}
+                </h3>
+                <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+                  {previewState === 'loading'
+                    ? 'Connecting this project to the secure preview route.'
+                    : 'This domain cannot be embedded. Open the live site in a new tab instead.'}
+                </p>
+                {deploymentUrl && previewState === 'unavailable' && (
+                  <Button variant="outline" size="sm" className="mt-4 gap-2" asChild>
+                    <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
+                      Open live site <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <aside className="flex flex-col justify-between border-t border-border bg-surface-muted/20 p-5 lg:border-l lg:border-t-0 lg:p-6">
+            <div className="space-y-6">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Deployment URL
+                </p>
+                <a
+                  href={deploymentUrl || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 flex items-center gap-2 break-all text-sm font-medium hover:text-primary"
+                >
+                  {project.domain || `localhost:${project.port}`}
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </a>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Branch</p>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm">
+                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                    {project.github_branch || 'main'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Framework</p>
+                  <p className="mt-1 capitalize text-sm">{project.app_type}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-background/60 p-3.5">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                  Deployment health check passed
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Runtime uptime monitoring and alerts are managed in Settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+              <span className="text-xs text-muted-foreground">
+                Build #{activeDeployment.build_id?.slice(0, 8)}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                onClick={() => setStopDialogOpen(true)}
+              >
+                <StopCircle className="h-3.5 w-3.5" /> Stop
+              </Button>
+            </div>
+          </aside>
+        </div>
+      </Card>
 
       <AlertDialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Stop Active Deployment?</AlertDialogTitle>
+            <AlertDialogTitle>Stop active deployment?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will stop the currently running deployment. The application will no longer be
-              accessible.
+              This will stop the running application and make its live URL unavailable.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleStop}
-              className="bg-red-600 text-foreground hover:bg-red-700"
-            >
-              Stop Deployment
+            <AlertDialogAction onClick={stopDeployment} className="bg-red-600 hover:bg-red-700">
+              Stop deployment
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

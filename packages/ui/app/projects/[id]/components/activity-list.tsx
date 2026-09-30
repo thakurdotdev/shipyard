@@ -1,10 +1,18 @@
 'use client';
 
+import {
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  GitCommit,
+  Loader2,
+  Terminal,
+  XCircle,
+} from 'lucide-react';
 import { LogViewer } from '@/components/log-viewer/log-viewer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet,
   SheetContent,
@@ -13,143 +21,149 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import {
-  Activity,
-  CheckCircle2,
-  GitBranch,
-  GitCommit,
-  Loader2,
-  Terminal,
-  XCircle,
-} from 'lucide-react';
 
 interface ActivityListProps {
   builds: any[];
   activeDeployment: any;
   onActivateBuild: (buildId: string) => void;
+  onViewAll: () => void;
 }
 
-export function ActivityList({ builds, activeDeployment, onActivateBuild }: ActivityListProps) {
+export function ActivityList({
+  builds,
+  activeDeployment,
+  onActivateBuild,
+  onViewAll,
+}: ActivityListProps) {
+  const recentBuilds = builds.slice(0, 5);
+
   return (
-    <div>
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <Activity className="w-5 h-5" /> Recent Activity
-      </h3>
-      <Card className="border-border shadow-sm overflow-hidden">
-        <ScrollArea className="h-[400px]">
-          <div className="divide-y">
-            {builds.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">No recent activity</div>
-            ) : (
-              builds.map((build) => (
-                <div
-                  key={build.id}
-                  className="p-4 flex items-center justify-between hover:bg-surface-muted/30 transition-colors group"
-                >
-                  <div className="flex items-center gap-4">
-                    <StatusIcon status={build.status} />
-                    <div>
-                      <div className="font-medium text-sm flex items-center gap-2">
+    <section>
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Activity className="h-5 w-5 text-muted-foreground" /> Recent activity
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">The latest builds for this project</p>
+        </div>
+        {builds.length > 5 && (
+          <Button variant="ghost" size="sm" className="gap-2" onClick={onViewAll}>
+            View all <ArrowRight className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      <Card className="gap-0 overflow-hidden border-border bg-card p-0 shadow-sm">
+        {recentBuilds.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <p className="font-medium">No builds yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your project build activity will show here.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {recentBuilds.map((build) => {
+              const current = activeDeployment?.build_id === build.id;
+              const success = build.status === 'success';
+              const failed = build.status === 'failed';
+              const summary = build.commit_message?.split('\n')[0] || 'Manual deployment';
+              return (
+                <div key={build.id} className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+                      success
+                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                        : failed
+                          ? 'border-red-500/20 bg-red-500/10 text-red-400'
+                          : 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                    }`}
+                  >
+                    {success ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : failed ? (
+                      <XCircle className="h-4 w-4" />
+                    ) : (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
+                  </span>
+
+                  <div className="min-w-[180px] flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-medium">
                         Build #{build.id.slice(0, 8)}
-                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">
-                          {build.status}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`h-5 capitalize ${
+                          success
+                            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                            : failed
+                              ? 'border-red-500/20 bg-red-500/10 text-red-400'
+                              : ''
+                        }`}
+                      >
+                        {build.status}
+                      </Badge>
+                      {current && (
+                        <Badge variant="secondary" className="h-5">
+                          Current production
                         </Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1">
-                        <span className="flex items-center gap-1">
-                          <GitBranch className="w-3 h-3" />
-                          main
-                        </span>
-                        {build.commit_sha ? (
-                          <>
-                            <span>•</span>
-                            <span className="flex items-center gap-1 font-mono">
-                              <GitCommit className="w-3 h-3" />
-                              {build.commit_sha.slice(0, 7)}
-                            </span>
-                            {build.commit_message && (
-                              <>
-                                <span>•</span>
-                                <span
-                                  className="truncate max-w-[200px]"
-                                  title={build.commit_message}
-                                >
-                                  {build.commit_message.split('\n')[0]}
-                                </span>
-                              </>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <span>•</span>
-                            <span className="italic">Manual Deploy</span>
-                          </>
-                        )}
-                        <span>•</span>
-                        <span>{new Date(build.created_at).toLocaleString()}</span>
-                      </div>
+                      )}
+                    </div>
+                    <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                      {build.commit_sha && <GitCommit className="h-3.5 w-3.5 shrink-0" />}
+                      {build.commit_sha && (
+                        <span className="font-mono">{build.commit_sha.slice(0, 7)}</span>
+                      )}
+                      <span className="truncate">{summary}</span>
+                      <span className="hidden shrink-0 sm:inline">
+                        · {new Date(build.created_at).toLocaleString()}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {build.status === 'success' &&
-                      (!activeDeployment || activeDeployment.build_id !== build.id) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => onActivateBuild(build.id)}
-                        >
-                          Promote
-                        </Button>
-                      )}
+
+                  <div className="ml-auto flex items-center gap-2">
+                    {success && !current && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => onActivateBuild(build.id)}
+                      >
+                        Promote
+                      </Button>
+                    )}
                     <Sheet>
                       <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Terminal className="w-4 h-4" />
-                          <span className="sr-only">Logs</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="View build logs"
+                        >
+                          <Terminal className="h-4 w-4" />
                         </Button>
                       </SheetTrigger>
-                      <SheetContent className="sm:max-w-[800px] w-full p-0 flex flex-col gap-0 border-l">
-                        <SheetHeader className="p-4 border-b bg-surface-muted/10">
+                      <SheetContent className="flex w-full flex-col gap-0 border-l p-0 sm:max-w-[800px]">
+                        <SheetHeader className="border-b bg-surface-muted/10 p-4">
                           <SheetTitle className="font-mono text-base">
                             Build #{build.id.slice(0, 8)}
                           </SheetTitle>
-                          <SheetDescription>Logs for build execution</SheetDescription>
+                          <SheetDescription>Build and deployment logs</SheetDescription>
                         </SheetHeader>
-                        <div className="flex-1 bg-console text-console-foreground font-mono text-xs overflow-hidden">
+                        <div className="flex-1 overflow-hidden bg-console font-mono text-xs text-console-foreground">
                           <LogViewer buildId={build.id} />
                         </div>
                       </SheetContent>
                     </Sheet>
                   </div>
                 </div>
-              ))
-            )}
+              );
+            })}
           </div>
-        </ScrollArea>
+        )}
       </Card>
-    </div>
-  );
-}
-
-function StatusIcon({ status }: { status: string }) {
-  if (status === 'success') {
-    return (
-      <div className="p-1.5 rounded-full bg-green-500/10 text-green-600">
-        <CheckCircle2 className="w-4 h-4" />
-      </div>
-    );
-  }
-  if (status === 'failed') {
-    return (
-      <div className="p-1.5 rounded-full bg-red-500/10 text-red-600">
-        <XCircle className="w-4 h-4" />
-      </div>
-    );
-  }
-  return (
-    <div className="p-1.5 rounded-full bg-blue-500/10 text-blue-600 animate-spin">
-      <Loader2 className="w-4 h-4" />
-    </div>
+    </section>
   );
 }

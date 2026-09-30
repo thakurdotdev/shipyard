@@ -1,12 +1,13 @@
 'use client';
 
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { DeploymentsTab } from './components/deployments-tab';
 import { OverviewTab } from './components/overview-tab';
 import { ProjectHeader } from './components/project-header';
@@ -17,9 +18,13 @@ function ProjectDetailsContent() {
   const id = params.id as string;
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentTab = searchParams.get('tab') || 'overview';
+  const requestedTab = searchParams.get('tab');
+  const currentTab = ['overview', 'deployments', 'settings'].includes(requestedTab || '')
+    ? requestedTab!
+    : 'overview';
 
   const [project, setProject] = useState<any>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [builds, setBuilds] = useState<any[]>([]);
   const [activeDeployment, setActiveDeployment] = useState<any>(null);
   const [isDeploying, setIsDeploying] = useState(false);
@@ -28,7 +33,16 @@ function ProjectDetailsContent() {
 
   const refreshData = () => {
     if (!id) return;
-    api.getProject(id).then(setProject).catch(console.error);
+    api
+      .getProject(id)
+      .then((result) => {
+        setProject(result);
+        setPageError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setPageError(error instanceof Error ? error.message : 'Unable to load this project');
+      });
     api.getBuilds(id).then(setBuilds).catch(console.error);
     api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
     api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
@@ -152,6 +166,17 @@ function ProjectDetailsContent() {
   };
 
   if (!project) {
+    if (pageError) {
+      return (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+          <h1 className="text-xl font-semibold">Project unavailable</h1>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">{pageError}</p>
+          <Button className="mt-5" variant="outline" onClick={() => router.push('/')}>
+            Back to projects
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -168,31 +193,30 @@ function ProjectDetailsContent() {
         onTriggerBuild={triggerBuild}
       />
 
-      <div className="mx-auto max-w-6xl space-y-8 px-6 py-12">
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="mb-8 w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+          <TabsList className="grid h-auto w-full grid-cols-3 justify-start rounded-xl border border-border bg-card p-1 sm:w-[min(100%,560px)]">
             <TabsTrigger
               value="overview"
-              className="rounded-none border-b-2 border-transparent px-4 py-2 text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              className="h-9 rounded-lg px-3 data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
             >
               Overview
             </TabsTrigger>
             <TabsTrigger
               value="deployments"
-              className="rounded-none border-b-2 border-transparent px-4 py-2 text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              className="h-9 rounded-lg px-3 data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
             >
               Deployments
             </TabsTrigger>
             <TabsTrigger
               value="settings"
-              className="rounded-none border-b-2 border-transparent px-4 py-2 text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              className="h-9 rounded-lg px-3 data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
             >
               Settings
             </TabsTrigger>
           </TabsList>
 
-          {/* Content Visibility Wrapper */}
-          <div className={currentTab === 'overview' ? 'block' : 'hidden'}>
+          <TabsContent value="overview" className="mt-5">
             <OverviewTab
               project={project}
               activeDeployment={activeDeployment}
@@ -200,24 +224,26 @@ function ProjectDetailsContent() {
               onStopDeployment={stopDeployment}
               onTriggerBuild={triggerBuild}
               onActivateBuild={activateBuild}
+              onOpenSettings={() => handleTabChange('settings')}
+              onViewDeployments={() => handleTabChange('deployments')}
               domainProvision={domainProvision}
               deploymentStatus={deploymentStatus}
               onRefreshDomain={refreshData}
             />
-          </div>
+          </TabsContent>
 
-          <div className={currentTab === 'deployments' ? 'block' : 'hidden'}>
+          <TabsContent value="deployments" className="mt-5">
             <DeploymentsTab
               builds={builds}
               onActivateBuild={activateBuild}
               activeDeployment={activeDeployment}
               deploymentStatus={deploymentStatus}
             />
-          </div>
+          </TabsContent>
 
-          <div className={currentTab === 'settings' ? 'block' : 'hidden'}>
+          <TabsContent value="settings" className="mt-5">
             <SettingsTab project={project} />
-          </div>
+          </TabsContent>
         </Tabs>
       </div>
     </div>

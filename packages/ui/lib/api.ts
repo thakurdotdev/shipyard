@@ -146,6 +146,18 @@ export const api = {
     return res.json();
   },
 
+  async configureProjectPreview(projectId: string): Promise<{
+    preview_url: string | null;
+    embeddable: boolean;
+  }> {
+    const res = await fetch(`${API_URL}/projects/${projectId}/preview`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to configure the deployment preview');
+    return res.json();
+  },
+
   async getUptimeSettings(projectId: string): Promise<UptimeSettings> {
     const res = await fetch(`${API_URL}/projects/${projectId}/uptime`, {
       credentials: 'include',

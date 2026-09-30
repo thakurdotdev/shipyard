@@ -1,8 +1,9 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
+const DASHBOARD_ORIGIN = process.env.DASHBOARD_ORIGIN || `https://deploy.${BASE_DOMAIN}`;
 
 function getNginxDirs(): { available: string; enabled: string } {
   // If explicitly configured and not default platform-sites
@@ -143,6 +144,32 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
+    # The isolated preview route can be embedded only by the ShipYard dashboard.
+    # Keep these header changes scoped here; the public application route below
+    # preserves the app's own framing policy.
+    location = /__shipyard_preview {
+        return 301 /__shipyard_preview/;
+    }
+
+    location ^~ /__shipyard_preview/ {
+        proxy_pass http://localhost:${port}/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header Content-Security-Policy;
+        add_header Content-Security-Policy "frame-ancestors ${DASHBOARD_ORIGIN}" always;
+
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+    }
+
     location / {
         proxy_pass http://localhost:${port};
         proxy_http_version 1.1;
@@ -206,6 +233,31 @@ server {
     await writeNginxFile(availablePath, this.generateConfig(sub, port));
     await linkNginxFile(availablePath, enabledPath);
     await this.reload();
+  },
+
+  async ensurePreviewConfig(sub: string, port: number) {
+    if (!this.isSubdomainAllowed(sub)) {
+      throw new Error(`Invalid or reserved subdomain: ${sub}`);
+    }
+
+    const { available, enabled } = getNginxDirs();
+    const availablePath = join(available, `${sub}.conf`);
+    const enabledPath = join(enabled, `${sub}.conf`);
+    if (existsSync(availablePath) && existsSync(enabledPath)) {
+      try {
+        const config = readFileSync(availablePath, 'utf8');
+        if (
+          config.includes('location ^~ /__shipyard_preview/') &&
+          config.includes(`proxy_pass http://localhost:${port}/;`)
+        ) {
+          return;
+        }
+      } catch {
+        // Rebuild the config below if it cannot be read.
+      }
+    }
+
+    await this.createConfig(sub, port);
   },
 
   /**

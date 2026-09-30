@@ -371,21 +371,21 @@ export const UptimeService = {
     if (endpointUrl) await validatePublicEndpoint(endpointUrl);
 
     const enabled = data.enabled ?? monitor.enabled;
-    return (
-      await db
-        .update(uptimeMonitors)
-        .set({
-          ...data,
-          ...(data.endpoint_url !== undefined ? { endpoint_url: endpointUrl } : {}),
-          current_status: 'unknown',
-          consecutive_failures: 0,
-          down_since: null,
-          next_check_at: enabled ? new Date() : null,
-          updated_at: new Date(),
-        })
-        .where(eq(uptimeMonitors.id, monitor.id))
-        .returning()
-    )[0];
+    const [updated] = await db
+      .update(uptimeMonitors)
+      .set({
+        ...data,
+        ...(data.endpoint_url !== undefined ? { endpoint_url: endpointUrl } : {}),
+        current_status: 'unknown',
+        consecutive_failures: 0,
+        down_since: null,
+        next_check_at: enabled ? new Date() : null,
+        updated_at: new Date(),
+      })
+      .where(eq(uptimeMonitors.id, monitor.id))
+      .returning();
+
+    return updated ? this.getSettings(projectId) : null;
   },
 
   async shutdown() {

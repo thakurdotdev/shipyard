@@ -16,6 +16,7 @@ const appTypeSchema = t.Union(
   ],
   { error: 'Invalid app type' },
 );
+const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
 
 export const projectsRoutes = new Elysia({ prefix: '/projects' })
   .get('/', async ({ request }) => {
@@ -189,6 +190,50 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     } catch (e: any) {
       set.status = 400;
       return { error: e.message };
+    }
+  })
+  .post('/:id/preview', async ({ params: { id }, request, set }) => {
+    const project = await ProjectAccessService.getOwnedProject(request, id);
+    if (!project) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
+
+    const activeDeployment = await db.query.deployments.findFirst({
+      where: and(eq(deployments.project_id, id), eq(deployments.status, 'active')),
+      columns: { id: true },
+    });
+    if (!activeDeployment || !project.port || !project.domain) {
+      return { preview_url: null, embeddable: false };
+    }
+
+    const subdomain = project.domain.slice(0, -(BASE_DOMAIN.length + 1));
+    if (!subdomain || project.domain !== `${subdomain}.${BASE_DOMAIN}`) {
+      return {
+        preview_url: `https://${project.domain}`,
+        embeddable: false,
+      };
+    }
+
+    try {
+      const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4012';
+      const response = await fetch(`${deployEngineUrl}/nginx/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subdomain, port: project.port }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) {
+        throw new Error(`Preview proxy setup failed: ${(await response.text()).slice(0, 300)}`);
+      }
+      return {
+        preview_url: `https://${project.domain}/__shipyard_preview/`,
+        embeddable: true,
+      };
+    } catch (error) {
+      console.error(`[ProjectPreview] Failed to configure preview for ${id}`, error);
+      set.status = 503;
+      return { error: 'Could not configure the embedded preview' };
     }
   })
   .get('/:id/uptime', async ({ params: { id }, request, set }) => {

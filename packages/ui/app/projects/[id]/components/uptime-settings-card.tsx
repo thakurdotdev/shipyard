@@ -73,6 +73,7 @@ export function UptimeSettingsCard({ projectId }: { projectId: string }) {
       : settings?.current_status === 'down'
         ? 'text-red-500'
         : 'text-muted-foreground';
+  const history = settings?.history ?? [];
 
   return (
     <Card>
@@ -146,14 +147,14 @@ export function UptimeSettingsCard({ projectId }: { projectId: string }) {
 
         <div className="space-y-2">
           <h4 className="text-sm font-medium">Recent checks</h4>
-          {!settings?.history.length ? (
+          {history.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Checks will appear here after monitoring starts.
             </p>
           ) : (
             <div className="max-h-64 overflow-auto rounded-md border">
               <div className="divide-y">
-                {settings.history.map((check) => (
+                {history.map((check) => (
                   <div
                     key={check.id}
                     className="flex items-center justify-between gap-4 px-3 py-2 text-sm"

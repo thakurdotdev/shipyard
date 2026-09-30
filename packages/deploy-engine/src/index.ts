@@ -188,7 +188,7 @@ const app = new Elysia()
   })
   // Nginx configuration management endpoints
   .post('/nginx/http-only', async ({ body }) => {
-    const { subdomain, port } = body as { subdomain: string; port: number };
+    const { subdomain, port } = (body || {}) as { subdomain: string; port: number };
     if (!subdomain || !port) return new Response('subdomain and port required', { status: 400 });
     try {
       await NginxService.createHttpOnlyConfig(subdomain, port);
@@ -202,6 +202,23 @@ const app = new Elysia()
     if (!subdomain || !port) return new Response('subdomain and port required', { status: 400 });
     try {
       await NginxService.upgradeToHttps(subdomain, port);
+      return { success: true };
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .post('/nginx/preview', async ({ body }) => {
+    const { subdomain, port } = body as { subdomain: string; port: number };
+    if (
+      !NginxService.isSubdomainAllowed(subdomain) ||
+      !Number.isInteger(port) ||
+      port < 1024 ||
+      port > 65535
+    ) {
+      return new Response('valid subdomain and port required', { status: 400 });
+    }
+    try {
+      await NginxService.ensurePreviewConfig(subdomain, port);
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
