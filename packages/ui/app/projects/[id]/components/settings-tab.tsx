@@ -31,6 +31,7 @@ import {
 
 import { Project } from '@/lib/types';
 import { FRAMEWORK_OPTIONS, AppType } from '@/lib/framework-config';
+import { UptimeSettingsCard } from './uptime-settings-card';
 
 interface SettingsTabProps {
   project: Project;
@@ -264,6 +265,8 @@ export function SettingsTab({ project }: SettingsTabProps) {
             </CardHeader>
           </Card>
         )}
+
+        <UptimeSettingsCard projectId={project.id} />
 
         {/* Environment Variables */}
         <Card>

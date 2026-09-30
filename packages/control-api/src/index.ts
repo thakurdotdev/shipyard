@@ -13,6 +13,7 @@ import { githubRoutes } from './routes/github';
 import { infraRoutes } from './routes/infra';
 import { WebSocketService } from './ws';
 import { BuildQueue } from './queue';
+import { UptimeService } from './services/uptime-service';
 
 const publicRoutes = new Elysia().use(githubWebhook).use(githubRoutes).use(internalBuildRoutes);
 
@@ -94,6 +95,9 @@ WebSocketService.initialize(io);
 BuildQueue.initialize().catch((err) => {
   console.error('[BuildQueue] Failed to initialize:', err);
 });
+UptimeService.initialize().catch((err) => {
+  console.error('[Uptime] Failed to initialize:', err);
+});
 
 // 4. Create Node.js compatible HTTP server manually to support Socket.IO on the same port
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -174,6 +178,7 @@ const gracefulShutdown = async (signal: string) => {
 
   try {
     await BuildQueue.shutdown();
+    await UptimeService.shutdown();
     server.close();
     process.exit(0);
   } catch (err) {

@@ -1,5 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { ProjectService } from '../services/project-service';
+import { ProjectAccessService } from '../services/project-access-service';
+import { UptimeService } from '../services/uptime-service';
 import { SecurityService } from '../services/security-service';
 import { db } from '../db';
 import { deployments } from '../db/schema';
@@ -16,8 +18,9 @@ const appTypeSchema = t.Union(
 );
 
 export const projectsRoutes = new Elysia({ prefix: '/projects' })
-  .get('/', async () => {
-    return await ProjectService.getAll();
+  .get('/', async ({ request }) => {
+    const ownerId = await ProjectAccessService.userIdFromRequest(request);
+    return ownerId ? ProjectService.getAll(ownerId) : [];
   })
   .post(
     '/check-port',
@@ -46,11 +49,17 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
   })
   .post(
     '/',
-    async ({ body, set }) => {
+    async ({ body, request, set }) => {
       try {
         SecurityService.validateBuildCommand(body.build_command);
+        const ownerId = await ProjectAccessService.userIdFromRequest(request);
+        if (!ownerId) {
+          set.status = 401;
+          return { error: 'Unauthorized' };
+        }
         return await ProjectService.create({
           ...body,
+          owner_id: ownerId,
           app_type: body.app_type as AppType,
         });
       } catch (e: any) {
@@ -83,8 +92,8 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       }),
     },
   )
-  .get('/:id', async ({ params: { id }, set }) => {
-    const project = await ProjectService.getById(id);
+  .get('/:id', async ({ params: { id }, request, set }) => {
+    const project = await ProjectAccessService.getOwnedProject(request, id);
     if (!project) {
       set.status = 404;
       return { error: 'Project not found' };
@@ -93,8 +102,17 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
   })
   .put(
     '/:id',
-    async ({ params: { id }, body, set }) => {
+    async ({ params: { id }, body, request, set }) => {
       try {
+        const ownerId = await ProjectAccessService.userIdFromRequest(request);
+        if (!ownerId) {
+          set.status = 401;
+          return { error: 'Unauthorized' };
+        }
+        if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+          set.status = 404;
+          return { error: 'Project not found' };
+        }
         if (body.build_command) {
           SecurityService.validateBuildCommand(body.build_command);
         }
@@ -102,7 +120,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
           ...body,
           app_type: body.app_type ? (body.app_type as AppType) : undefined,
         };
-        return await ProjectService.update(id, updateData);
+        return await ProjectService.update(id, ownerId, updateData);
       } catch (e: any) {
         set.status = 400;
         return { error: e.message };
@@ -121,10 +139,24 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       }),
     },
   )
-  .delete('/:id', async ({ params: { id } }) => {
-    return await ProjectService.delete(id);
+  .delete('/:id', async ({ params: { id }, request, set }) => {
+    const ownerId = await ProjectAccessService.userIdFromRequest(request);
+    if (!ownerId) {
+      set.status = 401;
+      return { error: 'Unauthorized' };
+    }
+    const project = await ProjectService.delete(id, ownerId);
+    if (!project) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
+    return project;
   })
-  .get('/:id/deployment', async ({ params: { id }, set }) => {
+  .get('/:id/deployment', async ({ params: { id }, request, set }) => {
+    if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
     const deployment = await db.query.deployments.findFirst({
       where: and(eq(deployments.project_id, id), eq(deployments.status, 'active')),
     });
@@ -134,7 +166,11 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     }
     return deployment;
   })
-  .get('/:id/deployments', async ({ params: { id } }) => {
+  .get('/:id/deployments', async ({ params: { id }, request, set }) => {
+    if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
     // Get all deployments for this project (for status tracking in UI)
     const allDeployments = await db.query.deployments.findMany({
       where: eq(deployments.project_id, id),
@@ -142,12 +178,57 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     });
     return allDeployments;
   })
-  .post('/:id/stop', async ({ params: { id }, set }) => {
+  .post('/:id/stop', async ({ params: { id }, request, set }) => {
     try {
+      if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+        set.status = 404;
+        return { error: 'Project not found' };
+      }
       await DeploymentService.stop(id);
       return { success: true };
     } catch (e: any) {
       set.status = 400;
       return { error: e.message };
     }
-  });
+  })
+  .get('/:id/uptime', async ({ params: { id }, request, set }) => {
+    if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
+    const settings = await UptimeService.getSettings(id);
+    if (!settings) {
+      set.status = 404;
+      return { error: 'Uptime monitor not found' };
+    }
+    return settings;
+  })
+  .put(
+    '/:id/uptime',
+    async ({ params: { id }, request, body, set }) => {
+      if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+        set.status = 404;
+        return { error: 'Project not found' };
+      }
+      try {
+        const settings = await UptimeService.updateSettings(id, body);
+        if (!settings) {
+          set.status = 404;
+          return { error: 'Uptime monitor not found' };
+        }
+        return settings;
+      } catch (error) {
+        set.status = 400;
+        return { error: error instanceof Error ? error.message : 'Invalid uptime settings' };
+      }
+    },
+    {
+      body: t.Object({
+        enabled: t.Optional(t.Boolean()),
+        endpoint_url: t.Optional(t.Union([t.String(), t.Null()])),
+        interval_seconds: t.Optional(
+          t.Union([t.Literal(60), t.Literal(300), t.Literal(600), t.Literal(900), t.Literal(1800)]),
+        ),
+      }),
+    },
+  );

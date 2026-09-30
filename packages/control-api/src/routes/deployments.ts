@@ -1,12 +1,18 @@
 import { Elysia, t } from 'elysia';
 import { DeploymentService } from '../services/deployment-service';
 import { BuildService } from '../services/build-service';
+import { ProjectAccessService } from '../services/project-access-service';
 
 export const deploymentsRoutes = new Elysia().group('/deploy', (app) =>
-  app.post('/build/:id/activate', async ({ params: { id }, set }) => {
+  app.post('/build/:id/activate', async ({ params: { id }, request, set }) => {
     try {
       const build = await BuildService.getById(id);
       if (!build) {
+        set.status = 404;
+        return { error: 'Build not found' };
+      }
+
+      if (!(await ProjectAccessService.getOwnedProject(request, build.project_id))) {
         set.status = 404;
         return { error: 'Build not found' };
       }

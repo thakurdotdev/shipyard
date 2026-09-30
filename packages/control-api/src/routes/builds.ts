@@ -5,12 +5,13 @@ import { LogService } from '../services/log-service';
 import { WebSocketService } from '../ws';
 import { LogLevel } from '../db/schema';
 import { BuildQueue } from '../queue';
+import { ProjectAccessService } from '../services/project-access-service';
 
 export const buildsRoutes = new Elysia()
   .group('/projects/:id/builds', (app) =>
     app
-      .post('/', async ({ params: { id }, set }) => {
-        const project = await ProjectService.getById(id);
+      .post('/', async ({ params: { id }, request, set }) => {
+        const project = await ProjectAccessService.getOwnedProject(request, id);
         if (!project) {
           set.status = 404;
           return { error: 'Project not found' };
@@ -23,7 +24,11 @@ export const buildsRoutes = new Elysia()
 
         return build;
       })
-      .get('/', async ({ params: { id } }) => {
+      .get('/', async ({ params: { id }, request, set }) => {
+        if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+          set.status = 404;
+          return { error: 'Project not found' };
+        }
         return await BuildService.getByProjectId(id);
       }),
   )
@@ -33,15 +38,20 @@ export const buildsRoutes = new Elysia()
         // Get queue statistics
         return await BuildQueue.getQueueInfo();
       })
-      .get('/:id', async ({ params: { id }, set }) => {
+      .get('/:id', async ({ params: { id }, request, set }) => {
         const build = await BuildService.getById(id);
-        if (!build) {
+        if (!build || !(await ProjectAccessService.getOwnedProject(request, build.project_id))) {
           set.status = 404;
           return { error: 'Build not found' };
         }
         return build;
       })
-      .get('/:id/queue-position', async ({ params: { id } }) => {
+      .get('/:id/queue-position', async ({ params: { id }, request, set }) => {
+        const build = await BuildService.getById(id);
+        if (!build || !(await ProjectAccessService.getOwnedProject(request, build.project_id))) {
+          set.status = 404;
+          return { error: 'Build not found' };
+        }
         // Get job position in queue
         const position = await BuildQueue.getJobPosition(id);
         const stats = await BuildQueue.getStats();
@@ -54,7 +64,12 @@ export const buildsRoutes = new Elysia()
           notFound: position === -1,
         };
       })
-      .get('/:id/logs', async ({ params: { id }, query }) => {
+      .get('/:id/logs', async ({ params: { id }, query, request, set }) => {
+        const build = await BuildService.getById(id);
+        if (!build || !(await ProjectAccessService.getOwnedProject(request, build.project_id))) {
+          set.status = 404;
+          return { error: 'Build not found' };
+        }
         // `?since=<ISO timestamp>` returns only lines persisted after that
         // point so clients can backfill what they missed over a flaky transport.
         const since = (query as { since?: string } | undefined)?.since;
@@ -66,7 +81,12 @@ export const buildsRoutes = new Elysia()
         }
         return await LogService.getLogs(id);
       })
-      .delete('/:id/logs', async ({ params: { id } }) => {
+      .delete('/:id/logs', async ({ params: { id }, request, set }) => {
+        const build = await BuildService.getById(id);
+        if (!build || !(await ProjectAccessService.getOwnedProject(request, build.project_id))) {
+          set.status = 404;
+          return { error: 'Build not found' };
+        }
         await LogService.clearLogs(id);
         return { success: true, message: 'Logs cleared' };
       }),

@@ -17,6 +17,9 @@ The project is structured as a monorepo with the following services:
 - **Realtime Logs**: Watch build and deployment logs stream in real-time via WebSockets, giving you instant visibility into what's happening.
 - **Dynamic Domain Generation**: Automatically assigns and configures subdomains for each deployed project using Nginx wildcard routing.
 - **Webhook Triggered Deployments**: Deploy your projects automatically when changes are pushed to your repository.
+- **Uptime Monitoring**: Schedule public HTTP checks for each project and send account email alerts when an app goes down or recovers.
+
+Uptime email alerts use the Resend API. Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the Control API environment. Monitoring can be set to check every 1, 5, 10, 15, or 30 minutes. Custom endpoints must resolve to public IP addresses; leaving the endpoint blank uses the project's generated domain once an active deployment exists.
 
 ## Tech Stack
 

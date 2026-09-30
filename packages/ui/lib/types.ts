@@ -36,6 +36,26 @@ export interface Deployment {
   activated_at: string;
 }
 
+export interface UptimeCheck {
+  id: string;
+  checked_at: string;
+  success: boolean;
+  status_code: number | null;
+  latency_ms: number | null;
+  error: string | null;
+}
+
+export interface UptimeSettings {
+  enabled: boolean;
+  endpoint_url: string | null;
+  interval_seconds: number;
+  current_status: 'unknown' | 'up' | 'down';
+  consecutive_failures: number;
+  last_checked_at: string | null;
+  down_since: string | null;
+  history: UptimeCheck[];
+}
+
 export interface EnvVar {
   id: string;
   project_id: string;

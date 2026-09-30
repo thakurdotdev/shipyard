@@ -1,11 +1,11 @@
 import { db } from '../db';
-import { projects } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { projects, uptimeMonitors } from '../db/schema';
+import { and, eq } from 'drizzle-orm';
 import { AppType } from '../config/framework-config';
 
 export const ProjectService = {
-  async getAll() {
-    return await db.select().from(projects);
+  async getAll(ownerId: string) {
+    return await db.select().from(projects).where(eq(projects.owner_id, ownerId));
   },
 
   async getById(id: string) {
@@ -110,6 +110,7 @@ export const ProjectService = {
   },
 
   async create(data: {
+    owner_id: string;
     name: string;
     github_url: string;
     root_directory?: string;
@@ -199,11 +200,14 @@ export const ProjectService = {
           github_repo_full_name: data.github_repo_full_name,
           github_branch: data.github_branch || 'main',
           github_installation_id: data.github_installation_id,
+          owner_id: data.owner_id,
           auto_deploy: data.auto_deploy ?? true, // Default true
         })
         .returning();
 
       const projectId = result[0].id;
+
+      await tx.insert(uptimeMonitors).values({ project_id: projectId });
 
       // Save env vars if provided
       if (data.env_vars) {
@@ -226,7 +230,7 @@ export const ProjectService = {
     });
   },
 
-  async update(id: string, data: Partial<typeof projects.$inferInsert>) {
+  async update(id: string, ownerId: string, data: Partial<typeof projects.$inferInsert>) {
     const updateData = { ...data };
     const domain = updateData.domain;
     if (typeof domain === 'string' && domain.trim() === '') {
@@ -241,13 +245,15 @@ export const ProjectService = {
     const result = await db
       .update(projects)
       .set({ ...updateData, updated_at: new Date() })
-      .where(eq(projects.id, id))
+      .where(and(eq(projects.id, id), eq(projects.owner_id, ownerId)))
       .returning();
     return result[0] || null;
   },
 
-  async delete(id: string) {
-    const project = await this.getById(id);
+  async delete(id: string, ownerId: string) {
+    const project = await db.query.projects.findFirst({
+      where: and(eq(projects.id, id), eq(projects.owner_id, ownerId)),
+    });
     if (!project) return null;
 
     console.log(`[ProjectService] Deleting project ${id} (${project.name})...`);
@@ -325,7 +331,10 @@ export const ProjectService = {
     console.log(`[ProjectService] Deleted builds.`);
 
     // Delete project - use returning to verify it was deleted
-    const deletedProject = await db.delete(projects).where(eq(projects.id, id)).returning();
+    const deletedProject = await db
+      .delete(projects)
+      .where(and(eq(projects.id, id), eq(projects.owner_id, ownerId)))
+      .returning();
     console.log(`[ProjectService] Deleted ${deletedProject.length} project record(s).`);
 
     if (deletedProject.length === 0) {

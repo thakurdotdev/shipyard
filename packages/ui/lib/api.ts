@@ -1,6 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-import { Project, Build, Deployment, EnvVar, LogEntry } from '@/lib/types';
+import { Project, Build, Deployment, EnvVar, LogEntry, UptimeSettings } from '@/lib/types';
 
 export const api = {
   getProjects: async (): Promise<Project[]> => {
@@ -142,6 +142,31 @@ export const api = {
       if (res.status === 404) return null;
       const error = await res.json().catch(() => ({ error: 'Failed to get active deployment' }));
       throw new Error(error.error || error.message || 'Failed to get active deployment');
+    }
+    return res.json();
+  },
+
+  async getUptimeSettings(projectId: string): Promise<UptimeSettings> {
+    const res = await fetch(`${API_URL}/projects/${projectId}/uptime`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to fetch uptime settings');
+    return res.json();
+  },
+
+  async updateUptimeSettings(
+    projectId: string,
+    data: { enabled?: boolean; endpoint_url?: string | null; interval_seconds?: number },
+  ): Promise<UptimeSettings> {
+    const res = await fetch(`${API_URL}/projects/${projectId}/uptime`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to update uptime settings' }));
+      throw new Error(error.error || error.message || 'Failed to update uptime settings');
     }
     return res.json();
   },

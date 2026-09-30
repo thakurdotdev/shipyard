@@ -27,6 +27,7 @@ export const projects = pgTable(
     github_installation_id: text('github_installation_id').references(
       () => githubInstallations.github_installation_id,
     ),
+    owner_id: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
     auto_deploy: boolean('auto_deploy').default(true).notNull(),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
@@ -36,6 +37,64 @@ export const projects = pgTable(
     githubRepoIdx: index('projects_github_repo_idx').on(table.github_repo_id, table.github_branch),
   }),
 );
+
+export const uptimeMonitors = pgTable(
+  'uptime_monitors',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    project_id: uuid('project_id')
+      .references(() => projects.id, { onDelete: 'cascade' })
+      .notNull()
+      .unique(),
+    enabled: boolean('enabled').notNull().default(false),
+    endpoint_url: text('endpoint_url'),
+    interval_seconds: integer('interval_seconds').notNull().default(300),
+    timeout_seconds: integer('timeout_seconds').notNull().default(10),
+    current_status: varchar('current_status', { length: 20 }).notNull().default('unknown'),
+    consecutive_failures: integer('consecutive_failures').notNull().default(0),
+    last_checked_at: timestamp('last_checked_at'),
+    next_check_at: timestamp('next_check_at'),
+    down_since: timestamp('down_since'),
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    updated_at: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    dueIdx: index('uptime_monitors_due_idx').on(table.enabled, table.next_check_at),
+  }),
+);
+
+export const uptimeChecks = pgTable(
+  'uptime_checks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    monitor_id: uuid('monitor_id')
+      .references(() => uptimeMonitors.id, { onDelete: 'cascade' })
+      .notNull(),
+    checked_at: timestamp('checked_at').defaultNow().notNull(),
+    success: boolean('success').notNull(),
+    status_code: integer('status_code'),
+    latency_ms: integer('latency_ms'),
+    error: text('error'),
+  },
+  (table) => ({
+    monitorCheckedIdx: index('uptime_checks_monitor_checked_idx').on(
+      table.monitor_id,
+      table.checked_at,
+    ),
+  }),
+);
+
+export const uptimeAlerts = pgTable('uptime_alerts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  monitor_id: uuid('monitor_id')
+    .references(() => uptimeMonitors.id, { onDelete: 'cascade' })
+    .notNull(),
+  status: varchar('status', { length: 20 }).notNull(),
+  occurred_at: timestamp('occurred_at').defaultNow().notNull(),
+  delivered_at: timestamp('delivered_at'),
+  attempts: integer('attempts').notNull().default(0),
+  last_error: text('last_error'),
+});
 
 export const builds = pgTable(
   'builds',

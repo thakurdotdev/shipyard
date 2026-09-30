@@ -4,6 +4,7 @@ import { DomainService } from '../services/domain-service';
 import { db } from '../db';
 import { projects, builds, deployments } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
+import { ProjectAccessService } from '../services/project-access-service';
 
 export const domainsRoutes = new Elysia({ prefix: '/domains' })
   .get(
@@ -44,8 +45,12 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
    * Get domain provision status for a project.
    * Returns DNS status, SSL status, error messages, and cert expiry.
    */
-  .get('/status/:projectId', async ({ params: { projectId }, set }) => {
+  .get('/status/:projectId', async ({ params: { projectId }, request, set }) => {
     try {
+      if (!(await ProjectAccessService.getOwnedProject(request, projectId))) {
+        set.status = 404;
+        return { error: 'Project not found' };
+      }
       const provision = await DomainService.getByProjectId(projectId);
 
       if (!provision) {
@@ -80,11 +85,9 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
    * Manually trigger domain provisioning for a project.
    * Useful for setting up domains before the first deployment.
    */
-  .post('/provision/:projectId', async ({ params: { projectId }, set }) => {
+  .post('/provision/:projectId', async ({ params: { projectId }, request, set }) => {
     try {
-      const project = await db.query.projects.findFirst({
-        where: eq(projects.id, projectId),
-      });
+      const project = await ProjectAccessService.getOwnedProject(request, projectId);
 
       if (!project) {
         set.status = 404;
@@ -138,11 +141,9 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
    * Retry failed domain provisioning.
    * Re-runs from the failed step (skips already completed steps).
    */
-  .post('/retry/:projectId', async ({ params: { projectId }, set }) => {
+  .post('/retry/:projectId', async ({ params: { projectId }, request, set }) => {
     try {
-      const project = await db.query.projects.findFirst({
-        where: eq(projects.id, projectId),
-      });
+      const project = await ProjectAccessService.getOwnedProject(request, projectId);
 
       if (!project) {
         set.status = 404;
