@@ -28,6 +28,10 @@ module.exports = {
         REDIS_URL: 'redis://localhost:6379/0',
         // Keep deployed apps OUTSIDE the platform repo so framework workspace-root
         // detection doesn't pick up this repo's own package.json/lockfile.
+        // NOTE: the pm2 user must be able to write here. Create it once with:
+        //   sudo mkdir -p /var/lib/shipyard/apps && sudo chown -R <pm2-user>:<pm2-user> /var/lib/shipyard/apps
+        // If you'd rather keep the old location, point BASE_DIR at it instead:
+        //   BASE_DIR: '/opt/shipyard/packages/deploy-engine/apps',
         BASE_DIR: '/var/lib/shipyard/apps',
       },
     },

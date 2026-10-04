@@ -22,10 +22,29 @@ import { join } from 'path';
 export const BASE_DIR = process.env.BASE_DIR || join(homedir(), '.shipyard', 'apps');
 export const ARTIFACTS_DIR = join(BASE_DIR, 'artifacts');
 
-// Ensure base dirs exist
-if (!existsSync(ARTIFACTS_DIR)) {
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+/**
+ * Ensure the on-disk layout exists. Wraps mkdir in a clear error so a bad
+ * BASE_DIR (missing permissions, read-only mount) fails fast with an
+ * actionable message instead of a bare EACCES stack trace.
+ */
+function ensureDir(path: string): void {
+  try {
+    if (!existsSync(path)) {
+      mkdirSync(path, { recursive: true });
+    }
+  } catch (e: any) {
+    const reason = e?.code === 'EACCES' || e?.code === 'EPERM' ? 'permission denied' : e?.message;
+    throw new Error(
+      `Cannot create directory "${path}" (${reason}). ` +
+        `Fix it with one of: sudo mkdir -p "${path}" && sudo chown -R "$(id -un):$(id -gn)" "${path}", ` +
+        `or point BASE_DIR at a writable directory.`,
+    );
+  }
 }
+
+// Ensure base dirs exist
+ensureDir(BASE_DIR);
+ensureDir(ARTIFACTS_DIR);
 
 /** Absolute path to a project's directory. */
 export function getProjectDir(projectId: string): string {

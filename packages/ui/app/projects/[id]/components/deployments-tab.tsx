@@ -95,6 +95,28 @@ export function DeploymentsTab({
     ].includes(status);
   };
 
+  // A build is "busy" (and therefore must not offer delete) while its own
+  // build is queued/running, or while any deployment pipeline is live for it:
+  // the row's ownDeploy status, or a realtime deployment event for this build.
+  const isBuildBusy = (build: any) => {
+    if (build.status === 'pending' || build.status === 'building') return true;
+    if (deployingBuildId === build.id) return true;
+    if (
+      build.deployment_status &&
+      (build.deployment_status === 'activating' || isPipelineStatus(build.deployment_status))
+    ) {
+      return true;
+    }
+    if (
+      deploymentStatus?.build_id === build.id &&
+      deploymentStatus?.status &&
+      (deploymentStatus.status === 'activating' || isPipelineStatus(deploymentStatus.status))
+    ) {
+      return true;
+    }
+    return false;
+  };
+
   // Get display label for deployment status
   const getDeployStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
@@ -257,7 +279,7 @@ export function DeploymentsTab({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {!isActive && (
+                        {!isActive && !isBuildBusy(build) && (
                           <Button
                             variant="ghost"
                             size="icon"
