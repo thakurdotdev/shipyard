@@ -71,6 +71,7 @@ export const DeployService = {
     subdomain: string,
     envVars: Record<string, string> = {},
     rootDirectory?: string,
+    projectName?: string,
   ) {
     const paths = this.getPaths(projectId, buildId);
 
@@ -187,6 +188,7 @@ export const DeployService = {
         envVars,
         projectId,
         effectiveExtractDir,
+        projectName || subdomain,
       );
     }
 
@@ -385,6 +387,7 @@ export const DeployService = {
     envVars: Record<string, string> = {},
     projectId?: string,
     repoRootDir?: string,
+    projectName?: string,
   ) {
     const framework = FRAMEWORKS[appType];
     const useStaticServer = shouldUseStaticServer(appType, cwd);
@@ -449,6 +452,7 @@ export const DeployService = {
         NODE_ENV: 'production',
         PLATFORM_ENV: 'production',
       },
+      projectName,
     });
 
     if (!startResult.success) {

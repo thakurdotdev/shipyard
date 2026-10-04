@@ -223,6 +223,7 @@ export const DeploymentService = {
           subdomain,
           rootDirectory: project.root_directory,
           envVars: envVarsObject,
+          projectName: project.name,
         }),
       });
 

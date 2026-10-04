@@ -44,8 +44,22 @@ const app = new Elysia()
   })
   .post(
     '/activate',
-    async ({ body }: { body: any }) => {
-      const { projectId, buildId, port, appType, subdomain, rootDirectory, envVars } = body;
+    async ({
+      body,
+    }: {
+      body: {
+        projectId: string;
+        buildId: string;
+        port: number;
+        appType: any;
+        subdomain: string;
+        rootDirectory?: string;
+        envVars?: Record<string, string>;
+        projectName?: string;
+      };
+    }) => {
+      const { projectId, buildId, port, appType, subdomain, rootDirectory, envVars, projectName } =
+        body;
 
       try {
         await DeployService.activateDeployment(
@@ -56,10 +70,12 @@ const app = new Elysia()
           subdomain,
           envVars || {},
           rootDirectory,
+          projectName,
         );
         return { success: true };
-      } catch (e: any) {
-        return new Response(e.message, { status: 500 });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        return new Response(message, { status: 500 });
       }
     },
     {
@@ -78,6 +94,7 @@ const app = new Elysia()
         subdomain: t.String(),
         rootDirectory: t.Optional(t.String()),
         envVars: t.Optional(t.Record(t.String(), t.String())),
+        projectName: t.Optional(t.String()),
       }),
     },
   )

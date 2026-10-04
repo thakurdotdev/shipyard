@@ -1,9 +1,25 @@
+'use client';
+
+import { useState } from 'react';
 import { CardShell } from '@/components/ui/card-shell';
-import { getFrameworkOption } from '@/lib/framework-config';
 import { Project } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ExternalLink, GitBranch } from 'lucide-react';
 import Link from 'next/link';
+
+function getDomainHostname(domain: string | null): string | null {
+  if (!domain) return null;
+  try {
+    const normalized =
+      domain.startsWith('http://') || domain.startsWith('https://') ? domain : `https://${domain}`;
+    return new URL(normalized).hostname;
+  } catch {
+    return domain
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+      .split(':')[0];
+  }
+}
 
 // Framework Icons mapping
 const FrameworkIcon = ({ type, className }: { type: string; className?: string }) => {
@@ -75,7 +91,12 @@ const FrameworkIcon = ({ type, className }: { type: string; className?: string }
 
 export function ProjectCard({ project }: { project: Project }) {
   const isReady = !!project.domain;
-  const framework = getFrameworkOption(project.app_type);
+  const [faviconError, setFaviconError] = useState(false);
+
+  const domainHostname = getDomainHostname(project.domain);
+  const faviconUrl = domainHostname
+    ? `https://icons.duckduckgo.com/ip3/${domainHostname}.ico`
+    : null;
 
   return (
     <CardShell
@@ -92,8 +113,17 @@ export function ProjectCard({ project }: { project: Project }) {
         <div className="p-5 flex-1">
           {/* Header */}
           <div className="flex items-start gap-4 mb-6">
-            <div className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-surface-muted border border-border">
-              <FrameworkIcon type={project.app_type} className="w-5 h-5 text-foreground" />
+            <div className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-surface-muted border border-border overflow-hidden">
+              {faviconUrl && !faviconError ? (
+                <img
+                  src={faviconUrl}
+                  alt={`${project.name} favicon`}
+                  className="w-5 h-5 object-contain"
+                  onError={() => setFaviconError(true)}
+                />
+              ) : (
+                <FrameworkIcon type={project.app_type} className="w-5 h-5 text-foreground" />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between mb-0.5">

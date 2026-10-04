@@ -40,32 +40,46 @@ export function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-6">
-        <div className="flex items-center gap-7">
-          <Link href="/" className="flex items-center gap-2.5 text-[15px] font-bold tracking-tight">
-            <Image src="/logo.png" alt="Logo" width={30} height={30} className="rounded-lg" />
-            ShipYard
+      <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-3 sm:px-6">
+        <div className="flex items-center gap-2.5 sm:gap-7 min-w-0">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-[15px] font-bold tracking-tight shrink-0"
+          >
+            <Image
+              src="/logo.png"
+              alt="Logo"
+              width={28}
+              height={28}
+              className="rounded-lg shrink-0"
+            />
+            <span className="hidden min-[380px]:inline">ShipYard</span>
           </Link>
-          <div className="hidden items-center gap-7 md:flex">
-            {session &&
-              routes.map((route) => (
-                <Link
-                  key={route.href}
-                  href={route.href}
-                  className={cn(
-                    'flex items-center gap-2 text-sm transition-colors duration-200',
-                    route.active
-                      ? 'font-medium text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <route.icon className="size-4" />
-                  {route.label}
-                </Link>
-              ))}
-          </div>
+          {session && (
+            <div className="flex items-center gap-1 sm:gap-6">
+              {routes.map((route) => {
+                const isProcesses = route.href === '/processes';
+                return (
+                  <Link
+                    key={route.href}
+                    href={route.href}
+                    className={cn(
+                      'flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors duration-200 py-1.5 px-2.5 sm:px-0 sm:py-0 rounded-md shrink-0',
+                      route.active
+                        ? 'font-medium text-foreground bg-surface-muted sm:bg-transparent'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-surface-muted/50 sm:hover:bg-transparent',
+                      !isProcesses && 'hidden sm:flex',
+                    )}
+                  >
+                    <route.icon className="size-4 shrink-0" />
+                    <span>{route.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <ThemeSwitcher />
           {session ? (
             <DropdownMenu>
@@ -89,6 +103,19 @@ export function Navbar() {
                     </p>
                   </div>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator className="sm:hidden" />
+                <DropdownMenuItem asChild className="sm:hidden">
+                  <Link href="/processes" className="flex items-center">
+                    <Activity className="mr-2 h-4 w-4" />
+                    <span>Processes</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="sm:hidden">
+                  <Link href="/projects/new" className="flex items-center">
+                    <FolderGit2 className="mr-2 h-4 w-4" />
+                    <span>New Project</span>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() =>

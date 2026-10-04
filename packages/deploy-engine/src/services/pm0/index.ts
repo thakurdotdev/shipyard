@@ -11,13 +11,36 @@ import { existsSync } from 'fs';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { execPm0 } from './exec';
-import { getProcessName } from './types';
+import { getProcessName, type PM0ProcessInfo } from './types';
 
 // Re-export types
 export { getProcessName } from './types';
 export type { PM0ProcessInfo } from './types';
 
 export const PM0Service = {
+  /**
+   * Find a managed process by projectId (checks DEPLOY_PROJECT_ID env var, then legacy names).
+   */
+  async findProcessByProjectId(projectId: string): Promise<{ name: string; pm_id: number } | null> {
+    const result = await execPm0(['jlist']);
+    if (result.exitCode !== 0) return null;
+
+    try {
+      const processes: PM0ProcessInfo[] = JSON.parse(result.stdout);
+      const proc = processes.find(
+        (p: PM0ProcessInfo) =>
+          p.pm2_env?.DEPLOY_PROJECT_ID === projectId ||
+          p.name === `deploy-${projectId.slice(0, 8)}`,
+      );
+      if (proc) {
+        return { name: proc.name, pm_id: proc.pm_id };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
   /**
    * Start an application as a managed pm0 process.
    * Generates a temporary ecosystem config and starts it via `pm0 start`.
@@ -29,9 +52,10 @@ export const PM0Service = {
     cwd: string;
     port: number;
     envVars: Record<string, string>;
+    projectName?: string;
   }): Promise<{ success: boolean; error?: string }> {
-    const { projectId, buildId, startCmd, cwd, port, envVars } = options;
-    const processName = getProcessName(projectId);
+    const { projectId, buildId, startCmd, cwd, port, envVars, projectName } = options;
+    const processName = getProcessName(projectId, projectName);
 
     // Build PM2-compatible ecosystem config
     const script = startCmd[0];
@@ -51,6 +75,7 @@ export const PM0Service = {
               ...envVars,
               PORT: port.toString(),
               DEPLOY_PROJECT_ID: projectId,
+              DEPLOY_PROJECT_NAME: projectName || processName,
               DEPLOY_BUILD_ID: buildId,
             },
           },
@@ -90,60 +115,65 @@ export const PM0Service = {
   /**
    * Stop a managed process (keeps pm0 entry for restart).
    */
-  async stop(projectId: string): Promise<boolean> {
-    const processName = getProcessName(projectId);
-    console.log(`[PM0Service] Stopping process: ${processName}`);
+  async stop(projectId: string, projectName?: string): Promise<boolean> {
+    const existing = await this.findProcessByProjectId(projectId);
+    const target = existing ? String(existing.pm_id) : getProcessName(projectId, projectName);
+    console.log(`[PM0Service] Stopping process: ${target}`);
 
-    const result = await execPm0(['stop', processName]);
+    const result = await execPm0(['stop', target]);
 
     if (result.exitCode === 0) {
-      console.log(`[PM0Service] Process stopped: ${processName}`);
+      console.log(`[PM0Service] Process stopped: ${target}`);
       return true;
     }
 
     // Process might not exist, which is fine
-    console.log(`[PM0Service] Process ${processName} not found or already stopped`);
+    console.log(`[PM0Service] Process ${target} not found or already stopped`);
     return false;
   },
 
   /**
    * Delete a managed process (stop + forget — frees the pm_id).
    */
-  async delete(projectId: string): Promise<boolean> {
-    const processName = getProcessName(projectId);
-    console.log(`[PM0Service] Deleting process: ${processName}`);
+  async delete(projectId: string, projectName?: string): Promise<boolean> {
+    const existing = await this.findProcessByProjectId(projectId);
+    const target = existing ? String(existing.pm_id) : getProcessName(projectId, projectName);
+    console.log(`[PM0Service] Deleting process: ${target}`);
 
-    const result = await execPm0(['delete', processName]);
+    const result = await execPm0(['delete', target]);
 
     if (result.exitCode === 0) {
-      console.log(`[PM0Service] Process deleted: ${processName}`);
+      console.log(`[PM0Service] Process deleted: ${target}`);
       await this.save();
       return true;
     }
 
-    console.log(`[PM0Service] Process ${processName} not found or already deleted`);
+    console.log(`[PM0Service] Process ${target} not found or already deleted`);
     return false;
   },
 
   /**
    * Ensure a process is stopped and removed before re-deploying.
    */
-  async ensureProcessStopped(projectId: string): Promise<void> {
-    await this.delete(projectId);
+  async ensureProcessStopped(projectId: string, projectName?: string): Promise<void> {
+    await this.delete(projectId, projectName);
   },
 
   /**
    * Check if a project's process is running.
    */
   async isRunning(projectId: string): Promise<boolean> {
-    const processName = getProcessName(projectId);
-
     const result = await execPm0(['jlist']);
     if (result.exitCode !== 0) return false;
 
     try {
-      const processes: any[] = JSON.parse(result.stdout);
-      return processes.some((p: any) => p.name === processName && p.pm2_env?.status === 'online');
+      const processes: PM0ProcessInfo[] = JSON.parse(result.stdout);
+      return processes.some(
+        (p: PM0ProcessInfo) =>
+          (p.pm2_env?.DEPLOY_PROJECT_ID === projectId ||
+            p.name === `deploy-${projectId.slice(0, 8)}`) &&
+          p.pm2_env?.status === 'online',
+      );
     } catch {
       return false;
     }
@@ -154,7 +184,8 @@ export const PM0Service = {
    * Reads directly from pm0 log files to avoid `pm0 logs` following forever.
    */
   async getLogs(projectId: string, tail: number = 100): Promise<string> {
-    const processName = getProcessName(projectId);
+    const existing = await this.findProcessByProjectId(projectId);
+    const processName = existing ? existing.name : getProcessName(projectId);
     const pm0Home = process.env.PM0_HOME || join(process.env.HOME || '/root', '.pm0');
 
     let output = '';
@@ -191,7 +222,7 @@ export const PM0Service = {
 
   /**
    * List all deploy-managed processes.
-   * Filters pm0 process list by the `deploy-` name prefix.
+   * Filters pm0 process list by DEPLOY_PROJECT_ID or the `deploy-` name prefix.
    */
   async list(): Promise<
     Array<{ name: string; projectId: string; buildId: string; status: string }>
@@ -200,10 +231,13 @@ export const PM0Service = {
     if (result.exitCode !== 0) return [];
 
     try {
-      const processes: any[] = JSON.parse(result.stdout);
+      const processes: PM0ProcessInfo[] = JSON.parse(result.stdout);
       return processes
-        .filter((p: any) => p.name?.startsWith('deploy-'))
-        .map((p: any) => ({
+        .filter(
+          (p: PM0ProcessInfo) =>
+            Boolean(p.pm2_env?.DEPLOY_PROJECT_ID) || p.name?.startsWith('deploy-'),
+        )
+        .map((p: PM0ProcessInfo) => ({
           name: p.name,
           projectId: p.pm2_env?.DEPLOY_PROJECT_ID || '',
           buildId: p.pm2_env?.DEPLOY_BUILD_ID || '',

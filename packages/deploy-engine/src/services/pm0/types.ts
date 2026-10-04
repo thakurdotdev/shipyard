@@ -22,14 +22,24 @@ export interface PM0ProcessInfo {
     pm_cwd: string;
     PORT?: string;
     DEPLOY_PROJECT_ID?: string;
+    DEPLOY_PROJECT_NAME?: string;
     DEPLOY_BUILD_ID?: string;
   };
 }
 
 /**
- * Process naming convention — mirrors Docker container naming.
- * Uses first 8 chars of projectId for uniqueness.
+ * Process naming convention.
+ * Uses sanitized project name (slug) if provided, otherwise falls back to first 8 chars of projectId.
  */
-export function getProcessName(projectId: string): string {
+export function getProcessName(projectId: string, projectName?: string): string {
+  if (projectName && projectName.trim()) {
+    const slug = projectName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    if (slug) return slug;
+  }
   return `deploy-${projectId.slice(0, 8)}`;
 }
