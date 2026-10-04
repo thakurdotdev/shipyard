@@ -1,19 +1,21 @@
 import { cors } from '@elysiajs/cors';
+import { BodyInit, HeadersInit } from 'bun';
 import { Elysia } from 'elysia';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { Server as IOServer } from 'socket.io';
 import { auth } from './lib/auth';
+import { BuildQueue } from './queue';
 import { buildsRoutes, internalBuildRoutes } from './routes/builds';
 import { deploymentsRoutes } from './routes/deployments';
 import { domainsRoutes } from './routes/domains';
 import { envRoutes } from './routes/env';
-import { projectsRoutes } from './routes/projects';
-import { githubWebhook } from './routes/webhook-handler';
 import { githubRoutes } from './routes/github';
 import { infraRoutes } from './routes/infra';
-import { WebSocketService } from './ws';
-import { BuildQueue } from './queue';
+import { processesRoutes } from './routes/processes';
+import { projectsRoutes } from './routes/projects';
+import { githubWebhook } from './routes/webhook-handler';
 import { UptimeService } from './services/uptime-service';
+import { WebSocketService } from './ws';
 
 const publicRoutes = new Elysia().use(githubWebhook).use(githubRoutes).use(internalBuildRoutes);
 
@@ -23,7 +25,8 @@ const protectedRoutes = new Elysia()
   .use(envRoutes)
   .use(deploymentsRoutes)
   .use(domainsRoutes)
-  .use(infraRoutes);
+  .use(infraRoutes)
+  .use(processesRoutes);
 
 // 1. Create your Elysia app
 const app = new Elysia()
@@ -64,7 +67,7 @@ const app = new Elysia()
   .group('/api', (app) => app.use(publicRoutes))
   .guard(
     {
-      async beforeHandle({ request, set }) {
+      async beforeHandle({ request }) {
         const session = await auth.api.getSession({
           headers: request.headers,
         });
@@ -114,14 +117,14 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     const method = req.method || 'GET';
 
     // Create verify body
-    let body: any = undefined;
+    let body: BodyInit | null | undefined = undefined;
     if (method !== 'GET' && method !== 'HEAD') {
-      body = req;
+      body = req as unknown as BodyInit;
     }
 
     const webReq = new Request(url.toString(), {
       method,
-      headers: req.headers as any,
+      headers: req.headers as unknown as HeadersInit,
       body,
       duplex: 'half',
     });
@@ -158,7 +161,7 @@ io.attach(server);
 
 const PORT = process.env.PORT || 4010;
 
-server.on('error', (err: any) => {
+server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ Control API port ${PORT} is already in use.`);
     process.exit(1);

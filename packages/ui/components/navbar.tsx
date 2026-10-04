@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
-import { FolderGit2, LogOut } from 'lucide-react';
+import { Activity, FolderGit2, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -25,6 +25,12 @@ export function Navbar() {
 
   const routes = [
     {
+      href: '/processes',
+      label: 'Processes',
+      icon: Activity,
+      active: pathname === '/processes',
+    },
+    {
       href: '/projects/new',
       label: 'New Project',
       icon: FolderGit2,
@@ -34,7 +40,7 @@ export function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-[68px] max-w-[1400px] items-center justify-between px-6">
+      <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-6">
         <div className="flex items-center gap-7">
           <Link href="/" className="flex items-center gap-2.5 text-[15px] font-bold tracking-tight">
             <Image src="/logo.png" alt="Logo" width={30} height={30} className="rounded-lg" />
