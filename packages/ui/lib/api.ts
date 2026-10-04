@@ -133,6 +133,17 @@ export const api = {
     }
     return res.json();
   },
+  async deleteBuild(buildId: string): Promise<{ success: boolean; id: string }> {
+    const res = await fetch(`${API_URL}/builds/${buildId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to delete build' }));
+      throw new Error(error.error || error.message || 'Failed to delete build');
+    }
+    return res.json();
+  },
 
   async getActiveDeployment(projectId: string): Promise<Deployment | null> {
     const res = await fetch(`${API_URL}/projects/${projectId}/deployment`, {

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
 
 /**
@@ -11,8 +12,14 @@ import { join } from 'path';
  *
  * Builds run inside the deploy engine and write straight into
  * {BASE_DIR}/{projectId}/builds/{buildId}/extracted, so no artifact copy is needed.
+ *
+ * IMPORTANT: the default lives OUTSIDE the platform repository on purpose. Frameworks
+ * that infer a workspace root by walking up from the build dir (Next.js/Turbopack,
+ * Vite, etc.) would otherwise discover the platform's own package.json/lockfile and
+ * emit warnings or pick the wrong project root. Production deployments should pin this
+ * via the BASE_DIR env var (e.g. /var/lib/shipyard/apps).
  */
-export const BASE_DIR = process.env.BASE_DIR || join(process.cwd(), 'apps');
+export const BASE_DIR = process.env.BASE_DIR || join(homedir(), '.shipyard', 'apps');
 export const ARTIFACTS_DIR = join(BASE_DIR, 'artifacts');
 
 // Ensure base dirs exist

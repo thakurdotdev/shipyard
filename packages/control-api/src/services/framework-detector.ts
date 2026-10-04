@@ -42,6 +42,11 @@ const FRAMEWORK_RULES: Array<{
     configFiles: [],
     dependencies: ['express'],
   },
+  {
+    framework: 'go',
+    configFiles: ['go.mod'],
+    dependencies: [],
+  },
 ];
 
 /**
@@ -105,6 +110,7 @@ export function getFrameworkDisplayInfo(framework: AppType | null): {
     express: { name: 'Express', icon: 'express', color: '#000000' },
     hono: { name: 'Hono', icon: 'hono', color: '#E36002' },
     elysia: { name: 'Elysia', icon: 'elysia', color: '#7C3AED' },
+    go: { name: 'Go', icon: 'go', color: '#00ADD8' },
   };
 
   if (!framework) {

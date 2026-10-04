@@ -73,6 +73,7 @@ const app = new Elysia()
           t.Literal('express'),
           t.Literal('hono'),
           t.Literal('elysia'),
+          t.Literal('go'),
         ]),
         subdomain: t.String(),
         rootDirectory: t.Optional(t.String()),
@@ -110,6 +111,15 @@ const app = new Elysia()
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
+    }
+  })
+  .delete('/projects/:projectId/builds/:buildId', async ({ params: { projectId, buildId } }) => {
+    try {
+      await DeployService.deleteBuild(projectId, buildId);
+      return { success: true };
+    } catch (e: any) {
+      const status = e.message === 'Cannot delete the currently active build' ? 400 : 500;
+      return new Response(e.message, { status });
     }
   })
   // Infrastructure service endpoints

@@ -23,7 +23,7 @@ import { ContainerConfig, DEFAULT_CONTAINER_LIMITS, getContainerName, getImageNa
 // Re-export types
 export * from './types';
 
-type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia';
+type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
 
 /**
  * Default internal port - containers use this internally,

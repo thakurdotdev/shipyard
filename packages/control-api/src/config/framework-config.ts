@@ -1,7 +1,7 @@
 /**
  * Supported application framework types for the platform.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
 
 export interface FrameworkConfig {
   id: AppType;
@@ -43,6 +43,12 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
     displayName: 'Elysia',
     category: 'backend',
     defaultBuildCommand: 'bun run build',
+  },
+  go: {
+    id: 'go',
+    displayName: 'Go',
+    category: 'backend',
+    defaultBuildCommand: 'go build -o app .',
   },
 };
 

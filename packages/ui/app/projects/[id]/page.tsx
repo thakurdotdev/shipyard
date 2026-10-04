@@ -236,6 +236,9 @@ function ProjectDetailsContent() {
             <DeploymentsTab
               builds={builds}
               onActivateBuild={activateBuild}
+              onBuildDeleted={(buildId) =>
+                setBuilds((prev) => prev.filter((b) => b.id !== buildId))
+              }
               activeDeployment={activeDeployment}
               deploymentStatus={deploymentStatus}
             />

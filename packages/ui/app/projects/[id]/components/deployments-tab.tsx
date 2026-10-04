@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { GitBranch, GitCommit, Clock, Terminal, Box, Loader2 } from 'lucide-react';
+import { GitBranch, GitCommit, Clock, Terminal, Box, Loader2, Trash2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -21,12 +21,25 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { LogViewer } from '@/components/log-viewer/log-viewer';
 import { DeploymentPipeline } from './deployment-pipeline';
+import { api } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface DeploymentsTabProps {
   builds: any[];
   onActivateBuild: (buildId: string) => Promise<void> | void;
+  onBuildDeleted?: (buildId: string) => void;
   activeDeployment?: any;
   deploymentStatus?: any;
 }
@@ -34,10 +47,13 @@ interface DeploymentsTabProps {
 export function DeploymentsTab({
   builds,
   onActivateBuild,
+  onBuildDeleted,
   activeDeployment,
   deploymentStatus,
 }: DeploymentsTabProps) {
   const [deployingBuildId, setDeployingBuildId] = useState<string | null>(null);
+  const [deletingBuildId, setDeletingBuildId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDeploy = async (buildId: string) => {
     if (deployingBuildId) return; // Prevent multiple simultaneous deploys
@@ -46,6 +62,21 @@ export function DeploymentsTab({
       await onActivateBuild(buildId);
     } finally {
       setDeployingBuildId(null);
+    }
+  };
+
+  const handleDelete = async (buildId: string) => {
+    if (deletingBuildId) return;
+    setDeletingBuildId(buildId);
+    try {
+      await api.deleteBuild(buildId);
+      toast.success(`Build #${buildId.slice(0, 8)} deleted — disk space freed`);
+      onBuildDeleted?.(buildId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete build');
+    } finally {
+      setDeletingBuildId(null);
+      setConfirmDeleteId(null);
     }
   };
 
@@ -226,6 +257,22 @@ export function DeploymentsTab({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {!isActive && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                            title="Delete build and free its disk space"
+                            disabled={deletingBuildId !== null || deployingBuildId !== null}
+                            onClick={() => setConfirmDeleteId(build.id)}
+                          >
+                            {deletingBuildId === build.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
                         {build.status === 'success' &&
                           !isActive &&
                           (() => {
@@ -279,6 +326,31 @@ export function DeploymentsTab({
           </Table>
         </div>
       </Card>
+
+      <AlertDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete build #{confirmDeleteId?.slice(0, 8)}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the build record, its logs, and its files on the server (repo
+              copy, dependencies, build output) to free disk space. This cannot be undone. The build
+              currently serving traffic cannot be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingBuildId !== null}
+              onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+            >
+              {deletingBuildId ? 'Deleting…' : 'Delete build'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

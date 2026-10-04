@@ -12,6 +12,7 @@ import { LogService } from './log-service';
 import { NginxService } from './nginx-service';
 import { DockerService } from './docker';
 import { PM0Service } from './pm0';
+import { isWorkspaceRoot } from '../utils/workspace';
 import { ARTIFACTS_DIR, BASE_DIR, getBuildExtractDir, getProjectDir } from '../config/paths';
 
 const IS_PLATFORM_PROD = process.env.PLATFORM_ENV === 'production';
@@ -267,6 +268,60 @@ export const DeployService = {
     return { success: true };
   },
 
+  /**
+   * Deletes ONE build's on-disk footprint: its output directory
+   * (`builds/<buildId>`, which holds the cloned repo, node_modules and build
+   * output) plus the legacy artifact tarball. Never deletes the whole project.
+   */
+  async deleteBuild(projectId: string, buildId: string) {
+    const paths = this.getPaths(projectId, buildId);
+
+    // Never remove the build currently serving traffic. The `current` symlink
+    // points at the active output; the control-api also blocks active builds,
+    // so this is a second layer of defense.
+    const currentTarget = await this.resolveCurrentTarget(paths.projectDir);
+    if (currentTarget) {
+      const buildsRoot = join(paths.projectDir, 'builds', buildId);
+      if (currentTarget === buildsRoot || currentTarget.startsWith(buildsRoot + '/')) {
+        throw new Error('Cannot delete the currently active build');
+      }
+    }
+
+    // Remove the build output directory (cloned repo + node_modules + dist).
+    // This is where almost all per-build disk usage lives.
+    const buildDir = join(paths.projectDir, 'builds', buildId);
+    if (existsSync(buildDir)) {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+
+    // Remove any stale direct-extract fallback path for very old builds.
+    if (existsSync(paths.extractDir)) {
+      await rm(paths.extractDir, { recursive: true, force: true });
+    }
+
+    // Remove the legacy artifact tarball, if any.
+    if (existsSync(paths.artifact)) {
+      await unlink(paths.artifact).catch(() => {});
+    }
+
+    return { success: true };
+  },
+
+  /** Best-effort read of the `current -> builds/<id>/extracted` symlink target. */
+  async resolveCurrentTarget(projectDir: string): Promise<string | null> {
+    try {
+      const proc = Bun.spawn(['readlink', '-f', join(projectDir, 'current')], {
+        stdout: 'pipe',
+        stderr: 'ignore',
+      });
+      const text = (await new Response(proc.stdout).text()).trim();
+      await proc.exited;
+      return text || null;
+    } catch {
+      return null;
+    }
+  },
+
   // -------- helpers --------
 
   getPaths(projectId: string, buildId: string) {
@@ -350,10 +405,16 @@ export const DeployService = {
         if (buildId) {
           await LogService.step(buildId, 'Installing production dependencies');
         }
-        // In monorepos: if repoRootDir has a package.json and is different from cwd, install workspace deps at root first
-        if (repoRootDir && repoRootDir !== cwd && existsSync(join(repoRootDir, 'package.json'))) {
+        // In monorepos: only install workspace deps at the repo root when the root
+        // is an actual workspace (declares `workspaces` or a workspace manifest).
+        if (
+          repoRootDir &&
+          repoRootDir !== cwd &&
+          existsSync(join(repoRootDir, 'package.json')) &&
+          isWorkspaceRoot(repoRootDir)
+        ) {
           if (buildId) {
-            await LogService.detail(buildId, 'Installing root workspace dependencies...');
+            await LogService.detail(buildId, 'Installing workspace root dependencies...');
           }
           await this.ensureDependenciesInstalled(repoRootDir, buildId);
         }
@@ -363,7 +424,7 @@ export const DeployService = {
         }
       }
       startCmd = isBackendFramework(appType)
-        ? getBackendStartCommand(cwd)
+        ? getBackendStartCommand(cwd, appType)
         : framework.startCommand(port, cwd);
       workingDir = cwd;
     }

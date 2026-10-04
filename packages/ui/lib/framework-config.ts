@@ -1,7 +1,7 @@
 /**
  * Supported application framework types.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
 
 export interface FrameworkOption {
   value: AppType;
@@ -38,6 +38,12 @@ export const FRAMEWORK_OPTIONS: FrameworkOption[] = [
     label: 'Express',
     category: 'Backend',
     defaultBuildCommand: 'npm run build',
+  },
+  {
+    value: 'go',
+    label: 'Go',
+    category: 'Backend',
+    defaultBuildCommand: 'go build -o app .',
   },
   {
     value: 'hono',

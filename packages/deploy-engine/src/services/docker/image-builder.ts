@@ -7,7 +7,7 @@ import { BuildResult, getImageName } from './types';
 /**
  * Dockerfile template types
  */
-type FrameworkType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia';
+type FrameworkType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
 
 /**
  * Common entry file patterns for backend apps
@@ -134,6 +134,21 @@ COPY dist/ /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]`;
 
+    case 'go':
+      // Go: compile a static binary, ship it on a minimal runtime image
+      return `FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go mod download
+RUN CGO_ENABLED=0 go build -o app .
+
+FROM alpine:3.20
+WORKDIR /app
+COPY --from=builder /app/app /app/app
+ENV PORT=${internalPort}
+EXPOSE ${internalPort}
+CMD ["/app/app"]`;
+
     case 'nextjs':
       // Next.js with multi-stage build
       return `FROM oven/bun:1-alpine AS builder
@@ -205,9 +220,12 @@ export async function buildImage(
       onLog?.(`Using existing Dockerfile`);
     }
   } else {
-    // Detect entry point: use start script if available, otherwise find entry file
+    // Detect entry point: use start script if available, otherwise find entry file.
+    // Go projects are compiled by the generated Dockerfile, so skip entry detection.
     let entryFile: string | undefined;
-    if (!hasStartScript(sourceDir)) {
+    if (framework === 'go') {
+      onLog?.(`Go project detected - compiling binary inside the image`);
+    } else if (!hasStartScript(sourceDir)) {
       entryFile = detectEntryFile(sourceDir) || undefined;
       if (entryFile) {
         onLog?.(`Detected entry file: ${entryFile}`);

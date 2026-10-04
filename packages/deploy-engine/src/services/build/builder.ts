@@ -4,6 +4,7 @@ import { rm } from 'fs/promises';
 import { join } from 'path';
 import { AppType, isBackendFramework } from '../../config/framework-config';
 import { getBuildExtractDir } from '../../config/paths';
+import { isWorkspaceRoot } from '../../utils/workspace';
 import { GitService } from './git-service';
 import { WorkerGitHubService } from './github-service';
 import { LogStreamer } from './log-streamer';
@@ -109,12 +110,23 @@ export const Builder = {
       );
       const projectDir = isMonorepo ? join(buildDir, job.root_directory) : buildDir;
 
-      // 3. Monorepos: install workspace dependencies at the repository root first
-      if (isMonorepo && existsSync(join(buildDir, 'package.json'))) {
+      if (isMonorepo) {
         await LogStreamer.stream(
           job.build_id,
           job.project_id,
-          `Monorepo detected: Installing workspace dependencies at root (${buildDir})...\n`,
+          `Resolved app directory: ${projectDir} (root_directory="${job.root_directory}")\n`,
+          'info',
+        );
+      }
+
+      // 3. Monorepos: only install at the repository root when it actually declares
+      //    a workspace (root `workspaces` field or pnpm/turbo/nx/lerna manifest).
+      //    This installs hoisted dependencies that workspace members rely on.
+      if (isMonorepo && existsSync(join(buildDir, 'package.json')) && isWorkspaceRoot(buildDir)) {
+        await LogStreamer.stream(
+          job.build_id,
+          job.project_id,
+          `Workspace root detected (${buildDir}) - installing workspace dependencies...\n`,
           'info',
         );
         await this.runCommand(
@@ -126,8 +138,12 @@ export const Builder = {
         );
       }
 
+      // 3b. Go: compile the binary in the app directory. No dependency install step.
+      if (job.app_type === 'go') {
+        await this.buildGo(job, projectDir);
+      }
       // 4. Install dependencies once, then build when the app needs compilation
-      if (isBackendFramework(job.app_type)) {
+      else if (isBackendFramework(job.app_type)) {
         const buildCommand = job.build_command.toLowerCase().trim();
         const needsBuild = this.needsCompilationStep(buildCommand);
         const hasBuildScript = await this.hasScript(projectDir, 'build');
@@ -242,6 +258,44 @@ export const Builder = {
       );
       throw error;
     }
+  },
+
+  /**
+   * Builds a Go application into a runnable binary inside the app directory.
+   * The deploy engine starts the resulting binary with pm0 at activation time.
+   */
+  async buildGo(job: BuildJob, projectDir: string) {
+    await LogStreamer.stream(
+      job.build_id,
+      job.project_id,
+      'Go project detected - compiling binary...\n',
+      'info',
+    );
+
+    // Preflight: the Go toolchain must exist on the build host.
+    const goCheck = Bun.spawnSync(['go', 'version']);
+    if (goCheck.exitCode !== 0) {
+      const msg =
+        'Go toolchain not found on the build host. Install Go (https://go.dev/dl/) and ensure `go` is on PATH.\n';
+      await LogStreamer.stream(job.build_id, job.project_id, msg, 'error');
+      throw new Error('Go toolchain not found (go version failed)');
+    }
+    await LogStreamer.stream(
+      job.build_id,
+      job.project_id,
+      `${goCheck.stdout.toString().trim()}\n`,
+      'info',
+    );
+
+    const buildCommand = job.build_command?.trim() || 'go build -o app .';
+    await LogStreamer.stream(job.build_id, job.project_id, 'Building project...\n', 'info');
+    await this.runCommand(buildCommand, projectDir, job.build_id, job.project_id, job.env_vars);
+    await LogStreamer.stream(
+      job.build_id,
+      job.project_id,
+      'Build completed successfully!\n',
+      'success',
+    );
   },
 
   async runCommand(
@@ -372,6 +426,7 @@ export const Builder = {
       'tsup', // tsup bundler
       'unbuild', // unbuild
       'ncc', // ncc compiler
+      'go build', // Go compiler
     ];
 
     // Check if build command contains any compilation pattern

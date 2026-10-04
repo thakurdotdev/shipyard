@@ -26,6 +26,9 @@ module.exports = {
         PORT: 4012,
         CONTROL_API_URL: 'http://localhost:4010',
         REDIS_URL: 'redis://localhost:6379/0',
+        // Keep deployed apps OUTSIDE the platform repo so framework workspace-root
+        // detection doesn't pick up this repo's own package.json/lockfile.
+        BASE_DIR: '/var/lib/shipyard/apps',
       },
     },
     {

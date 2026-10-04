@@ -89,6 +89,30 @@ export const buildsRoutes = new Elysia()
         }
         await LogService.clearLogs(id);
         return { success: true, message: 'Logs cleared' };
+      })
+      .delete('/:id', async ({ params: { id }, request, set }) => {
+        // Ownership is verified by project; the service itself blocks the
+        // currently-active build and anything queued/in progress.
+        const build = await BuildService.getById(id);
+        if (!build || !(await ProjectAccessService.getOwnedProject(request, build.project_id))) {
+          set.status = 404;
+          return { error: 'Build not found' };
+        }
+        try {
+          const deleted = await BuildService.delete(id);
+          if (!deleted) {
+            set.status = 404;
+            return { error: 'Build not found' };
+          }
+          WebSocketService.broadcastBuildUpdate(deleted.project_id, {
+            id,
+            deleted: true,
+          });
+          return { success: true, id: deleted.id, project_id: deleted.project_id };
+        } catch (e: any) {
+          set.status = 400;
+          return { error: e.message };
+        }
       }),
   );
 

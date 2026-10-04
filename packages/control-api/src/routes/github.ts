@@ -299,8 +299,13 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
           hasPackageJson: boolean;
         }> = [];
 
+        // A folder is deployable when it contains a supported manifest:
+        // Node (package.json) or Go (go.mod).
+        const deployableManifest = (names: string[]) =>
+          names.includes('package.json') || names.includes('go.mod');
+
         // Check root for package.json
-        const rootHasPackageJson = rootContents.some((f) => f.name === 'package.json');
+        const rootHasPackageJson = deployableManifest(rootContents.map((f) => f.name));
 
         if (rootHasPackageJson) {
           const pkgRes = await fetch(
@@ -352,7 +357,7 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
             name: string;
             type: string;
           }>;
-          const hasPackageJson = dirContents.some((f) => f.name === 'package.json');
+          const hasPackageJson = deployableManifest(dirContents.map((f) => f.name));
 
           if (hasPackageJson) {
             const pkgRes = await fetch(
@@ -396,7 +401,7 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
               const subDirContents = (await subDirRes.json()) as Array<{
                 name: string;
               }>;
-              const subHasPackageJson = subDirContents.some((f) => f.name === 'package.json');
+              const subHasPackageJson = deployableManifest(subDirContents.map((f) => f.name));
 
               if (subHasPackageJson) {
                 const pkgRes = await fetch(

@@ -196,6 +196,28 @@ export function FolderIcon({ size = 20, ...props }: IconProps) {
   );
 }
 
+// Go Icon (gopher-inspired)
+export function GoIcon({ size = 20, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} {...props}>
+      <circle cx="9" cy="8" r="4" fill="#00ADD8" />
+      <circle cx="23" cy="8" r="4" fill="#00ADD8" />
+      <circle cx="16" cy="18" r="11" fill="#00ADD8" />
+      <circle cx="12" cy="16" r="3" fill="#fff" />
+      <circle cx="20" cy="16" r="3" fill="#fff" />
+      <circle cx="12" cy="16" r="1.2" fill="#111" />
+      <circle cx="20" cy="16" r="1.2" fill="#111" />
+      <path
+        d="M13 24c1.8 1.6 4.2 1.6 6 0"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 // Map icon name to component
 export function FrameworkIcon({
   icon,
@@ -212,6 +234,7 @@ export function FrameworkIcon({
     express: ExpressIcon,
     hono: HonoIcon,
     elysia: ElysiaIcon,
+    go: GoIcon,
     folder: FolderIcon,
   };
 

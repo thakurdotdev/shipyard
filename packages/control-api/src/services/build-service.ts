@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { builds, deployments } from '../db/schema';
+import { builds, buildLogs, deployments } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { DeploymentService } from './deployment-service';
 import { AppType } from '../config/framework-config';
@@ -129,6 +129,54 @@ export const BuildService = {
   async getById(id: string) {
     const result = await db.select().from(builds).where(eq(builds.id, id));
     return result[0] || null;
+  },
+
+  /**
+   * Deletes one build (a single row in the deployment-history list) and frees
+   * the disk it consumed: build output dir, artifact tarball, logs, deployment
+   * rows. The build currently serving traffic cannot be deleted — roll back or
+   * promote another build first.
+   */
+  async delete(id: string) {
+    const build = await this.getById(id);
+    if (!build) return null;
+
+    if (build.status === 'pending' || build.status === 'building') {
+      throw new Error('Cannot delete a build that is queued or in progress');
+    }
+
+    const [activeDeployment] = await db
+      .select()
+      .from(deployments)
+      .where(eq(deployments.project_id, build.project_id))
+      .orderBy(desc(deployments.activated_at))
+      .limit(1);
+
+    if (activeDeployment?.build_id === id && activeDeployment.status === 'active') {
+      throw new Error(
+        'Cannot delete the currently active build. Activate another build first, then delete this one.',
+      );
+    }
+
+    // Tell the deploy engine to remove the build output dir + artifact tarball
+    // before dropping the DB rows. Best-effort: DB deletion proceeds regardless.
+    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
+    try {
+      const res = await fetch(`${deployEngineUrl}/projects/${build.project_id}/builds/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        console.error(`[BuildService] Deploy Engine build cleanup failed: ${res.status}`);
+      }
+    } catch (e) {
+      console.error('[BuildService] Failed to cleanup build on Deploy Engine', e);
+    }
+
+    await db.delete(deployments).where(eq(deployments.build_id, id));
+    await db.delete(buildLogs).where(eq(buildLogs.build_id, id));
+    await db.delete(builds).where(eq(builds.id, id));
+
+    return { id, project_id: build.project_id };
   },
 
   async updateStatus(

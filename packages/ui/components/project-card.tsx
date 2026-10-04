@@ -41,6 +41,18 @@ const FrameworkIcon = ({ type, className }: { type: string; className?: string }
           <circle cx="128" cy="114" r="23" fill="#FFF" />
         </svg>
       );
+    case 'go':
+      return (
+        <svg viewBox="0 0 32 32" className={className} xmlns="http://www.w3.org/2000/svg">
+          <circle cx="9" cy="8" r="4" fill="#00ADD8" />
+          <circle cx="23" cy="8" r="4" fill="#00ADD8" />
+          <circle cx="16" cy="18" r="11" fill="#00ADD8" />
+          <circle cx="12" cy="16" r="3" fill="#fff" />
+          <circle cx="20" cy="16" r="3" fill="#fff" />
+          <circle cx="12" cy="16" r="1.2" fill="#111" />
+          <circle cx="20" cy="16" r="1.2" fill="#111" />
+        </svg>
+      );
     default:
       // Default generic code/globe icon
       return (

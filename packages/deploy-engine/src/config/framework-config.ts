@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 /**
  * Supported application framework types.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
 
 export interface FrameworkConfig {
   id: AppType;
@@ -77,6 +77,16 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
     requiresInstall: true,
     isStaticBuild: false,
     startCommand: () => ['bun', 'run', '--bun', 'start'],
+  },
+
+  go: {
+    id: 'go',
+    displayName: 'Go',
+    category: 'backend',
+    requiresInstall: false,
+    isStaticBuild: false,
+    // Go apps are compiled to a native binary that pm0 runs directly.
+    startCommand: (_port, cwd) => getGoStartCommand(cwd),
   },
 };
 
@@ -200,10 +210,40 @@ export function detectEntryFile(cwd: string): string | null {
   return null;
 }
 
+/** Candidate binary names for compiled Go apps, checked in priority order. */
+const GO_BINARY_CANDIDATES = ['app', 'server', 'main'];
+
+/**
+ * Resolves the start command for a compiled Go binary.
+ *
+ * The default build command is `go build -o app .`, so `app` is checked first.
+ * Falls back to a binary named after the app directory, then to `go run .`.
+ */
+export function getGoStartCommand(cwd: string): string[] {
+  const candidates = [...GO_BINARY_CANDIDATES, 'bin/app', basename(cwd)];
+
+  for (const name of candidates) {
+    const binaryPath = join(cwd, name);
+    if (existsSync(binaryPath)) {
+      console.log(`[getGoStartCommand] Found Go binary: ${binaryPath}`);
+      return [binaryPath];
+    }
+  }
+
+  // No compiled binary found - fall back to running the source directly.
+  console.log(`[getGoStartCommand] No compiled binary found in ${cwd}, falling back to "go run ."`);
+  return ['go', 'run', '.'];
+}
+
 /**
  * Gets the start command for a backend app, preferring direct entry file execution.
+ * Go apps resolve to their compiled binary; everything else uses the bun runtime.
  */
-export function getBackendStartCommand(cwd: string): string[] {
+export function getBackendStartCommand(cwd: string, appType?: AppType): string[] {
+  if (appType === 'go') {
+    return getGoStartCommand(cwd);
+  }
+
   const entryFile = detectEntryFile(cwd);
 
   if (entryFile) {
