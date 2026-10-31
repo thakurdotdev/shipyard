@@ -2,9 +2,7 @@
 
 import { useState } from 'react';
 import { PM0Process, pm0Api } from '@/lib/pm0-api';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,50 +69,35 @@ function formatExecMode(mode: string): string {
 
 type StatusKey = 'online' | 'stopped' | 'errored' | 'launching' | 'stopping' | 'waiting restart';
 
-const statusConfig: Record<
-  StatusKey,
-  { color: string; bg: string; dot: string; rail: string; label: string }
-> = {
+const statusConfig: Record<StatusKey, { dot: string; text: string; label: string }> = {
   online: {
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/10 border-emerald-500/20',
-    dot: 'bg-emerald-400',
-    rail: 'bg-emerald-400/70',
+    dot: 'bg-emerald-500',
+    text: 'text-emerald-600 dark:text-emerald-400',
     label: 'Online',
   },
   stopped: {
-    color: 'text-zinc-400',
-    bg: 'bg-zinc-500/10 border-zinc-500/20',
     dot: 'bg-zinc-400',
-    rail: 'bg-zinc-500/50',
+    text: 'text-muted-foreground',
     label: 'Stopped',
   },
   errored: {
-    color: 'text-red-400',
-    bg: 'bg-red-500/10 border-red-500/20',
-    dot: 'bg-red-400',
-    rail: 'bg-red-400/80',
+    dot: 'bg-red-500',
+    text: 'text-red-600 dark:text-red-400',
     label: 'Errored',
   },
   launching: {
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10 border-amber-500/20',
-    dot: 'bg-amber-400',
-    rail: 'bg-amber-400/80',
-    label: 'Launching',
+    dot: 'bg-amber-500',
+    text: 'text-amber-600 dark:text-amber-400',
+    label: 'Starting',
   },
   stopping: {
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/10 border-orange-500/20',
-    dot: 'bg-orange-400',
-    rail: 'bg-orange-400/80',
+    dot: 'bg-orange-500',
+    text: 'text-orange-600 dark:text-orange-400',
     label: 'Stopping',
   },
   'waiting restart': {
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10 border-amber-500/20',
-    dot: 'bg-amber-400 animate-pulse',
-    rail: 'bg-amber-400/80',
+    dot: 'bg-amber-500',
+    text: 'text-amber-600 dark:text-amber-400',
     label: 'Restarting',
   },
 };
@@ -122,40 +105,24 @@ const statusConfig: Record<
 function getStatusConfig(status: string) {
   return (
     statusConfig[status as StatusKey] ?? {
-      color: 'text-zinc-400',
-      bg: 'bg-zinc-500/10 border-zinc-500/20',
       dot: 'bg-zinc-400',
-      rail: 'bg-zinc-500/50',
+      text: 'text-muted-foreground',
       label: status,
     }
   );
 }
 
-interface MetricItem {
-  icon: typeof Cpu;
-  label: string;
-  value: string;
-  muted?: boolean;
-  danger?: boolean;
-}
-
-function MetricCell({ icon: Icon, label, value, muted, danger }: MetricItem) {
+function RowMetric({ value, muted, danger }: { value: string; muted?: boolean; danger?: boolean }) {
   return (
-    <div className="flex flex-col gap-1 bg-surface-muted/30 px-3 py-2.5">
-      <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-        <Icon className="size-3" />
-        {label}
-      </span>
-      <span
-        className={cn(
-          'font-mono text-sm font-medium tabular-nums',
-          muted ? 'text-muted-foreground' : 'text-foreground',
-          danger && 'text-red-400',
-        )}
-      >
-        {value}
-      </span>
-    </div>
+    <span
+      className={cn(
+        'truncate font-mono text-xs tabular-nums',
+        muted ? 'text-muted-foreground/60' : 'text-foreground',
+        danger && 'text-red-600 dark:text-red-400',
+      )}
+    >
+      {value}
+    </span>
   );
 }
 
@@ -216,11 +183,11 @@ export function ProcessTable({
 
   if (processes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-muted/20 px-6 py-16 text-center sm:py-20">
-        <div className="mb-4 grid size-14 place-items-center rounded-full border border-border bg-surface-muted">
-          <Terminal className="size-6 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
+        <div className="mb-4 grid size-11 place-items-center rounded-lg border border-border bg-surface-muted">
+          <Terminal className="size-5 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold tracking-tight">No processes to show</h3>
+        <h3 className="text-base font-semibold tracking-tight">No processes to show</h3>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           Nothing matched your filters, or the PM0 daemon has no supervised processes. Start one
           with{' '}
@@ -234,326 +201,281 @@ export function ProcessTable({
 
   return (
     <>
-      <div className="space-y-2">
-        {processes.map((proc) => {
-          const sc = getStatusConfig(proc.status);
-          const isOnline = proc.status === 'online';
-          const isLoading = (a: string) => actionLoading === `${a}-${proc.pm_id}`;
-          const logsOpen = expandedLogs === String(proc.pm_id);
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        {/* Column header */}
+        <div className="hidden items-center gap-4 border-b border-border bg-surface-muted/40 px-4 py-2 lg:flex">
+          <div className="flex flex-1 items-center pl-[46px] text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Process
+          </div>
+          <div className="grid w-[340px] shrink-0 grid-cols-4 gap-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span>CPU</span>
+            <span>Memory</span>
+            <span>Uptime</span>
+            <span>Restarts</span>
+          </div>
+          <span className="w-[132px] shrink-0 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Actions
+          </span>
+        </div>
 
-          const scriptName = proc.script?.split('/').pop() || proc.script || '—';
-          const interpreter =
-            proc.interpreter && proc.interpreter !== 'none' ? `${proc.interpreter} ` : '';
-          const args = proc.args?.length ? ` ${proc.args.join(' ')}` : '';
-          const command = `${interpreter}${scriptName}${args}`;
-          const commandTitle = `${proc.interpreter} ${proc.script}${args}`.trim();
+        <div className="divide-y divide-border">
+          {processes.map((proc) => {
+            const sc = getStatusConfig(proc.status);
+            const isOnline = proc.status === 'online';
+            const isLoading = (a: string) => actionLoading === `${a}-${proc.pm_id}`;
+            const logsOpen = expandedLogs === String(proc.pm_id);
 
-          const restartDanger = proc.max_restarts > 0 && proc.restart_time >= proc.max_restarts;
-          const restartValue =
-            proc.max_restarts > 0
-              ? `${proc.restart_time}/${proc.max_restarts}`
-              : String(proc.restart_time);
+            const scriptName = proc.script?.split('/').pop() || proc.script || '—';
+            const interpreter =
+              proc.interpreter && proc.interpreter !== 'none' ? `${proc.interpreter} ` : '';
+            const args = proc.args?.length ? ` ${proc.args.join(' ')}` : '';
+            const command = `${interpreter}${scriptName}${args}`;
+            const commandTitle = `${proc.interpreter} ${proc.script}${args}`.trim();
 
-          const metrics: MetricItem[] = [
-            {
-              icon: Cpu,
-              label: 'CPU',
-              value: isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—',
-              muted: !isOnline,
-            },
-            {
-              icon: MemoryStick,
-              label: 'Memory',
-              value: isOnline ? formatBytes(proc.monit.memory) : '—',
-              muted: !isOnline,
-            },
-            {
-              icon: Clock,
-              label: 'Uptime',
-              value: isOnline ? formatUptime(proc.pm_uptime) : '—',
-              muted: !isOnline,
-            },
-            {
-              icon: RotateCw,
-              label: 'Restarts',
-              value: restartValue,
-              muted: proc.restart_time === 0,
-              danger: restartDanger,
-            },
-          ];
+            const restartDanger = proc.max_restarts > 0 && proc.restart_time >= proc.max_restarts;
+            const restartValue =
+              proc.max_restarts > 0
+                ? `${proc.restart_time}/${proc.max_restarts}`
+                : String(proc.restart_time);
 
-          const selectBox = onToggleSelect ? (
-            <input
-              type="checkbox"
-              checked={selectedIds?.has(proc.pm_id) ?? false}
-              onChange={() => onToggleSelect(proc.pm_id)}
-              aria-label={`Select ${proc.name}`}
-              className="size-3.5 shrink-0 cursor-pointer rounded border-border bg-surface-muted accent-brand-500"
-            />
-          ) : null;
+            const selectBox = onToggleSelect ? (
+              <input
+                type="checkbox"
+                checked={selectedIds?.has(proc.pm_id) ?? false}
+                onChange={() => onToggleSelect(proc.pm_id)}
+                aria-label={`Select ${proc.name}`}
+                className="mt-0.5 size-3.5 shrink-0 cursor-pointer rounded border-border bg-surface-muted accent-brand-500 lg:mt-0"
+              />
+            ) : null;
 
-          const actions = (
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  'h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground',
-                  !compact && 'sm:px-2.5',
-                  logsOpen && 'bg-accent text-foreground',
-                )}
-                onClick={() => setExpandedLogs(logsOpen ? null : String(proc.pm_id))}
-                title={logsOpen ? 'Hide logs' : 'View logs'}
-              >
-                <ScrollText className="size-3.5" />
-                <span className={cn(compact ? 'hidden' : 'hidden sm:inline')}>
-                  {logsOpen ? 'Hide logs' : 'Logs'}
-                </span>
-              </Button>
-
-              {isOnline ? (
+            const actions = (
+              <div className="flex shrink-0 items-center gap-0.5">
                 <Button
                   variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => runAction('stop', proc)}
-                  disabled={!!isLoading('stop')}
-                  title="Stop"
+                  size="sm"
+                  className={cn(
+                    'h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground',
+                    logsOpen && 'bg-accent text-foreground',
+                  )}
+                  onClick={() => setExpandedLogs(logsOpen ? null : String(proc.pm_id))}
+                  title={logsOpen ? 'Hide logs' : 'View logs'}
                 >
-                  <Square className="size-3.5" />
+                  <ScrollText className="size-3.5" />
+                  <span className={cn(compact ? 'hidden' : 'hidden md:inline')}>
+                    {logsOpen ? 'Hide' : 'Logs'}
+                  </span>
                 </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground hover:text-emerald-400"
-                  onClick={() => runAction('restart', proc)}
-                  disabled={!!isLoading('restart')}
-                  title="Start"
-                >
-                  <Play className="size-3.5" />
-                </Button>
-              )}
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                {isOnline ? (
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     className="text-muted-foreground hover:text-foreground"
+                    onClick={() => runAction('stop', proc)}
+                    disabled={!!isLoading('stop')}
+                    title="Stop"
                   >
-                    <MoreVertical className="size-4" />
+                    {isLoading('stop') ? (
+                      <RotateCw className="size-3.5 animate-spin" />
+                    ) : (
+                      <Square className="size-3.5" />
+                    )}
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
                     onClick={() => runAction('restart', proc)}
                     disabled={!!isLoading('restart')}
+                    title="Start"
                   >
-                    <RotateCw className="mr-2 size-4" />
-                    Restart
-                  </DropdownMenuItem>
-                  {isOnline && (
-                    <DropdownMenuItem
-                      onClick={() => runAction('reload', proc)}
-                      disabled={!!isLoading('reload')}
+                    {isLoading('restart') ? (
+                      <RotateCw className="size-3.5 animate-spin" />
+                    ) : (
+                      <Play className="size-3.5" />
+                    )}
+                  </Button>
+                )}
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={`More actions for ${proc.name}`}
                     >
-                      <RefreshCcw className="mr-2 size-4" />
-                      Reload (graceful)
-                    </DropdownMenuItem>
-                  )}
-                  {isOnline && (
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem
-                      onClick={() => runAction('stop', proc)}
-                      disabled={!!isLoading('stop')}
+                      onClick={() => runAction('restart', proc)}
+                      disabled={!!isLoading('restart')}
                     >
-                      <Square className="mr-2 size-4" />
-                      Stop
+                      <RotateCw className="mr-2 size-4" />
+                      Restart
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => setDeleteTarget(proc)}
-                  >
-                    <Trash2 className="mr-2 size-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          );
-
-          const logPanel = logsOpen ? (
-            <div
-              className={cn(
-                'overflow-hidden border border-border',
-                compact ? 'rounded-b-xl' : 'rounded-b-2xl',
-              )}
-            >
-              <ProcessLogViewer
-                target={String(proc.pm_id)}
-                processName={proc.name}
-                onClose={() => setExpandedLogs(null)}
-              />
-            </div>
-          ) : null;
-
-          const cardClassName = cn(
-            'relative gap-0 overflow-hidden border border-border bg-card p-0 shadow-sm transition-colors',
-            compact ? 'rounded-xl' : 'rounded-2xl',
-            logsOpen ? 'rounded-b-none border-b-transparent' : 'hover:border-border-strong',
-          );
-
-          if (compact) {
-            return (
-              <div key={proc.pm_id}>
-                <Card className={cardClassName}>
-                  <span className={cn('absolute inset-y-0 left-0 w-0.5', sc.rail)} aria-hidden />
-                  <div className="flex items-center gap-2.5 px-3 py-2">
-                    {selectBox}
-                    <span className={cn('size-2 shrink-0 rounded-full', sc.dot)} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">
-                          {proc.name}
-                        </span>
-                        <span
-                          className={cn(
-                            'shrink-0 text-[10px] font-semibold uppercase tracking-wider',
-                            sc.color,
-                          )}
-                        >
-                          {sc.label}
-                        </span>
-                        <span className="hidden font-mono text-[10px] text-muted-foreground sm:inline">
-                          #{proc.pm_id}
-                        </span>
-                      </div>
-                      <p
-                        className="truncate font-mono text-[11px] text-muted-foreground"
-                        title={commandTitle}
+                    {isOnline && (
+                      <DropdownMenuItem
+                        onClick={() => runAction('reload', proc)}
+                        disabled={!!isLoading('reload')}
                       >
-                        {command}
-                      </p>
+                        <RefreshCcw className="mr-2 size-4" />
+                        Reload (graceful)
+                      </DropdownMenuItem>
+                    )}
+                    {isOnline && (
+                      <DropdownMenuItem
+                        onClick={() => runAction('stop', proc)}
+                        disabled={!!isLoading('stop')}
+                      >
+                        <Square className="mr-2 size-4" />
+                        Stop
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setDeleteTarget(proc)}
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            );
+
+            const logPanel = logsOpen ? (
+              <div className="border-t border-border">
+                <ProcessLogViewer
+                  target={String(proc.pm_id)}
+                  processName={proc.name}
+                  onClose={() => setExpandedLogs(null)}
+                />
+              </div>
+            ) : null;
+
+            return (
+              <div
+                key={proc.pm_id}
+                className={cn(selectedIds?.has(proc.pm_id) && 'bg-surface-muted/50')}
+              >
+                <div
+                  className={cn(
+                    'flex items-start gap-3 px-4 transition-colors hover:bg-surface-muted/40 lg:items-center lg:gap-4',
+                    compact ? 'py-2' : 'py-3',
+                  )}
+                >
+                  {selectBox}
+                  <span
+                    className={cn('mt-1.5 size-2 shrink-0 rounded-full lg:mt-0', sc.dot)}
+                    aria-hidden
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {proc.name}
+                      </span>
+                      <span className={cn('text-[11px] font-medium', sc.text)}>{sc.label}</span>
+                      <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
+                        #{proc.pm_id}
+                      </span>
                     </div>
 
-                    {isOnline && (
-                      <div className="hidden shrink-0 items-center gap-3 text-[11px] text-muted-foreground lg:flex">
-                        <span className="flex items-center gap-1 tabular-nums" title="CPU">
-                          <Cpu className="size-3" />
-                          <span className="font-mono text-foreground">
-                            {proc.monit.cpu.toFixed(1)}%
-                          </span>
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                      <span
+                        className="inline-flex min-w-0 max-w-[260px] items-center gap-1 font-mono"
+                        title={commandTitle}
+                      >
+                        <Terminal className="size-3 shrink-0 opacity-60" />
+                        <span className="truncate">{command}</span>
+                      </span>
+                      {isOnline && proc.pid > 0 && (
+                        <span className="tabular-nums">PID {proc.pid}</span>
+                      )}
+                      <span>{formatExecMode(proc.exec_mode)}</span>
+                      {proc.instances > 1 && <span>{proc.instances} instances</span>}
+                      {proc.status === 'errored' && proc.exit_code != null && (
+                        <span className="text-red-600 dark:text-red-400">
+                          exit {proc.exit_code}
                         </span>
-                        <span className="flex items-center gap-1 tabular-nums" title="Memory">
-                          <MemoryStick className="size-3" />
-                          <span className="font-mono text-foreground">
-                            {formatBytes(proc.monit.memory)}
-                          </span>
+                      )}
+                      {proc.unstable_restarts > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          {proc.unstable_restarts} unstable restart
+                          {proc.unstable_restarts === 1 ? '' : 's'}
                         </span>
-                        <span className="flex items-center gap-1 tabular-nums" title="Uptime">
-                          <Clock className="size-3" />
-                          <span className="font-mono text-foreground">
-                            {formatUptime(proc.pm_uptime)}
-                          </span>
-                        </span>
-                        {proc.restart_time > 0 && (
-                          <span className="flex items-center gap-1 tabular-nums" title="Restarts">
-                            <RotateCw className="size-3" />
-                            <span
-                              className={cn(
-                                'font-mono',
-                                restartDanger ? 'text-red-400' : 'text-foreground',
-                              )}
-                            >
-                              {restartValue}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
 
+                    {/* Inline metrics for narrow screens */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground lg:hidden">
+                      <span className="flex items-center gap-1" title="CPU">
+                        <Cpu className="size-3" />
+                        <span className="font-mono text-foreground tabular-nums">
+                          {isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—'}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1" title="Memory">
+                        <MemoryStick className="size-3" />
+                        <span className="font-mono text-foreground tabular-nums">
+                          {isOnline ? formatBytes(proc.monit.memory) : '—'}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1" title="Uptime">
+                        <Clock className="size-3" />
+                        <span className="font-mono text-foreground tabular-nums">
+                          {isOnline ? formatUptime(proc.pm_uptime) : '—'}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1" title="Restarts">
+                        <RotateCw className="size-3" />
+                        <span
+                          className={cn(
+                            'font-mono tabular-nums',
+                            restartDanger ? 'text-red-600 dark:text-red-400' : 'text-foreground',
+                          )}
+                        >
+                          {restartValue}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Desktop metrics */}
+                  <div className="hidden w-[340px] shrink-0 grid-cols-4 items-center gap-4 lg:grid">
+                    <RowMetric
+                      value={isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—'}
+                      muted={!isOnline}
+                    />
+                    <RowMetric
+                      value={isOnline ? formatBytes(proc.monit.memory) : '—'}
+                      muted={!isOnline}
+                    />
+                    <RowMetric
+                      value={isOnline ? formatUptime(proc.pm_uptime) : '—'}
+                      muted={!isOnline}
+                    />
+                    <RowMetric
+                      value={restartValue}
+                      muted={proc.restart_time === 0}
+                      danger={restartDanger}
+                    />
+                  </div>
+
+                  <div className="flex w-auto shrink-0 items-center justify-end lg:w-[132px]">
                     {actions}
                   </div>
-                </Card>
+                </div>
                 {logPanel}
               </div>
             );
-          }
-
-          return (
-            <div key={proc.pm_id}>
-              <Card className={cardClassName}>
-                <span className={cn('absolute inset-y-0 left-0 w-0.5', sc.rail)} aria-hidden />
-                <div className="p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      {selectBox && <div className="pt-0.5">{selectBox}</div>}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
-                            {proc.name}
-                          </h3>
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              'gap-1.5 border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider',
-                              sc.bg,
-                              sc.color,
-                            )}
-                          >
-                            <span className={cn('size-1.5 rounded-full', sc.dot)} />
-                            {sc.label}
-                          </Badge>
-                          <span className="hidden font-mono text-[11px] text-muted-foreground tabular-nums sm:inline">
-                            #{proc.pm_id}
-                          </span>
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span
-                            className="inline-flex min-w-0 max-w-[280px] items-center gap-1.5 font-mono"
-                            title={commandTitle}
-                          >
-                            <Terminal className="size-3.5 shrink-0 opacity-60" />
-                            <span className="truncate">{command}</span>
-                          </span>
-                          {isOnline && proc.pid > 0 && (
-                            <span className="tabular-nums">PID {proc.pid}</span>
-                          )}
-                          <span>{formatExecMode(proc.exec_mode)}</span>
-                          {proc.instances > 1 && (
-                            <span>
-                              {proc.instances} instance{proc.instances === 1 ? '' : 's'}
-                            </span>
-                          )}
-                          {proc.status === 'errored' && proc.exit_code != null && (
-                            <span className="text-red-400">exit {proc.exit_code}</span>
-                          )}
-                          {proc.unstable_restarts > 0 && (
-                            <span className="text-amber-400">
-                              {proc.unstable_restarts} unstable restart
-                              {proc.unstable_restarts === 1 ? '' : 's'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {actions}
-                  </div>
-
-                  {/* Metrics strip */}
-                  <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
-                    {metrics.map((metric) => (
-                      <MetricCell key={metric.label} {...metric} />
-                    ))}
-                  </div>
-                </div>
-              </Card>
-              {logPanel}
-            </div>
-          );
-        })}
+          })}
+        </div>
       </div>
 
       {/* Delete confirmation dialog */}
