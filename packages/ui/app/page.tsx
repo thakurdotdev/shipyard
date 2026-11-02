@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Plus, Search, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { Project } from '@/lib/types';
+import { getProjectStatus } from '@/lib/project-status';
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -45,8 +46,21 @@ export default function Home() {
     };
   }, []);
 
-  const filteredProjects = projects.filter((project) =>
-    project.name.toLowerCase().includes(search.toLowerCase()),
+  const filteredProjects = projects
+    .filter((project) => project.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const aRunning = getProjectStatus(a).tone === 'progress';
+      const bRunning = getProjectStatus(b).tone === 'progress';
+      if (aRunning !== bRunning) return aRunning ? -1 : 1;
+
+      const aLatest =
+        a.latest_build?.created_at ?? a.latest_deployment?.activated_at ?? a.created_at;
+      const bLatest =
+        b.latest_build?.created_at ?? b.latest_deployment?.activated_at ?? b.created_at;
+      return Date.parse(bLatest) - Date.parse(aLatest);
+    });
+  const runningProjects = filteredProjects.filter(
+    (project) => getProjectStatus(project).tone === 'progress',
   );
 
   return (
@@ -105,11 +119,29 @@ export default function Home() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
+          <>
+            {runningProjects.length > 0 && (
+              <div
+                role="status"
+                className="flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3"
+              >
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                </span>
+                <span className="text-sm font-medium text-foreground">
+                  {runningProjects.length === 1
+                    ? 'A build or deployment is currently running'
+                    : `${runningProjects.length} builds or deployments are currently running`}
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredProjects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
