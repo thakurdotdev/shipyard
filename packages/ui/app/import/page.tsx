@@ -8,7 +8,7 @@ import { InstallationSelector, GitInstallation } from '@/components/github/insta
 import { RepositoryList, GitRepository } from '@/components/github/repository-list';
 import { ProjectConfigForm, ProjectConfig } from '@/components/github/project-config-form';
 import { FolderPicker } from '@/components/github/folder-picker';
-import { GitBranch, User, Settings2, FolderOpen } from 'lucide-react';
+import { GitBranch, User, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SelectedFolder {
@@ -141,77 +141,72 @@ export default function ImportPage() {
   };
 
   return (
-    <div className="relative mx-auto max-w-4xl px-6 py-20 min-h-[calc(100vh-68px)]">
-      {/* Editorial backdrop: a faint grid that dissolves toward the edges. */}
-      <div
-        aria-hidden="true"
-        className="bg-grid pointer-events-none absolute inset-x-0 top-0 h-[420px]"
-      />
-      <div className="relative mb-10 text-center space-y-2">
-        <h1 className="text-foreground text-4xl font-extrabold tracking-[-0.035em] md:text-5xl">
-          Import Git Repository
-        </h1>
-        <p className="text-muted-foreground mx-auto max-w-lg">
-          Deploy your GitHub repositories instantly. Connect your account, select a project, and
-          we'll handle the rest.
+    <div className="page-width relative min-h-[calc(100svh-4rem)] max-w-5xl pb-16 pt-8 sm:pt-10">
+      <header className="mb-7 border-b border-border pb-6">
+        <p className="eyebrow mb-2">New project · GitHub</p>
+        <h1 className="page-heading">Import a repository</h1>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+          Choose an installation, select a repository, then review the deployment settings.
         </p>
-      </div>
+      </header>
 
-      {/* Progress Steps (Visual only) */}
-      <div className="relative mb-10 flex items-center justify-center gap-4 text-sm font-medium">
+      <div className="relative mb-7 flex items-center justify-between gap-1.5 text-xs font-medium sm:mb-8 sm:justify-start sm:gap-4 sm:text-sm">
         <div
+          aria-current={step === 'installations' ? 'step' : undefined}
           className={cn(
-            'flex items-center gap-2',
+            'flex items-center gap-1.5 sm:gap-2',
             step === 'installations' ? 'text-foreground' : 'text-muted-foreground',
           )}
         >
           <div
             className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center border',
+              'flex size-8 items-center justify-center rounded-full border',
               step === 'installations'
                 ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
                 : 'border-border bg-surface-muted',
             )}
           >
-            <User className="w-4 h-4" />
+            <User className="size-4" />
           </div>
           <span>Account</span>
         </div>
-        <div className="w-8 h-px bg-surface-muted" />
+        <div className="h-px min-w-3 flex-1 bg-border sm:max-w-14" />
         <div
+          aria-current={step === 'repos' ? 'step' : undefined}
           className={cn(
-            'flex items-center gap-2',
+            'flex items-center gap-1.5 sm:gap-2',
             step === 'repos' ? 'text-foreground' : 'text-muted-foreground',
           )}
         >
           <div
             className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center border',
+              'flex size-8 items-center justify-center rounded-full border',
               step === 'repos'
                 ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
                 : 'border-border bg-surface-muted',
             )}
           >
-            <GitBranch className="w-4 h-4" />
+            <GitBranch className="size-4" />
           </div>
           <span>Repository</span>
         </div>
-        <div className="w-8 h-px bg-surface-muted" />
+        <div className="h-px min-w-3 flex-1 bg-border sm:max-w-14" />
         <div
+          aria-current={step === 'config' ? 'step' : undefined}
           className={cn(
-            'flex items-center gap-2',
+            'flex items-center gap-1.5 sm:gap-2',
             step === 'config' ? 'text-foreground' : 'text-muted-foreground',
           )}
         >
           <div
             className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center border',
+              'flex size-8 items-center justify-center rounded-full border',
               step === 'config'
                 ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
                 : 'border-border bg-surface-muted',
             )}
           >
-            <Settings2 className="w-4 h-4" />
+            <Settings2 className="size-4" />
           </div>
           <span>Configure</span>
         </div>

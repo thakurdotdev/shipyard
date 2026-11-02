@@ -26,7 +26,7 @@ function ThemeOption({
   return (
     <button
       className={cn(
-        'relative flex size-8 cursor-pointer items-center justify-center rounded-lg transition-[color] duration-200 outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-4',
+        'relative flex size-7 cursor-pointer items-center justify-center rounded-md transition-colors duration-150 outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-3.5 sm:size-8 sm:rounded-lg sm:[&_svg]:size-4',
         isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
       )}
       role="radio"
@@ -40,7 +40,7 @@ function ThemeOption({
         <motion.div
           layoutId="theme-option"
           transition={reduceMotion ? { duration: 0 } : SPRING}
-          className="absolute inset-0 rounded-lg border border-border-strong bg-surface shadow-xs"
+          className="absolute inset-0 rounded-md border border-border-strong bg-surface sm:rounded-lg"
         />
       )}
     </button>
@@ -74,7 +74,7 @@ function ThemeSwitcher() {
 
   if (!isMounted) {
     // Reserve the same footprint the control will take, so the bar never jumps.
-    return <div className="h-[38px] w-[106px]" />;
+    return <div className="h-[30px] w-[82px] sm:h-[38px] sm:w-[106px]" />;
   }
 
   return (
@@ -83,7 +83,7 @@ function ThemeSwitcher() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: reduceMotion ? 0 : 0.3 }}
-      className="inline-flex items-center gap-0.5 overflow-hidden rounded-xl border border-border bg-surface-muted p-0.5"
+      className="inline-flex items-center gap-0 overflow-hidden rounded-lg border border-border bg-surface-muted p-0.5 sm:gap-0.5 sm:rounded-xl"
       role="radiogroup"
     >
       {THEME_OPTIONS.map((option) => (

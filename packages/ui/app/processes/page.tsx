@@ -302,72 +302,65 @@ export default function ProcessesPage() {
   ];
 
   return (
-    <div className="pb-24">
-      {/* Page header */}
-      <header className="sticky top-[68px] z-10 border-b border-border bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-foreground">Processes</h1>
-                {daemonDown && (
-                  <Badge
-                    variant="outline"
-                    className="gap-1.5 border-red-500/30 font-normal text-red-500 dark:text-red-400"
-                  >
-                    <AlertTriangle className="size-3" />
-                    Offline
-                  </Badge>
-                )}
-              </div>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Monitor and control services supervised by PM0.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-                <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search processes"
-                  className="h-8 pl-8 text-sm"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setSelectedIds(new Set());
-                  }}
-                />
-              </div>
-              <Button
+    <div className="page-width pb-16 pt-8 sm:pt-10">
+      <header className="flex flex-col justify-between gap-5 border-b border-border pb-6 sm:flex-row sm:items-end">
+        <div className="min-w-0">
+          <p className="eyebrow mb-2">Runtime</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="page-heading">Processes</h1>
+            {daemonDown && (
+              <Badge
                 variant="outline"
-                size="icon-sm"
-                className="shrink-0"
-                onClick={fetchData}
-                disabled={refreshing}
-                title="Refresh"
-                aria-label="Refresh"
+                className="gap-1.5 border-red-500/30 font-normal text-red-500 dark:text-red-400"
               >
-                <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5"
-                onClick={handleSave}
-                disabled={saving || processes.length === 0}
-              >
-                {saving ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Save className="size-3.5" />
-                )}
-                <span className="hidden sm:inline">Save</span>
-              </Button>
-            </div>
+                <AlertTriangle className="size-3" />
+                Offline
+              </Badge>
+            )}
           </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Monitor and control services supervised by PM0.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search processes"
+              aria-label="Search processes"
+              className="h-10 pl-8 text-sm"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelectedIds(new Set());
+              }}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-10 shrink-0"
+            onClick={fetchData}
+            disabled={refreshing}
+            title="Refresh"
+            aria-label="Refresh"
+          >
+            <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 shrink-0 gap-1.5"
+            onClick={handleSave}
+            disabled={saving || processes.length === 0}
+          >
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            <span className="hidden sm:inline">Save</span>
+          </Button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mt-7 space-y-6">
         {loading ? (
           <div className="space-y-4">
             <div className="h-36 animate-pulse rounded-xl border border-border bg-card" />
@@ -561,7 +554,7 @@ export default function ProcessesPage() {
               />
 
               {selectedIds.size > 0 && (
-                <div className="sticky bottom-4 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur">
+                <div className="sticky bottom-3 z-20 mx-auto flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-border bg-popover px-3 py-2 shadow-lg">
                   <span className="mr-auto text-xs font-medium text-foreground">
                     {selectedIds.size} selected
                   </span>

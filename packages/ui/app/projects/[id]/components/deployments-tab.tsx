@@ -137,6 +137,32 @@ export function DeploymentsTab({
     return labels[status] || status;
   };
 
+  const getBuildStatusClass = (status: string) =>
+    status === 'success'
+      ? 'text-emerald-800 bg-emerald-500/10 dark:text-emerald-300'
+      : status === 'failed'
+        ? 'text-red-800 bg-red-500/10 dark:text-red-300'
+        : 'text-brand-800 bg-brand-500/10 dark:text-brand-300';
+
+  const getDeploymentStatusClass = (status: string) =>
+    status === 'active'
+      ? 'text-emerald-800 bg-emerald-500/10 dark:text-emerald-300'
+      : status === 'failed'
+        ? 'text-red-800 bg-red-500/10 dark:text-red-300'
+        : status === 'inactive'
+          ? 'text-muted-foreground bg-surface-muted'
+          : status === 'activating'
+            ? 'text-amber-800 bg-amber-500/10 dark:text-amber-300'
+            : 'text-brand-800 bg-brand-500/10 dark:text-brand-300';
+
+  const getPromotionLabel = (build: any) => {
+    const currentDeploymentBuild = builds.find((item) => item.id === activeDeployment?.build_id);
+    const isNewerThanCurrent =
+      !currentDeploymentBuild ||
+      new Date(build.created_at) > new Date(currentDeploymentBuild.created_at);
+    return isNewerThanCurrent ? 'Deploy' : 'Rollback';
+  };
+
   if (!builds || builds.length === 0) {
     return (
       <Card className="flex min-h-72 flex-col items-center justify-center border-dashed bg-card px-6 py-12 text-center">
@@ -180,7 +206,127 @@ export function DeploymentsTab({
           </Card>
         )}
 
-      <Card className="gap-0 overflow-hidden border-border bg-card p-0 shadow-sm">
+      <div className="space-y-3 xl:hidden">
+        {builds.map((build) => {
+          const isActive = activeDeployment?.build_id === build.id;
+          const isDeploying = deployingBuildId === build.id;
+
+          return (
+            <Card key={build.id} className="gap-0 border-border bg-card p-4 shadow-none">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="font-medium">Build #{build.id.slice(0, 8)}</span>
+                  {isActive && (
+                    <Badge variant="default" className="h-5 text-[10px]">
+                      Current
+                    </Badge>
+                  )}
+                </div>
+                <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="size-3.5" />
+                  {new Date(build.created_at).toLocaleDateString()}
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className={`h-5 text-[10px] capitalize ${getBuildStatusClass(build.status)}`}
+                >
+                  {build.status}
+                </Badge>
+                {build.deployment_status && (
+                  <Badge
+                    variant="secondary"
+                    className={`h-5 gap-1 text-[10px] capitalize ${getDeploymentStatusClass(build.deployment_status)}`}
+                  >
+                    {(isPipelineStatus(build.deployment_status) ||
+                      build.deployment_status === 'activating') && (
+                      <Loader2 className="size-3 animate-spin" />
+                    )}
+                    {getDeployStatusLabel(build.deployment_status)}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="mt-3 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                <GitBranch className="size-3.5 shrink-0" />
+                <span>main</span>
+                {build.commit_sha ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="font-mono text-xs">{build.commit_sha.slice(0, 7)}</span>
+                    {build.commit_message && (
+                      <span className="truncate text-xs" title={build.commit_message}>
+                        {build.commit_message.split('\n')[0]}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="truncate text-xs italic">Manual deploy</span>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-3">
+                {!isActive && !isBuildBusy(build) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-red-500"
+                    aria-label={`Delete build ${build.id.slice(0, 8)}`}
+                    title="Delete build and free its disk space"
+                    disabled={deletingBuildId !== null || deployingBuildId !== null}
+                    onClick={() => setConfirmDeleteId(build.id)}
+                  >
+                    {deletingBuildId === build.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </Button>
+                )}
+                {build.status === 'success' && !isActive && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={deployingBuildId !== null}
+                    onClick={() => handleDeploy(build.id)}
+                  >
+                    {isDeploying && <Loader2 className="mr-1 size-3 animate-spin" />}
+                    {getPromotionLabel(build)}
+                  </Button>
+                )}
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      aria-label={`View logs for build ${build.id.slice(0, 8)}`}
+                    >
+                      <Terminal className="size-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent className="flex w-full flex-col gap-0 border-l p-0 sm:max-w-[800px]">
+                    <SheetHeader className="border-b bg-surface-muted/10 p-4">
+                      <SheetTitle className="font-mono text-base">
+                        Build #{build.id.slice(0, 8)}
+                      </SheetTitle>
+                      <SheetDescription>Logs for build execution</SheetDescription>
+                    </SheetHeader>
+                    <div className="flex-1 overflow-hidden bg-console font-mono text-xs text-console-foreground">
+                      <LogViewer buildId={build.id} />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card className="hidden gap-0 overflow-hidden border-border bg-card p-0 shadow-sm xl:flex">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -213,12 +359,7 @@ export function DeploymentsTab({
                           <span className="text-xs text-muted-foreground">Build:</span>
                           <Badge
                             variant="secondary"
-                            className={`
-                                text-[10px] h-5 capitalize
-                                ${build.status === 'success' ? 'text-green-600 bg-green-500/10' : ''}
-                                ${build.status === 'failed' ? 'text-red-600 bg-red-500/10' : ''}
-                                ${build.status === 'building' || build.status === 'pending' ? 'text-blue-600 bg-blue-500/10' : ''}
-                            `}
+                            className={`h-5 text-[10px] capitalize ${getBuildStatusClass(build.status)}`}
                           >
                             {build.status}
                           </Badge>
@@ -228,14 +369,7 @@ export function DeploymentsTab({
                             <span className="text-xs text-muted-foreground">Deploy:</span>
                             <Badge
                               variant="secondary"
-                              className={`
-                                    text-[10px] h-5 capitalize
-                                    ${build.deployment_status === 'active' ? 'text-green-600 bg-green-500/10' : ''}
-                                    ${build.deployment_status === 'failed' ? 'text-red-600 bg-red-500/10' : ''}
-                                    ${isPipelineStatus(build.deployment_status) ? 'text-blue-600 bg-blue-500/10 animate-pulse' : ''}
-                                    ${build.deployment_status === 'activating' ? 'text-yellow-600 bg-yellow-500/10 animate-pulse' : ''}
-                                    ${build.deployment_status === 'inactive' ? 'text-muted-foreground bg-surface-muted' : ''}
-                                `}
+                              className={`h-5 text-[10px] capitalize ${getDeploymentStatusClass(build.deployment_status)}`}
                             >
                               {(isPipelineStatus(build.deployment_status) ||
                                 build.deployment_status === 'activating') && (

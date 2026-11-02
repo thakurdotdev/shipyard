@@ -67,8 +67,9 @@ export function ActiveDeploymentCard({
   const loadPreview = () => {
     if (!activeDeployment || previewState === 'loading' || previewState === 'ready') return;
     const deploymentId = activeDeployment.id;
-    if (previewRequest.current?.deploymentId === deploymentId) {
-      void previewRequest.current.promise;
+    const existingRequest = previewRequest.current;
+    if (existingRequest && existingRequest.deploymentId === deploymentId) {
+      void existingRequest.promise;
       return;
     }
 

@@ -64,21 +64,21 @@ export function RepositoryList({ repositories, loading, onSelect }: RepositoryLi
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-muted/20 p-12">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <Loader2 className="mb-2 size-6 animate-spin text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Loading repositories...</span>
         </div>
       ) : (
         <div className="max-h-[500px] space-y-2 overflow-y-auto pr-2">
           {filteredRepos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-muted/20 p-12 text-muted-foreground">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground">
               <span className="text-sm">No repositories found matching "{searchQuery}"</span>
             </div>
           ) : (
             filteredRepos.map((repo) => (
               <div
                 key={repo.id}
-                className="group flex flex-col justify-between gap-4 rounded-2xl border border-border bg-surface-muted/20 p-4 transition-colors duration-200 hover:border-border-strong hover:bg-surface sm:flex-row sm:items-center sm:gap-0"
+                className="group flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-4 transition-colors duration-150 hover:border-border-strong hover:bg-surface-muted/50 sm:flex-row sm:items-center sm:gap-0"
               >
                 <div className="flex min-w-0 items-start gap-4">
                   <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted">
