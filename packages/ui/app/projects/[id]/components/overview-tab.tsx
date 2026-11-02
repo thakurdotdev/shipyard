@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ActiveDeploymentCard } from './active-deployment-card';
 import { ActivityList } from './activity-list';
 import { DomainStatusCard } from './domain-status-card';
+import { ProjectProcessCard } from './project-process-card';
 import { UptimeOverviewCard } from './uptime-overview-card';
 
 interface OverviewTabProps {
@@ -81,6 +82,8 @@ export function OverviewTab({
         project={project}
         onStopDeployment={onStopDeployment}
       />
+
+      <ProjectProcessCard projectId={project.id} />
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Collapsible open={configurationOpen} onOpenChange={setConfigurationOpen}>
