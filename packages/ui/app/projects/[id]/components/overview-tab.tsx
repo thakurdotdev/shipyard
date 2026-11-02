@@ -1,18 +1,10 @@
 'use client';
 
-import {
-  ArrowRight,
-  Box,
-  Braces,
-  CalendarDays,
-  GitBranch,
-  GitCommit,
-  HardDrive,
-  Server,
-} from 'lucide-react';
+import { useState } from 'react';
+import { Braces, CalendarDays, ChevronDown, HardDrive, Settings2, ShieldCheck } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ActiveDeploymentCard } from './active-deployment-card';
 import { ActivityList } from './activity-list';
 import { DomainStatusCard } from './domain-status-card';
@@ -23,7 +15,6 @@ interface OverviewTabProps {
   activeDeployment: any;
   builds: any[];
   onStopDeployment: () => void;
-  onTriggerBuild: () => void;
   onActivateBuild: (buildId: string) => void;
   onOpenSettings: () => void;
   onOpenUptime?: () => void;
@@ -49,12 +40,19 @@ function Detail({ icon: Icon, label, value }: { icon: any; label: string; value:
   );
 }
 
+function DisclosureIcon({ open }: { open: boolean }) {
+  return (
+    <ChevronDown
+      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
+    />
+  );
+}
+
 export function OverviewTab({
   project,
   activeDeployment,
   builds,
   onStopDeployment,
-  onTriggerBuild,
   onActivateBuild,
   onOpenSettings,
   onOpenUptime,
@@ -63,181 +61,127 @@ export function OverviewTab({
   deploymentStatus,
   onRefreshDomain,
 }: OverviewTabProps) {
-  const latestBuild = builds[0];
+  const [configurationOpen, setConfigurationOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const deploymentFailed = deploymentStatus?.status === 'failed';
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-300">
-      {deploymentStatus &&
-        deploymentStatus.status &&
-        !['active', 'inactive'].includes(deploymentStatus.status) && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-sm font-semibold text-blue-300">Deployment in progress</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {deploymentStatus.status_message || deploymentStatus.status.replaceAll('_', ' ')}
-            </p>
-          </div>
-        )}
+    <div className="space-y-5 animate-in fade-in-50 duration-300">
+      {deploymentFailed && (
+        <div role="status" className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+          <p className="text-sm font-semibold">Deployment failed</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {deploymentStatus.status_message || deploymentStatus.status.replaceAll('_', ' ')}
+          </p>
+        </div>
+      )}
 
       <ActiveDeploymentCard
         activeDeployment={activeDeployment}
         project={project}
         onStopDeployment={onStopDeployment}
-        onTriggerBuild={onTriggerBuild}
       />
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Production
-          </p>
-          <div className="flex items-center gap-2">
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                activeDeployment
-                  ? project?.uptime_status === 'down'
-                    ? 'bg-red-500 animate-pulse'
-                    : 'bg-emerald-500'
-                  : 'bg-muted-foreground'
-              }`}
-            />
-            <span
-              className={`text-lg font-semibold ${
-                activeDeployment && project?.uptime_status === 'down' ? 'text-red-400' : ''
-              }`}
-            >
-              {activeDeployment
-                ? project?.uptime_status === 'down'
-                  ? 'Service Down'
-                  : 'Live'
-                : 'Not deployed'}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {activeDeployment
-              ? `Released ${new Date(activeDeployment.activated_at).toLocaleDateString()}`
-              : 'Deploy a successful build to go live'}
-          </p>
-        </Card>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Collapsible open={configurationOpen} onOpenChange={setConfigurationOpen}>
+          <Card className="gap-0 overflow-hidden border-border bg-card p-0 shadow-sm">
+            <CollapsibleTrigger asChild>
+              <button className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-surface-muted/40 sm:px-5">
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="rounded-lg border border-border bg-surface-muted p-2 text-muted-foreground">
+                    <Settings2 className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">Build configuration</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {project.github_repo_full_name ||
+                        project.github_url.replace(/^https?:\/\//, '')}
+                    </span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="hidden text-xs text-muted-foreground sm:inline">Details</span>
+                  <DisclosureIcon open={configurationOpen} />
+                </span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="grid gap-x-8 gap-y-5 border-t border-border p-4 sm:grid-cols-2 sm:p-5">
+                <Detail icon={Braces} label="Build command" value={project.build_command} />
+                <Detail
+                  icon={HardDrive}
+                  label="Root directory"
+                  value={project.root_directory || './'}
+                />
+                <Detail
+                  icon={CalendarDays}
+                  label="Created"
+                  value={new Date(project.created_at).toLocaleDateString()}
+                />
+              </div>
+              <div className="flex justify-end border-t border-border px-4 py-2.5 sm:px-5">
+                <Button variant="ghost" size="sm" className="gap-2" onClick={onOpenSettings}>
+                  Edit settings <Settings2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Latest build
-          </p>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={
-                latestBuild?.status === 'success'
-                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                  : latestBuild?.status === 'failed'
-                    ? 'border-red-500/20 bg-red-500/10 text-red-400'
-                    : ''
-              }
-            >
-              {latestBuild?.status || 'No builds'}
-            </Badge>
-            {latestBuild && (
-              <span className="font-mono text-sm">#{latestBuild.id.slice(0, 8)}</span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {latestBuild
-              ? new Date(latestBuild.created_at).toLocaleString()
-              : 'Build history will appear here'}
-          </p>
-        </Card>
-
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Source branch
-          </p>
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <GitBranch className="h-4 w-4 text-muted-foreground" />
-            <span className="truncate">{project.github_branch || 'main'}</span>
-          </div>
-          <p className="truncate text-xs text-muted-foreground">
-            {project.github_repo_full_name || project.github_url.replace(/^https?:\/\//, '')}
-          </p>
-        </Card>
-
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Runtime
-          </p>
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <Server className="h-4 w-4 text-muted-foreground" />
-            <span>
-              {project.app_type === 'vite'
-                ? 'Static hosting'
-                : project.port
-                  ? `Port ${project.port}`
-                  : 'Auto assigned'}
-            </span>
-          </div>
-          <p className="text-xs capitalize text-muted-foreground">{project.app_type}</p>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
-        <Card className="gap-0 overflow-hidden border-border bg-card p-0 shadow-sm">
-          <div className="flex items-center justify-between border-b border-border px-5 py-4 sm:px-6">
-            <div>
-              <h2 className="font-semibold">Project configuration</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Build and source details</p>
-            </div>
-            <Button variant="ghost" size="sm" className="gap-2" onClick={onOpenSettings}>
-              Settings <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="grid gap-x-8 gap-y-6 p-5 sm:grid-cols-2 sm:p-6">
-            <Detail
-              icon={GitCommit}
-              label="Repository"
-              value={project.github_repo_full_name || project.github_url}
-            />
-            <Detail icon={GitBranch} label="Branch" value={project.github_branch || 'main'} />
-            <Detail icon={Braces} label="Build command" value={project.build_command} />
-            <Detail
-              icon={HardDrive}
-              label="Root directory"
-              value={project.root_directory || './'}
-            />
-            <Detail icon={Box} label="Framework" value={project.app_type} />
-            <Detail
-              icon={CalendarDays}
-              label="Created"
-              value={new Date(project.created_at).toLocaleDateString()}
-            />
-          </div>
-        </Card>
-
-        <div className="grid gap-4">
-          <UptimeOverviewCard
-            projectId={project.id}
-            onOpenUptime={onOpenUptime}
-            onOpenSettings={onOpenSettings}
-          />
-          {domainProvision?.provisioned ? (
-            <DomainStatusCard
-              projectId={project.id}
-              domainProvision={domainProvision}
-              onRefresh={onRefreshDomain || (() => {})}
-            />
-          ) : (
-            <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-              <p className="font-medium">Project domain</p>
-              <p className="break-all text-sm text-muted-foreground">
-                {project.domain || 'No public domain configured'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {project.domain
-                  ? 'Domain provisioning details will appear after setup.'
-                  : 'A public domain is required for automatic uptime checks.'}
-              </p>
-            </Card>
-          )}
-        </div>
-      </section>
+        <Collapsible open={healthOpen} onOpenChange={setHealthOpen}>
+          <Card className="gap-0 overflow-hidden border-border bg-card p-0 shadow-sm">
+            <CollapsibleTrigger asChild>
+              <button className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-surface-muted/40 sm:px-5">
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="rounded-lg border border-border bg-surface-muted p-2 text-muted-foreground">
+                    <ShieldCheck className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">Health & domain</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      Uptime checks and DNS/SSL status
+                    </span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {project.uptime_status === 'down' && (
+                    <span className="text-xs font-medium text-red-400">Service down</span>
+                  )}
+                  <DisclosureIcon open={healthOpen} />
+                </span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="grid gap-3 border-t border-border p-3 sm:p-4">
+                <UptimeOverviewCard
+                  projectId={project.id}
+                  onOpenUptime={onOpenUptime}
+                  onOpenSettings={onOpenSettings}
+                />
+                {domainProvision?.provisioned ? (
+                  <DomainStatusCard
+                    projectId={project.id}
+                    domainProvision={domainProvision}
+                    onRefresh={onRefreshDomain || (() => {})}
+                  />
+                ) : (
+                  <Card className="gap-2 border-border bg-surface-muted/20 p-4 shadow-none">
+                    <p className="text-sm font-medium">Project domain</p>
+                    <p className="break-all text-sm text-muted-foreground">
+                      {project.domain || 'No public domain configured'}
+                    </p>
+                    {!project.domain && (
+                      <p className="text-xs text-muted-foreground">
+                        Add a domain in project settings to publish this app.
+                      </p>
+                    )}
+                  </Card>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      </div>
 
       <ActivityList
         builds={builds}

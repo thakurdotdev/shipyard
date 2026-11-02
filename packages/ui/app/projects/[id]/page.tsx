@@ -281,7 +281,6 @@ function ProjectDetailsContent() {
               activeDeployment={activeDeployment}
               builds={builds}
               onStopDeployment={stopDeployment}
-              onTriggerBuild={triggerBuild}
               onActivateBuild={activateBuild}
               onOpenSettings={() => handleTabChange('settings')}
               onOpenUptime={() => handleTabChange('uptime')}

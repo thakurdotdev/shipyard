@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { Github } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowUpRight, Code2, GitBranch, Loader2, Play } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Code2, GitBranch, Loader2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectHeaderProps {
@@ -18,14 +19,14 @@ interface ProjectHeaderProps {
 const getDeployStatusLabel = (status: string) => {
   const labels: Record<string, string> = {
     pending: 'Pending',
-    dns_creating: 'DNS Setup',
-    dns_created: 'DNS Ready',
-    ssl_issuing: 'SSL Issuing',
-    ssl_issued: 'SSL Ready',
+    dns_creating: 'DNS setup',
+    dns_created: 'DNS ready',
+    ssl_issuing: 'SSL issuing',
+    ssl_issued: 'SSL ready',
     nginx_configuring: 'Configuring',
     nginx_configured: 'Configured',
-    app_starting: 'Starting App',
-    health_checking: 'Health Check',
+    app_starting: 'Starting app',
+    health_checking: 'Health check',
     active: 'Active',
     inactive: 'Inactive',
     failed: 'Failed',
@@ -50,125 +51,140 @@ export function ProjectHeader({
 
   const isPipelineActive =
     deploymentStatus?.status && !['active', 'inactive', 'failed'].includes(deploymentStatus.status);
-
   const isBuilding =
     isDeploying || latestBuild?.status === 'building' || latestBuild?.status === 'pending';
-
-  const isDeployFailed =
-    deploymentStatus?.status === 'failed' ||
-    (!activeDeployment && latestBuild?.status === 'failed');
-
+  const isDeployFailed = deploymentStatus?.status === 'failed' || latestBuild?.status === 'failed';
+  const failureLabel =
+    deploymentStatus?.status === 'failed' ? 'Deployment failed' : 'Latest build failed';
   const isBusy = isDeploying || isBuilding || isPipelineActive;
 
-  const renderDeploymentBadge = () => {
-    if (isBuilding) {
-      return (
-        <Badge variant="outline" className="gap-1.5 font-normal">
-          <Loader2 className="h-3 w-3 animate-spin text-brand-500" />
-          <span>Building{latestBuild?.id ? ` #${latestBuild.id.slice(0, 7)}` : '...'}</span>
-        </Badge>
-      );
-    }
-
-    if (isPipelineActive) {
-      const stepLabel =
-        deploymentStatus.status_message || getDeployStatusLabel(deploymentStatus.status);
-      return (
-        <Badge variant="outline" className="gap-1.5 font-normal">
-          <Loader2 className="h-3 w-3 animate-spin text-brand-500" />
-          <span>Deploying: {stepLabel}</span>
-        </Badge>
-      );
-    }
-
-    if (activeDeployment) {
-      if (project?.uptime_status === 'down') {
-        return (
-          <Badge
-            variant="destructive"
-            className="gap-1.5 font-normal border-red-500/30 bg-red-500/10 text-red-400"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span>Service Down</span>
-          </Badge>
-        );
-      }
-
-      return (
-        <Badge variant="outline" className="gap-1.5 font-normal">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span>Production live</span>
-        </Badge>
-      );
-    }
-
-    if (isDeployFailed) {
-      return (
-        <Badge variant="destructive" className="gap-1.5 font-normal">
-          <span className="h-1.5 w-1.5 rounded-full bg-destructive-foreground" />
-          <span>Build Failed</span>
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge variant="secondary" className="gap-1.5 font-normal text-muted-foreground">
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
-        <span>Not deployed</span>
+  let statusBadge;
+  if (isBuilding) {
+    statusBadge = (
+      <Badge
+        variant="outline"
+        className="h-6 gap-1.5 border-blue-500/20 bg-blue-500/5 text-blue-300"
+      >
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Building{latestBuild?.id ? ` #${latestBuild.id.slice(0, 7)}` : ''}
       </Badge>
     );
-  };
+  } else if (isPipelineActive) {
+    const step = deploymentStatus.status_message || getDeployStatusLabel(deploymentStatus.status);
+    statusBadge = (
+      <Badge
+        variant="outline"
+        className="h-6 gap-1.5 border-blue-500/20 bg-blue-500/5 text-blue-300"
+      >
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Deploying · {step}
+      </Badge>
+    );
+  } else if (isDeployFailed && !activeDeployment) {
+    statusBadge = (
+      <Badge variant="destructive" className="h-6">
+        {failureLabel}
+      </Badge>
+    );
+  } else if (activeDeployment && project.uptime_status === 'down') {
+    statusBadge = (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="destructive" className="h-6">
+          Service down
+        </Badge>
+        {isDeployFailed && (
+          <Badge variant="destructive" className="h-6">
+            {failureLabel}
+          </Badge>
+        )}
+      </span>
+    );
+  } else if (activeDeployment) {
+    statusBadge = (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Badge
+          variant="outline"
+          className="h-6 gap-1.5 border-emerald-500/20 bg-emerald-500/5 text-emerald-400"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Production live
+        </Badge>
+        {isDeployFailed && (
+          <Badge variant="destructive" className="h-6">
+            {failureLabel}
+          </Badge>
+        )}
+      </span>
+    );
+  } else {
+    statusBadge = (
+      <Badge variant="secondary" className="h-6 text-muted-foreground">
+        Not deployed
+      </Badge>
+    );
+  }
 
   return (
-    <header className="sticky top-[68px] z-20 border-b border-border bg-background/85 backdrop-blur-xl">
-      <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                {project.name}
-              </h1>
-              {renderDeploymentBadge()}
-              <Badge variant="outline" className="gap-1.5 font-normal capitalize">
-                <Code2 className="h-3 w-3" /> {project.app_type}
-              </Badge>
-              {project.github_branch && (
-                <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
-                  <GitBranch className="h-3.5 w-3.5" /> {project.github_branch}
-                </span>
-              )}
-            </div>
+    <header className="sticky top-[68px] z-20 border-b border-border bg-background/90 shadow-sm backdrop-blur-xl">
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div className="min-w-0">
+          <Link
+            href="/"
+            className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" /> All projects
+          </Link>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2">
+            <h1 className="max-w-full truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              {project.name}
+            </h1>
+            {statusBadge}
+            <span className="inline-flex items-center gap-1.5 text-xs capitalize text-muted-foreground">
+              <Code2 className="h-3.5 w-3.5" /> {project.app_type}
+            </span>
+            {project.github_branch && (
+              <span className="inline-flex max-w-40 items-center gap-1.5 truncate text-xs text-muted-foreground">
+                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{project.github_branch}</span>
+              </span>
+            )}
           </div>
+        </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" asChild>
-              <a href={project.github_url} target="_blank" rel="noopener noreferrer">
-                <Github className="h-4 w-4" />
+        <div className="flex items-center gap-2 lg:shrink-0">
+          <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
+            <a
+              href={project.github_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open GitHub repository"
+              title="Open GitHub repository"
+            >
+              <Github className="h-4 w-4" />
+            </a>
+          </Button>
+          {activeDeployment && liveUrl && (
+            <Button variant="outline" size="sm" className="h-9 gap-2" asChild>
+              <a href={liveUrl} target="_blank" rel="noopener noreferrer">
+                Open site <ArrowUpRight className="h-4 w-4" />
               </a>
             </Button>
-            {activeDeployment && liveUrl && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={liveUrl} target="_blank" rel="noopener noreferrer" className="gap-2">
-                  Visit <ArrowUpRight className="h-4 w-4" />
-                </a>
-              </Button>
-            )}
-            <Button
-              size="sm"
-              onClick={() =>
-                toast.promise(onTriggerBuild(), {
-                  loading: 'Starting deployment...',
-                  success: 'Deployment started',
-                  error: 'Failed to start deployment',
-                })
-              }
-              disabled={isBusy}
-              className="gap-2"
-            >
-              {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              <span className="hidden sm:inline">Deploy</span>
-            </Button>
-          </div>
+          )}
+          <Button
+            size="sm"
+            onClick={() =>
+              toast.promise(onTriggerBuild(), {
+                loading: 'Starting deployment...',
+                success: 'Deployment started',
+                error: 'Failed to start deployment',
+              })
+            }
+            disabled={isBusy}
+            className="h-9 gap-2 px-4"
+          >
+            {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            <span>{isBusy ? 'Working' : 'Deploy'}</span>
+          </Button>
         </div>
       </div>
     </header>

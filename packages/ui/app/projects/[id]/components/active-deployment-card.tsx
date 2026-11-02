@@ -1,21 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
-  ArrowUpRight,
+  ChevronDown,
   ExternalLink,
-  GitBranch,
   Globe,
   Loader2,
   RefreshCw,
-  ShieldCheck,
   StopCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,20 +30,24 @@ interface ActiveDeploymentCardProps {
   activeDeployment: any;
   project: any;
   onStopDeployment: () => void;
-  onTriggerBuild: () => void;
 }
+
+type PreviewState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export function ActiveDeploymentCard({
   activeDeployment,
   project,
   onStopDeployment,
-  onTriggerBuild,
 }: ActiveDeploymentCardProps) {
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [previewState, setPreviewState] = useState<PreviewState>('idle');
   const [frameLoading, setFrameLoading] = useState(true);
   const [frameKey, setFrameKey] = useState(0);
+  const previewRequest = useRef<{ deploymentId: string; promise: Promise<void> } | null>(null);
+  const currentDeploymentId = useRef<string | undefined>(activeDeployment?.id);
+  currentDeploymentId.current = activeDeployment?.id;
 
   const deploymentUrl = project.domain
     ? `https://${project.domain}`
@@ -53,31 +56,42 @@ export function ActiveDeploymentCard({
       : null;
 
   useEffect(() => {
-    let cancelled = false;
-    if (!activeDeployment) {
-      setPreviewState('unavailable');
+    setPreviewUrl(null);
+    setPreviewState('idle');
+    setFrameLoading(true);
+    setFrameKey(0);
+    previewRequest.current = null;
+    setPreviewOpen(false);
+  }, [activeDeployment?.id]);
+
+  const loadPreview = () => {
+    if (!activeDeployment || previewState === 'loading' || previewState === 'ready') return;
+    const deploymentId = activeDeployment.id;
+    if (previewRequest.current?.deploymentId === deploymentId) {
+      void previewRequest.current.promise;
       return;
     }
 
     setPreviewState('loading');
     setFrameLoading(true);
-    api
+    const request = { deploymentId, promise: Promise.resolve() };
+    const promise = api
       .configureProjectPreview(project.id)
       .then((result) => {
-        if (cancelled) return;
+        if (currentDeploymentId.current !== deploymentId || previewRequest.current !== request)
+          return;
         setPreviewUrl(result.preview_url);
         setPreviewState(result.embeddable && result.preview_url ? 'ready' : 'unavailable');
       })
       .catch(() => {
-        if (cancelled) return;
+        if (currentDeploymentId.current !== deploymentId || previewRequest.current !== request)
+          return;
         setPreviewUrl(null);
         setPreviewState('unavailable');
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeDeployment?.id, project.id]);
+    request.promise = promise;
+    previewRequest.current = request;
+  };
 
   const stopDeployment = () => {
     onStopDeployment();
@@ -86,18 +100,17 @@ export function ActiveDeploymentCard({
 
   if (!activeDeployment) {
     return (
-      <Card className="overflow-hidden border-dashed bg-card">
-        <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-surface-muted text-muted-foreground">
-            <Activity className="h-5 w-5" />
+      <Card className="flex flex-col gap-4 border-dashed border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-xl border border-border bg-surface-muted p-2.5 text-muted-foreground">
+            <Activity className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="font-semibold">No production deployment</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Deploy a build to publish this project and enable its live preview.
+            </p>
           </div>
-          <h2 className="text-lg font-semibold">No production deployment</h2>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Build and deploy this project to bring its live status, domain, and preview here.
-          </p>
-          <Button onClick={onTriggerBuild} className="mt-5 gap-2">
-            <RefreshCw className="h-4 w-4" /> Deploy project
-          </Button>
         </div>
       </Card>
     );
@@ -105,168 +118,142 @@ export function ActiveDeploymentCard({
 
   return (
     <>
-      <Card className="overflow-hidden border-border bg-card shadow-sm">
-        <div className="flex flex-col border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-2.5 w-2.5">
-              <span
-                className={`absolute inline-flex h-full w-full rounded-full ${
-                  project?.uptime_status === 'down'
-                    ? 'animate-ping bg-red-400 opacity-60'
-                    : 'animate-ping bg-emerald-400 opacity-40'
-                }`}
-              />
-              <span
-                className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-                  project?.uptime_status === 'down' ? 'bg-red-500' : 'bg-emerald-500'
-                }`}
-              />
+      <Card className="gap-0 overflow-hidden border-border bg-card py-0 shadow-sm">
+        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="mt-0.5 rounded-xl border border-border bg-surface-muted p-2.5 text-muted-foreground">
+              <Globe className="h-4 w-4" />
             </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-semibold">Production</h2>
-                {project?.uptime_status === 'down' ? (
-                  <Badge className="border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/10">
-                    Service Down
-                  </Badge>
-                ) : (
-                  <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10">
-                    Live
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold">Current production</h2>
+                {project?.uptime_status === 'down' && (
+                  <Badge variant="destructive" className="h-5 text-[11px]">
+                    Service down
                   </Badge>
                 )}
               </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Released {new Date(activeDeployment.activated_at).toLocaleString()}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>Released {new Date(activeDeployment.activated_at).toLocaleString()}</span>
+                {activeDeployment.build_id && (
+                  <span className="font-mono">Build #{activeDeployment.build_id.slice(0, 8)}</span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-2 sm:mt-0">
+          <div className="flex shrink-0 items-center gap-2">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="h-8 gap-2"
-              onClick={() => {
-                setFrameLoading(true);
-                setFrameKey((value) => value + 1);
-              }}
-              disabled={previewState !== 'ready'}
+              className="h-9 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+              onClick={() => setStopDialogOpen(true)}
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh preview
+              <StopCircle className="h-3.5 w-3.5" /> Stop
             </Button>
-            {deploymentUrl && (
-              <Button variant="secondary" size="sm" className="h-8 gap-2" asChild>
-                <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
-                  Visit live <ArrowUpRight className="h-3.5 w-3.5" />
-                </a>
-              </Button>
-            )}
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,1.7fr)_minmax(260px,0.8fr)]">
-          <div className="relative min-h-[300px] overflow-hidden bg-white sm:min-h-[390px]">
-            {previewState === 'ready' && previewUrl ? (
-              <>
-                {frameLoading && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-muted">
-                    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
-                  </div>
-                )}
-                <iframe
-                  key={frameKey}
-                  src={previewUrl}
-                  title={`${project.name} live preview`}
-                  className="absolute inset-0 h-full min-h-[300px] w-full border-0 bg-white sm:min-h-[390px]"
-                  sandbox="allow-scripts allow-same-origin allow-forms"
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  onLoad={() => setFrameLoading(false)}
-                />
-              </>
-            ) : (
-              <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center sm:min-h-[390px]">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground">
-                  {previewState === 'loading' ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Globe className="h-5 w-5" />
-                  )}
-                </div>
-                <h3 className="font-medium text-foreground">
-                  {previewState === 'loading'
-                    ? 'Preparing live preview'
-                    : 'Preview is not available'}
-                </h3>
-                <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                  {previewState === 'loading'
-                    ? 'Connecting this project to the secure preview route.'
-                    : 'This domain cannot be embedded. Open the live site in a new tab instead.'}
+        <Collapsible
+          open={previewOpen}
+          onOpenChange={(open) => {
+            setPreviewOpen(open);
+            if (open) loadPreview();
+          }}
+        >
+          <div className="border-t border-border bg-surface-muted/20 px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Live preview</p>
+                <p className="text-xs text-muted-foreground">
+                  Load an embedded preview when you need it.
                 </p>
-                {deploymentUrl && previewState === 'unavailable' && (
-                  <Button variant="outline" size="sm" className="mt-4 gap-2" asChild>
-                    <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
-                      Open live site <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+              </div>
+              <div className="flex items-center gap-2">
+                {previewOpen && previewState === 'unavailable' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => {
+                      previewRequest.current = null;
+                      setPreviewState('idle');
+                      loadPreview();
+                    }}
+                  >
+                    Retry
                   </Button>
                 )}
+                <CollapsibleTrigger asChild>
+                  <Button variant="secondary" size="sm" className="h-8 gap-2">
+                    {previewOpen ? 'Hide preview' : 'Show preview'}
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${previewOpen ? 'rotate-180' : ''}`}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
               </div>
-            )}
+            </div>
           </div>
 
-          <aside className="flex flex-col justify-between border-t border-border bg-surface-muted/20 p-5 lg:border-l lg:border-t-0 lg:p-6">
-            <div className="space-y-6">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Deployment URL
-                </p>
-                <a
-                  href={deploymentUrl || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 flex items-center gap-2 break-all text-sm font-medium hover:text-primary"
-                >
-                  {project.domain || `localhost:${project.port}`}
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                </a>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Branch</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm">
-                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-                    {project.github_branch || 'main'}
+          <CollapsibleContent>
+            <div className="relative min-h-[260px] overflow-hidden border-t border-border bg-white sm:min-h-[420px]">
+              {previewState === 'ready' && previewUrl ? (
+                <>
+                  {frameLoading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-muted">
+                      <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                  <iframe
+                    key={frameKey}
+                    src={previewUrl}
+                    title={`${project.name} live preview`}
+                    className="h-[260px] w-full border-0 bg-white sm:h-[420px]"
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    onLoad={() => setFrameLoading(false)}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute right-3 top-3 z-20 gap-2 shadow"
+                    onClick={() => {
+                      setFrameLoading(true);
+                      setFrameKey((value) => value + 1);
+                    }}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                  </Button>
+                </>
+              ) : (
+                <div className="flex min-h-[260px] flex-col items-center justify-center px-6 text-center sm:min-h-[420px]">
+                  <span className="mb-3 rounded-xl border border-border bg-card p-3 text-muted-foreground">
+                    {previewState === 'loading' ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Globe className="h-5 w-5" />
+                    )}
+                  </span>
+                  <h3 className="font-medium text-foreground">
+                    {previewState === 'loading' ? 'Preparing preview' : 'Preview unavailable'}
+                  </h3>
+                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                    {previewState === 'loading'
+                      ? 'Connecting to the secure preview route.'
+                      : 'This site cannot be embedded. You can still open it in a new tab.'}
                   </p>
+                  {deploymentUrl && previewState === 'unavailable' && (
+                    <Button variant="outline" size="sm" className="mt-4 gap-2" asChild>
+                      <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
+                        Open live site <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </Button>
+                  )}
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Framework</p>
-                  <p className="mt-1 capitalize text-sm">{project.app_type}</p>
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-background/60 p-3.5">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                  Deployment health check passed
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Runtime uptime monitoring and alerts are managed in Settings.
-                </p>
-              </div>
+              )}
             </div>
-
-            <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
-              <span className="text-xs text-muted-foreground">
-                Build #{activeDeployment.build_id?.slice(0, 8)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
-                onClick={() => setStopDialogOpen(true)}
-              >
-                <StopCircle className="h-3.5 w-3.5" /> Stop
-              </Button>
-            </div>
-          </aside>
-        </div>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
 
       <AlertDialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
