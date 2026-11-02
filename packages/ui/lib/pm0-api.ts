@@ -5,6 +5,7 @@ export interface PM0Process {
   pid: number;
   name: string;
   pm_id: number;
+  project_id?: string;
   monit: { memory: number; cpu: number };
   status: string;
   exec_mode: string;

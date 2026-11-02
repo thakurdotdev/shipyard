@@ -25,6 +25,13 @@ export interface Project {
     status_message: string | null;
     activated_at: string;
   } | null;
+  managed_process?: {
+    name: string;
+    pm_id: number;
+    status: string;
+    cpu: number;
+    memory: number;
+  } | null;
   uptime_status?: 'unknown' | 'up' | 'down' | null;
 }
 

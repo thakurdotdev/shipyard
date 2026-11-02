@@ -5,7 +5,7 @@ import { CardShell } from '@/components/ui/card-shell';
 import { Project } from '@/lib/types';
 import { getProjectStatus } from '@/lib/project-status';
 import { cn } from '@/lib/utils';
-import { ExternalLink, GitBranch } from 'lucide-react';
+import { Cpu, ExternalLink, GitBranch, HardDrive } from 'lucide-react';
 import Link from 'next/link';
 
 function getDomainHostname(domain: string | null): string | null {
@@ -20,6 +20,11 @@ function getDomainHostname(domain: string | null): string | null {
       .split('/')[0]
       .split(':')[0];
   }
+}
+
+function formatProcessMemory(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
 // Framework Icons mapping
@@ -223,6 +228,32 @@ export function ProjectCard({ project }: { project: Project }) {
               </div>
               <span className="truncate flex-1">Latest commit from GitHub</span>
             </div>
+
+            {project.managed_process && (
+              <div className="flex items-center justify-between gap-2 border-t border-border/70 pt-3 text-[11px] text-muted-foreground">
+                <span className="inline-flex min-w-0 items-center gap-1.5 capitalize">
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      project.managed_process.status === 'online'
+                        ? 'bg-emerald-500'
+                        : project.managed_process.status === 'errored'
+                          ? 'bg-red-500'
+                          : 'bg-amber-500'
+                    }`}
+                  />
+                  <span className="truncate">PM0 {project.managed_process.status}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <span className="inline-flex items-center gap-1" title="Process CPU usage">
+                    <Cpu className="h-3 w-3" /> {project.managed_process.cpu.toFixed(1)}%
+                  </span>
+                  <span className="inline-flex items-center gap-1" title="Process memory usage">
+                    <HardDrive className="h-3 w-3" />
+                    {formatProcessMemory(project.managed_process.memory)}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

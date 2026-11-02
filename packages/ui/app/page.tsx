@@ -9,6 +9,7 @@ import { Plus, Search, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { Project } from '@/lib/types';
 import { getProjectStatus } from '@/lib/project-status';
+import { pm0Api } from '@/lib/pm0-api';
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -22,8 +23,31 @@ export default function Home() {
       if (refreshing) return;
       refreshing = true;
       try {
-        const latest = await api.getProjects();
-        if (!disposed) setProjects(latest);
+        const [latest, processes] = await Promise.all([
+          api.getProjects(),
+          pm0Api.getProcesses().catch(() => []),
+        ]);
+        if (!disposed) {
+          setProjects(
+            latest.map((project) => {
+              const process = processes
+                .filter((candidate) => candidate.project_id === project.id)
+                .sort((a, b) => Number(b.status === 'online') - Number(a.status === 'online'))[0];
+              return {
+                ...project,
+                managed_process: process
+                  ? {
+                      name: process.name,
+                      pm_id: process.pm_id,
+                      status: process.status,
+                      cpu: process.monit?.cpu ?? 0,
+                      memory: process.monit?.memory ?? 0,
+                    }
+                  : null,
+              };
+            }),
+          );
+        }
       } catch (error) {
         console.error(error);
       } finally {

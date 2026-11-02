@@ -23,6 +23,9 @@ interface RawPM0Process {
     max_restarts?: number;
     watch?: boolean;
     args?: string | string[];
+    env?: Record<string, string | undefined>;
+    DEPLOY_PROJECT_ID?: string;
+    DEPLOY_BUILD_ID?: string;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -68,7 +71,7 @@ function getErrorMessage(error: unknown): string {
 /**
  * Strip sensitive / bulky fields from a pm0 process object before
  * sending it to the dashboard.  We keep only what the UI needs:
- *   - top-level: pid, name, pm_id, monit
+ *   - top-level: pid, name, pm_id, project_id, monit
  *   - pm2_env: status, exec_mode, interpreter, pm_exec_path, pm_cwd,
  *     instances, autorestart, restart_time, unstable_restarts,
  *     created_at, pm_uptime, exit_code, max_restarts, watch, args
@@ -82,6 +85,7 @@ function sanitizeProcess(proc: RawPM0Process) {
     pid: proc.pid,
     name: proc.name,
     pm_id: proc.pm_id,
+    project_id: env.env?.DEPLOY_PROJECT_ID ?? env.DEPLOY_PROJECT_ID,
     monit: proc.monit,
     status: env.status,
     exec_mode: env.exec_mode,
