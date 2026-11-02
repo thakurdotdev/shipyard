@@ -2,6 +2,7 @@ import { db } from '../db';
 import { builds, deployments, projects, uptimeMonitors } from '../db/schema';
 import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { AppType, isStaticFramework } from '../config/framework-config';
+import { normalizeWatchPatternsInput } from './deploy-change-detection';
 
 const IS_PLATFORM_PROD =
   process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
@@ -179,8 +180,11 @@ export const ProjectService = {
     github_branch?: string;
     github_installation_id?: string;
     auto_deploy?: boolean;
+    auto_deploy_paths?: string | null;
   }) {
     let nextPort: number | null;
+    // Validate before allocating resources so bad input fails fast.
+    const autoDeployPaths = normalizeWatchPatternsInput(data.auto_deploy_paths);
 
     if (isStaticFramework(data.app_type)) {
       // Local development still uses an automatically assigned preview server.
@@ -262,6 +266,7 @@ export const ProjectService = {
           github_installation_id: data.github_installation_id,
           owner_id: data.owner_id,
           auto_deploy: data.auto_deploy ?? true, // Default true
+          auto_deploy_paths: autoDeployPaths,
         })
         .returning();
 
@@ -296,6 +301,9 @@ export const ProjectService = {
     });
     if (!existing) return null;
     const updateData = { ...data };
+    if (updateData.auto_deploy_paths !== undefined) {
+      updateData.auto_deploy_paths = normalizeWatchPatternsInput(updateData.auto_deploy_paths);
+    }
     const appType = updateData.app_type || existing.app_type;
     if (isStaticFramework(appType)) {
       // Keep legacy routing intact until a successful static activation retires it.

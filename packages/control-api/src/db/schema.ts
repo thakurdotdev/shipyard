@@ -29,6 +29,7 @@ export const projects = pgTable(
     ),
     owner_id: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
     auto_deploy: boolean('auto_deploy').default(true).notNull(),
+    auto_deploy_paths: text('auto_deploy_paths'),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
   },

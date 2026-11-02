@@ -2,9 +2,28 @@ import { Elysia } from 'elysia';
 import { randomUUID } from 'crypto';
 import { GitHubService } from '../services/github-service';
 import { db } from '../db';
-import { githubInstallations, projects, builds } from '../db/schema';
+import { githubInstallations, projects, builds, deployments } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { BuildService } from '../services/build-service';
+import {
+  evaluateDeployFilter,
+  getPushChangedFiles,
+  parseWatchPatterns,
+  type DeployFilterDecision,
+} from '../services/deploy-change-detection';
+import { RepoChangeResolver } from '../services/deploy-change-resolver';
+
+/** Commit SHA currently live for a project (the build behind its active deployment). */
+async function getDeployedCommitSha(projectId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ commit_sha: builds.commit_sha })
+    .from(deployments)
+    .innerJoin(builds, eq(deployments.build_id, builds.id))
+    .where(and(eq(deployments.project_id, projectId), eq(deployments.status, 'active')))
+    .orderBy(desc(deployments.activated_at))
+    .limit(1);
+  return row?.commit_sha ?? null;
+}
 
 // Generate a unique request ID for log tracing
 function generateRequestId(): string {
@@ -115,15 +134,21 @@ export const githubWebhook = new Elysia()
       if (event === 'push') {
         const ref = payload.ref; // 'refs/heads/main'
         const repo = payload.repository;
-        const branch = ref.replace('refs/heads/', '');
+        const branch = typeof ref === 'string' ? ref.replace('refs/heads/', '') : '';
         const installationId = payload.installation?.id?.toString();
         const commitSha = payload.after; // The commit SHA after the push
         const commitMessage = payload.head_commit?.message?.slice(0, 255) || null; // Store full message (up to 255 chars)
+        const payloadChangedFiles = getPushChangedFiles(payload);
 
         log('info', `Push to ${repo.full_name}:${branch}`, {
           commit: commitSha?.slice(0, 7),
           message: commitMessage,
         });
+
+        if (payload.deleted || !ref?.startsWith('refs/heads/')) {
+          log('info', `Ignoring ${payload.deleted ? 'branch deletion' : `non-branch ref ${ref}`}`);
+          return { processed: true, builds_triggered: 0, ignored: true };
+        }
 
         if (!installationId) {
           log('warn', 'Push event missing installation ID');
@@ -146,11 +171,77 @@ export const githubWebhook = new Elysia()
 
         let buildsTriggered = 0;
         let buildsSkipped = 0;
+        const results: { project: string; action: 'queued' | 'skipped'; reason: string }[] = [];
+
+        // Lazily created: only projects with path filters need GitHub API access.
+        let resolverPromise: Promise<RepoChangeResolver | null> | null = null;
+        const getResolver = () => {
+          resolverPromise ??= GitHubService.getInstallationToken(installationId)
+            .then((token) => new RepoChangeResolver(token, repo.full_name, commitSha))
+            .catch((e) => {
+              log('warn', 'Could not create GitHub client for change detection', {
+                error: String(e),
+              });
+              return null;
+            });
+          return resolverPromise;
+        };
+
+        /** Decide whether a path-filtered project is affected by this push. */
+        const decide = async (
+          project: typeof projects.$inferSelect,
+        ): Promise<DeployFilterDecision> => {
+          const base = {
+            configuredPatterns: project.auto_deploy_paths,
+            rootDirectory: project.root_directory,
+          };
+          if (parseWatchPatterns(project.auto_deploy_paths).length === 0) {
+            return evaluateDeployFilter({ ...base, changedFiles: [], dependencyDirectories: [] });
+          }
+
+          const deployedSha = await getDeployedCommitSha(project.id);
+          if (!deployedSha) {
+            return { shouldBuild: true, reason: 'No active deployment to compare against' };
+          }
+
+          // Diff against what is live, not just this push: a previously failed or
+          // skipped-but-relevant change must still deploy on the next push.
+          const resolver = await getResolver();
+          let changedFiles: string[] | null = null;
+          if (resolver) {
+            const changeSet = await resolver.compare(deployedSha);
+            changedFiles = changeSet.files;
+            if (changedFiles === null) {
+              log('info', `Change set unavailable for ${project.name}`, {
+                detail: changeSet.detail,
+              });
+            }
+          }
+          // The push payload is equivalent when the push starts at the deployed commit.
+          if (changedFiles === null && payload.before === deployedSha) {
+            changedFiles = payloadChangedFiles;
+          }
+
+          // Cheap pass first: root directory / explicit paths often decide without
+          // resolving the workspace dependency graph.
+          const quick = evaluateDeployFilter({ ...base, changedFiles, dependencyDirectories: [] });
+          if (quick.shouldBuild) return quick;
+
+          const dependencyDirectories = resolver
+            ? await resolver.dependencyDirectories(project.root_directory)
+            : null;
+          return evaluateDeployFilter({ ...base, changedFiles, dependencyDirectories });
+        };
 
         for (const project of connectedProjects) {
           // Check auto_deploy setting
           if (!project.auto_deploy) {
             log('info', `Skipping project ${project.name} (auto_deploy disabled)`);
+            results.push({
+              project: project.name,
+              action: 'skipped',
+              reason: 'Auto deploy disabled',
+            });
             buildsSkipped++;
             continue;
           }
@@ -168,9 +259,30 @@ export const githubWebhook = new Elysia()
                 'info',
                 `Skipping duplicate build for commit ${commitSha.slice(0, 7)} on project ${project.name}`,
               );
+              results.push({
+                project: project.name,
+                action: 'skipped',
+                reason: 'Build already exists for this commit',
+              });
               buildsSkipped++;
               continue;
             }
+          }
+
+          let decision: DeployFilterDecision;
+          try {
+            decision = await decide(project);
+          } catch (e) {
+            decision = { shouldBuild: true, reason: `Change detection failed: ${String(e)}` };
+          }
+          if (!decision.shouldBuild) {
+            log('info', `Skipping project ${project.name}: ${decision.reason}`, {
+              auto_deploy_paths: project.auto_deploy_paths,
+              root_directory: project.root_directory,
+            });
+            results.push({ project: project.name, action: 'skipped', reason: decision.reason });
+            buildsSkipped++;
+            continue;
           }
 
           // Create build with commit SHA and message for tracking
@@ -181,7 +293,11 @@ export const githubWebhook = new Elysia()
               commit_sha: commitSha,
               commit_message: commitMessage,
             });
-            log('info', `Build queued for project ${project.name}`, { project_id: project.id });
+            log('info', `Build queued for project ${project.name}`, {
+              project_id: project.id,
+              reason: decision.reason,
+            });
+            results.push({ project: project.name, action: 'queued', reason: decision.reason });
             buildsTriggered++;
           } catch (e) {
             log('error', `Failed to create build for project ${project.name}`, {
@@ -194,6 +310,7 @@ export const githubWebhook = new Elysia()
           processed: true,
           builds_triggered: buildsTriggered,
           builds_skipped: buildsSkipped,
+          results,
         };
       }
 

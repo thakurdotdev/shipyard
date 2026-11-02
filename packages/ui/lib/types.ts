@@ -14,6 +14,7 @@ export interface Project {
   github_branch: string | null;
   github_installation_id: string | null;
   auto_deploy: boolean;
+  auto_deploy_paths: string | null;
   created_at: string;
   updated_at: string;
   latest_build?: Pick<Build, 'id' | 'status' | 'created_at' | 'completed_at'> | null;

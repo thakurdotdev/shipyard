@@ -41,6 +41,13 @@ export function SettingsTab({ project }: SettingsTabProps) {
   const [confirmName, setConfirmName] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [autoDeploy, setAutoDeploy] = useState(project.auto_deploy ?? true);
+  const [savedAutoDeployPaths, setSavedAutoDeployPaths] = useState(project.auto_deploy_paths ?? '');
+  const [autoDeployPaths, setAutoDeployPaths] = useState(project.auto_deploy_paths ?? '');
+  const autoDeployPathsChanged = autoDeployPaths.trim() !== savedAutoDeployPaths.trim();
+  const projectRootDirectory = (project.root_directory || './')
+    .replace(/^(\.\/)+|^\.$/, '')
+    .replace(/\/$/, '');
+  const [savingAutoDeployPaths, setSavingAutoDeployPaths] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   // Build settings state
@@ -108,6 +115,30 @@ export function SettingsTab({ project }: SettingsTabProps) {
       toast.error('Failed to update settings');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleSaveAutoDeployPaths = async () => {
+    setSavingAutoDeployPaths(true);
+    try {
+      const updated = await api.updateProject(project.id, {
+        auto_deploy_paths: autoDeployPaths.trim() || null,
+      });
+      // The server canonicalises paths (trims slashes, de-duplicates); show what was stored.
+      const stored = updated?.auto_deploy_paths ?? '';
+      setSavedAutoDeployPaths(stored);
+      setAutoDeployPaths(stored);
+      toast.success(stored ? 'Build filters saved' : 'Build filters cleared', {
+        description: stored
+          ? 'Pushes deploy only when watched paths or their dependencies change.'
+          : 'Every push to the branch will deploy.',
+      });
+    } catch (e: any) {
+      toast.error('Failed to save build filters', {
+        description: e.message || 'An unexpected error occurred',
+      });
+    } finally {
+      setSavingAutoDeployPaths(false);
     }
   };
 
@@ -256,6 +287,66 @@ export function SettingsTab({ project }: SettingsTabProps) {
                 />
               </div>
             </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="auto-deploy-paths">Build filters (optional)</Label>
+                <textarea
+                  id="auto-deploy-paths"
+                  value={autoDeployPaths}
+                  onChange={(e) => setAutoDeployPaths(e.target.value)}
+                  placeholder={`${projectRootDirectory || 'apps/web'}\npackages/config\n!**/*.md`}
+                  rows={4}
+                  spellCheck={false}
+                  disabled={!autoDeploy || savingAutoDeployPaths}
+                  aria-describedby="auto-deploy-paths-help"
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <div
+                  id="auto-deploy-paths-help"
+                  className="space-y-1 text-xs text-muted-foreground"
+                >
+                  <p>
+                    Leave blank to deploy on every push. When set, a push deploys only if files
+                    changed since the live deployment match. One repository-relative path or glob
+                    per line (<code>apps/web</code>, <code>packages/*</code>,{' '}
+                    <code>**/*.graphql</code>); prefix with <code>!</code> to exclude.
+                  </p>
+                  <p>
+                    Always watched automatically:{' '}
+                    {projectRootDirectory ? (
+                      <>
+                        the root directory (<code>{projectRootDirectory}</code>),{' '}
+                      </>
+                    ) : null}
+                    internal workspace packages it depends on, and root lockfiles and workspace
+                    config. Empty commits and force pushes always deploy.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                {autoDeployPathsChanged && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setAutoDeployPaths(savedAutoDeployPaths)}
+                    disabled={savingAutoDeployPaths}
+                  >
+                    Reset
+                  </Button>
+                )}
+                <Button
+                  onClick={handleSaveAutoDeployPaths}
+                  disabled={!autoDeploy || !autoDeployPathsChanged || savingAutoDeployPaths}
+                >
+                  {savingAutoDeployPaths ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    'Save Filters'
+                  )}
+                </Button>
+              </div>
+            </CardContent>
           </Card>
         )}
 

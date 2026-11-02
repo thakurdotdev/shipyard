@@ -91,6 +91,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         github_branch: t.Optional(t.String()),
         github_installation_id: t.Optional(t.String()),
         auto_deploy: t.Optional(t.Boolean()),
+        auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
       }),
     },
   )
@@ -152,6 +153,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         domain: t.Optional(t.String()),
         port: t.Optional(t.Integer({ minimum: 1024, maximum: 65535 })),
         auto_deploy: t.Optional(t.Boolean()),
+        auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
       }),
     },
   )
