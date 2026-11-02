@@ -35,7 +35,7 @@ export function ActivityList({
   onActivateBuild,
   onViewAll,
 }: ActivityListProps) {
-  const recentBuilds = builds.slice(0, 5);
+  const recentBuilds = builds.slice(0, 3);
 
   return (
     <section>
@@ -44,9 +44,9 @@ export function ActivityList({
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Activity className="h-5 w-5 text-muted-foreground" /> Recent activity
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">The latest builds for this project</p>
+          <p className="mt-1 text-sm text-muted-foreground">Recent builds for this project</p>
         </div>
-        {builds.length > 5 && (
+        {builds.length > recentBuilds.length && (
           <Button variant="ghost" size="sm" className="gap-2" onClick={onViewAll}>
             View all <ArrowRight className="h-4 w-4" />
           </Button>
