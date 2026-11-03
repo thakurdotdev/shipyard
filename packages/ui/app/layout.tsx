@@ -1,6 +1,4 @@
 import { AuthGuard } from '@/components/auth-guard';
-import { Footer } from '@/components/footer';
-import { Grain } from '@/components/grain';
 import { Navbar } from '@/components/navbar';
 import { ThemeProvider } from '@/components/theme-provider';
 import type { Metadata } from 'next';
@@ -19,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'ShipYard',
-  description: 'Deploy your any frontend app with ease',
+  title: 'Shipyard',
+  description: 'Manage application builds, deployments, and runtime services.',
 };
 
 export default function RootLayout({
@@ -34,12 +32,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background font-sans flex flex-col`}
       >
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <Grain />
           <Toaster richColors position="bottom-right" />
           <AuthGuard>
             <Navbar />
             <main className="flex-1">{children}</main>
-            {/* <Footer /> */}
           </AuthGuard>
         </ThemeProvider>
       </body>

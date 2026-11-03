@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
-import { Activity, FolderGit2, LogOut } from 'lucide-react';
+import { Activity, FolderKanban, LogOut, Plus } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -22,121 +22,112 @@ export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = authClient.useSession();
+  const projectRoute = pathname === '/' || pathname.startsWith('/projects');
+  const isLogin = pathname === '/login';
 
-  const routes = [
-    {
-      href: '/processes',
-      label: 'Processes',
-      icon: Activity,
-      active: pathname === '/processes',
-    },
-    {
-      href: '/projects/new',
-      label: 'New Project',
-      icon: FolderGit2,
-      active: pathname === '/projects/new',
-    },
-  ];
+  const navLinkClass = (active: boolean) =>
+    cn(
+      'inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors',
+      active
+        ? 'bg-accent text-foreground'
+        : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
+    );
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border bg-background/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-3 sm:px-6">
-        <div className="flex items-center gap-2.5 sm:gap-7 min-w-0">
+    <nav
+      aria-label="Main navigation"
+      className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+    >
+      <div className="page-width flex h-16 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-4 sm:gap-7">
           <Link
             href="/"
-            className="flex items-center gap-2 text-[15px] font-bold tracking-tight shrink-0"
+            className="flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Image
-              src="/logo.png"
-              alt="Logo"
-              width={28}
-              height={28}
-              className="rounded-lg shrink-0"
-            />
-            <span className="hidden min-[380px]:inline">ShipYard</span>
+            <Image src="/logo.png" alt="" width={28} height={28} className="rounded-md" />
+            <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">
+              Shipyard
+            </span>
           </Link>
+
           {session && (
-            <div className="flex items-center gap-1 sm:gap-6">
-              {routes.map((route) => {
-                const isProcesses = route.href === '/processes';
-                return (
-                  <Link
-                    key={route.href}
-                    href={route.href}
-                    className={cn(
-                      'flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-colors duration-200 py-1.5 px-2.5 sm:px-0 sm:py-0 rounded-md shrink-0',
-                      route.active
-                        ? 'font-medium text-foreground bg-surface-muted sm:bg-transparent'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-surface-muted/50 sm:hover:bg-transparent',
-                      !isProcesses && 'hidden sm:flex',
-                    )}
-                  >
-                    <route.icon className="size-4 shrink-0" />
-                    <span>{route.label}</span>
-                  </Link>
-                );
-              })}
+            <div className="flex items-center gap-1">
+              <Link
+                href="/"
+                aria-label="Projects"
+                className={navLinkClass(projectRoute)}
+                aria-current={projectRoute ? 'page' : undefined}
+              >
+                <FolderKanban className="size-4" />
+                <span className="hidden sm:inline">Projects</span>
+              </Link>
+              <Link
+                href="/processes"
+                aria-label="Processes"
+                className={navLinkClass(pathname === '/processes')}
+                aria-current={pathname === '/processes' ? 'page' : undefined}
+              >
+                <Activity className="size-4" />
+                <span className="hidden sm:inline">Processes</span>
+              </Link>
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <ThemeSwitcher />
           {session ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="relative size-9 rounded-xl border border-border bg-surface-muted p-0 hover:border-border-strong hover:bg-surface-muted/70"
-                >
-                  <Avatar className="size-7">
-                    <AvatarImage src={session.user.image || ''} alt={session.user.name} />
-                    <AvatarFallback>{session.user.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session.user.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {session.user.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="sm:hidden" />
-                <DropdownMenuItem asChild className="sm:hidden">
-                  <Link href="/processes" className="flex items-center">
-                    <Activity className="mr-2 h-4 w-4" />
-                    <span>Processes</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="sm:hidden">
-                  <Link href="/projects/new" className="flex items-center">
-                    <FolderGit2 className="mr-2 h-4 w-4" />
-                    <span>New Project</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() =>
-                    authClient.signOut({
-                      fetchOptions: {
-                        credentials: 'include',
-                        onSuccess: () => router.push('/login'),
-                      },
-                    })
-                  }
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button asChild>
-              <Link href="/login">Sign In</Link>
+            <>
+              <Button asChild size="sm" className="h-9 gap-1.5 px-2.5 sm:px-3">
+                <Link href="/projects/new" aria-label="Create project">
+                  <Plus className="size-4" />
+                  <span className="hidden sm:inline">New project</span>
+                </Link>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    aria-label="Open account menu"
+                    className="size-9 rounded-full border border-border bg-card p-0 hover:bg-accent"
+                  >
+                    <Avatar className="size-7">
+                      <AvatarImage src={session.user.image || ''} alt={session.user.name} />
+                      <AvatarFallback>{session.user.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-60" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col gap-1">
+                      <p className="text-sm font-medium leading-none">{session.user.name}</p>
+                      <p className="truncate text-xs leading-none text-muted-foreground">
+                        {session.user.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      authClient.signOut({
+                        fetchOptions: {
+                          credentials: 'include',
+                          onSuccess: () => router.push('/login'),
+                        },
+                      })
+                    }
+                  >
+                    <LogOut className="mr-2 size-4" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : !isLogin ? (
+            <Button asChild size="sm">
+              <Link href="/login">Sign in</Link>
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
     </nav>

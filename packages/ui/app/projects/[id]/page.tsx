@@ -216,14 +216,14 @@ function ProjectDetailsContent() {
       );
     }
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-[calc(100svh-4rem)] items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-[calc(100svh-4rem)] bg-background pb-20">
       <ProjectHeader
         project={project}
         activeDeployment={activeDeployment}
@@ -324,7 +324,7 @@ export default function ProjectDetails() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex min-h-[calc(100svh-4rem)] items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       }

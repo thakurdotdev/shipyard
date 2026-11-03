@@ -52,7 +52,7 @@ export function InstallationSelector({
               key={inst.id}
               onClick={() => onSelect(inst.id)}
               className={cn(
-                'group relative flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-colors duration-200',
+                'group relative flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors duration-150',
                 isSelected
                   ? 'border-border-strong bg-surface'
                   : 'border-border bg-surface-muted/40 hover:border-border-strong hover:bg-surface',
@@ -88,7 +88,7 @@ export function InstallationSelector({
 
         <button
           onClick={onInstall}
-          className="flex h-[66px] items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:border-border-strong hover:bg-surface-muted/40 hover:text-foreground"
+          className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-border p-3 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:border-border-strong hover:bg-surface-muted/40 hover:text-foreground"
         >
           <span>Connect New</span>
         </button>

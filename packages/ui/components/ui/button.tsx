@@ -5,20 +5,18 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  "inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-[color,background-color,border-color,box-shadow] duration-200 ease-out disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
         // Brand surface. Text is --primary-foreground (near-black) because
         // white on brand-500 only reaches 3.1:1.
-        default:
-          'bg-brand-500 font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_6px_20px_-8px_var(--brand-500)] hover:bg-brand-500/90 active:scale-[0.98]',
+        default: 'bg-brand-500 font-semibold text-primary-foreground hover:bg-brand-500/90',
         destructive:
-          'bg-destructive font-semibold text-destructive-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-destructive/90 active:scale-[0.98]',
+          'bg-destructive font-semibold text-destructive-foreground hover:bg-destructive/90',
         outline:
-          'border border-border bg-surface-muted text-foreground hover:border-border-strong hover:bg-surface-muted/70 active:scale-[0.98]',
-        secondary:
-          'border border-border bg-surface-muted text-secondary-foreground hover:border-border-strong hover:bg-surface-muted/70',
+          'border border-border bg-surface-muted text-foreground hover:border-border-strong hover:bg-surface-muted/70',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'text-muted-foreground hover:bg-accent hover:text-foreground',
         link: 'text-brand-500 underline-offset-4 hover:underline',
       },

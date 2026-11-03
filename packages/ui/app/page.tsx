@@ -88,46 +88,48 @@ export default function Home() {
   );
 
   return (
-    <div className="pb-24">
-      {/* Sits below the 68px sticky navbar rather than sliding under it. */}
-      <header className="sticky top-[68px] z-10 border-b border-border bg-background/70 backdrop-blur-xl">
-        <div className="mx-auto max-w-6xl px-6 py-4">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-            <h1 className="text-2xl font-bold tracking-[-0.02em] text-foreground">Overview</h1>
-            <div className="flex items-center gap-3">
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search projects..."
-                  className="h-9 pl-9"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <Button asChild className="h-9 gap-2">
-                <Link href="/projects/new">
-                  <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">Add New...</span>
-                  <span className="sm:hidden">New</span>
-                </Link>
-              </Button>
-            </div>
+    <div className="page-width space-y-7 pb-16 pt-8 sm:space-y-8 sm:pt-10">
+      <header className="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="eyebrow mb-2">Deployment workspace</p>
+          <h1 className="page-heading">Projects</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your apps, builds, and production services in one place.
+          </p>
+        </div>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search projects"
+              aria-label="Search projects"
+              className="h-10 pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+          <Button asChild className="h-10 shrink-0 gap-2 px-3 sm:px-4">
+            <Link href="/projects/new">
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">New project</span>
+              <span className="sm:hidden">New</span>
+            </Link>
+          </Button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-8 px-6 py-12">
+      <div className="space-y-6">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-muted/20 py-24 text-center">
-            <div className="mb-4 grid size-14 place-items-center rounded-full border border-border bg-surface-muted">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-5 py-20 text-center">
+            <div className="mb-4 grid size-12 place-items-center rounded-xl border border-border bg-surface-muted">
               <Search className="h-6 w-6 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-semibold tracking-tight">No projects found</h3>
-            <p className="mb-6 max-w-sm text-muted-foreground">
+            <p className="mb-6 mt-1 max-w-sm text-sm text-muted-foreground">
               {search
                 ? `No projects matching "${search}"`
                 : 'Get started by creating your first project.'}
@@ -147,11 +149,11 @@ export default function Home() {
             {runningProjects.length > 0 && (
               <div
                 role="status"
-                className="flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3"
+                className="flex items-center gap-3 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3"
               >
                 <span className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500 opacity-40" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-500" />
                 </span>
                 <span className="text-sm font-medium text-foreground">
                   {runningProjects.length === 1

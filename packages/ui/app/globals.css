@@ -67,10 +67,7 @@
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --font-serif: Georgia, serif;
 
-  --radius: 0.625rem;
-
-  /* Texture intensity for .bg-grid */
-  --pattern-fg: rgba(10, 10, 10, 0.07);
+  --radius: 0.75rem;
 
   /* Faded-wordmark ink: needs a higher alpha in light to read the same as dark. */
   --wordmark-alpha: 10%;
@@ -97,27 +94,27 @@
 /* Dark is the default theme. Surfaces stay within a few percent of the
    background so the page reads as one near-black plane with hairline seams. */
 .dark {
-  --background: #0a0a0b;
-  --foreground: #f5f5f6;
-  --card: #111113;
-  --card-foreground: #f5f5f6;
-  --popover: #18181b;
-  --popover-foreground: #f5f5f6;
+  --background: #0a0d0b;
+  --foreground: #f2f5f2;
+  --card: #101511;
+  --card-foreground: #f2f5f2;
+  --popover: #151b16;
+  --popover-foreground: #f2f5f2;
 
   --primary: var(--brand-500);
   --primary-foreground: #0a0a0b;
-  --secondary: #18181b;
-  --secondary-foreground: #f5f5f6;
-  --muted: #18181b;
-  --muted-foreground: #a1a1aa;
-  --accent: #1f1f23;
-  --accent-foreground: #f5f5f6;
+  --secondary: #171d18;
+  --secondary-foreground: #f2f5f2;
+  --muted: #171d18;
+  --muted-foreground: #9aa59c;
+  --accent: #1b241d;
+  --accent-foreground: #f2f5f2;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --input: rgba(255, 255, 255, 0.06);
+  --border: rgba(222, 239, 226, 0.09);
+  --border-strong: rgba(222, 239, 226, 0.16);
+  --input: rgba(222, 239, 226, 0.08);
   /* brand-300 instead of brand-500 so focus rings stay visible on near-black. */
   --ring: var(--brand-300);
 
@@ -127,13 +124,13 @@
   --chart-4: oklch(0.44 0 0);
   --chart-5: oklch(0.92 0 0);
 
-  --sidebar: #111113;
-  --sidebar-foreground: #f5f5f6;
+  --sidebar: #101511;
+  --sidebar-foreground: #f2f5f2;
   --sidebar-primary: var(--brand-500);
   --sidebar-primary-foreground: #0a0a0b;
-  --sidebar-accent: #1f1f23;
-  --sidebar-accent-foreground: #f5f5f6;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-accent: #1b241d;
+  --sidebar-accent-foreground: #f2f5f2;
+  --sidebar-border: rgba(222, 239, 226, 0.09);
   --sidebar-ring: var(--brand-300);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -143,7 +140,6 @@
 
   --radius: 0.625rem;
 
-  --pattern-fg: rgba(255, 255, 255, 0.06);
   --wordmark-alpha: 5%;
 
   /* Intentionally identical to :root — the console never inverts. */
@@ -242,6 +238,7 @@ body {
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100svh;
 }
 
 @layer base {
@@ -260,30 +257,6 @@ body {
 }
 
 @layer utilities {
-  /* -------------------------------------------------------------------------
-     Texture. Everything here is a CSS background — no SVG or image files.
-     ------------------------------------------------------------------------- */
-
-  /* Faint 48px grid, radially masked so it dissolves toward the edges.
-     Dial the intensity with --pattern-fg. */
-  .bg-grid {
-    background-image:
-      linear-gradient(to right, var(--pattern-fg) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--pattern-fg) 1px, transparent 1px);
-    background-size: 48px 48px;
-    -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
-    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
-  }
-
-  /* Very subtle brand wash for behind a hero or a closing CTA. */
-  .glow-brand {
-    background: radial-gradient(
-      60% 50% at 50% 0%,
-      color-mix(in oklab, var(--brand-500) 28%, transparent),
-      transparent 70%
-    );
-  }
-
   /* Hairline divider lit at its centre. */
   .divider-glow {
     position: relative;
@@ -325,6 +298,26 @@ body {
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .page-width {
+    width: min(100% - 2rem, 76rem);
+    margin-inline: auto;
+  }
+
+  .page-heading {
+    font-size: clamp(1.65rem, 3vw, 2.125rem);
+    line-height: 1.12;
+    letter-spacing: -0.04em;
+    font-weight: 650;
+  }
+
+  .eyebrow {
+    color: var(--muted-foreground);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 }
 

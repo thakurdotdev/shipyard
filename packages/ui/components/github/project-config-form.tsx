@@ -204,7 +204,7 @@ export function ProjectConfigForm({
         </Button>
       </div>
 
-      <div className="space-y-6 bg-surface-muted/40 border border-border rounded-2xl p-6">
+      <div className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
         {/* Project Name */}
         <div className="space-y-3">
           <Label className="text-foreground/90">Project Name</Label>

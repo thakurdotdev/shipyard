@@ -63,7 +63,7 @@ export function ProjectHeader({
     statusBadge = (
       <Badge
         variant="outline"
-        className="h-6 gap-1.5 border-blue-500/20 bg-blue-500/5 text-blue-300"
+        className="h-6 gap-1.5 border-brand-500/25 bg-brand-500/5 text-brand-800 dark:text-brand-300"
       >
         <Loader2 className="h-3 w-3 animate-spin" />
         Building{latestBuild?.id ? ` #${latestBuild.id.slice(0, 7)}` : ''}
@@ -74,7 +74,7 @@ export function ProjectHeader({
     statusBadge = (
       <Badge
         variant="outline"
-        className="h-6 gap-1.5 border-blue-500/20 bg-blue-500/5 text-blue-300"
+        className="h-6 gap-1.5 border-brand-500/25 bg-brand-500/5 text-brand-800 dark:text-brand-300"
       >
         <Loader2 className="h-3 w-3 animate-spin" />
         Deploying · {step}
@@ -125,26 +125,26 @@ export function ProjectHeader({
   }
 
   return (
-    <header className="sticky top-[68px] z-20 border-b border-border bg-background/90 shadow-sm backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <header className="sticky top-16 z-30 border-b border-border bg-background/95 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div className="min-w-0">
           <Link
             href="/"
-            className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className="mb-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft className="h-3 w-3" /> All projects
+            <ArrowLeft className="size-3" /> All projects
           </Link>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2">
-            <h1 className="max-w-full truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+            <h1 className="max-w-full truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               {project.name}
             </h1>
             {statusBadge}
             <span className="inline-flex items-center gap-1.5 text-xs capitalize text-muted-foreground">
-              <Code2 className="h-3.5 w-3.5" /> {project.app_type}
+              <Code2 className="size-3.5" /> {project.app_type}
             </span>
             {project.github_branch && (
               <span className="inline-flex max-w-40 items-center gap-1.5 truncate text-xs text-muted-foreground">
-                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <GitBranch className="size-3.5 shrink-0" />
                 <span className="truncate">{project.github_branch}</span>
               </span>
             )}
@@ -152,7 +152,7 @@ export function ProjectHeader({
         </div>
 
         <div className="flex items-center gap-2 lg:shrink-0">
-          <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
+          <Button variant="outline" size="icon" className="size-9" asChild>
             <a
               href={project.github_url}
               target="_blank"
@@ -180,7 +180,7 @@ export function ProjectHeader({
               })
             }
             disabled={isBusy}
-            className="h-9 gap-2 px-4"
+            className="h-9 gap-2 px-3 sm:px-4"
           >
             {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             <span>{isBusy ? 'Working' : 'Deploy'}</span>
