@@ -389,57 +389,87 @@ export function ProcessTable({
               </div>
             );
 
-            const details = !compact && (
-              <>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                  <span
-                    className="inline-flex min-w-0 max-w-[260px] items-center gap-1 font-mono"
-                    title={commandTitle}
-                  >
-                    <Terminal className="size-3 shrink-0 opacity-60" />
-                    <span className="truncate">{command}</span>
-                  </span>
-                  {isOnline && proc.pid > 0 && <span className="tabular-nums">PID {proc.pid}</span>}
-                  <span>{formatExecMode(proc.exec_mode)}</span>
-                  {proc.instances > 1 && <span>{proc.instances} instances</span>}
-                  {isErrored && proc.exit_code != null && (
-                    <span className="text-red-600 dark:text-red-400">exit {proc.exit_code}</span>
-                  )}
-                  {proc.unstable_restarts > 0 && (
-                    <span className="text-amber-600 dark:text-amber-400">
-                      {proc.unstable_restarts} unstable restart
-                      {proc.unstable_restarts === 1 ? '' : 's'}
-                    </span>
-                  )}
-                </div>
-
-                {proc.cwd && (
-                  <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <FolderOpen className="size-3 shrink-0 opacity-60" />
-                    <code className="min-w-0 truncate font-mono" title={proc.cwd}>
-                      {proc.cwd}
-                    </code>
-                    <button
-                      type="button"
-                      className="shrink-0 cursor-pointer rounded p-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                      title="Copy path"
-                      aria-label={`Copy working directory of ${proc.name}`}
-                      onClick={() => {
-                        navigator.clipboard.writeText(proc.cwd);
-                        setCopiedId(proc.pm_id);
-                        toast.success('Path copied');
-                        setTimeout(() => setCopiedId((v) => (v === proc.pm_id ? null : v)), 2000);
-                      }}
-                    >
-                      {copiedId === proc.pm_id ? (
-                        <Check className="size-3 text-emerald-700 dark:text-emerald-400" />
-                      ) : (
-                        <Copy className="size-3" />
-                      )}
-                    </button>
-                  </div>
+            const metaLine = (
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                <span
+                  className="inline-flex min-w-0 max-w-[260px] items-center gap-1 font-mono"
+                  title={commandTitle}
+                >
+                  <Terminal className="size-3 shrink-0 opacity-60" />
+                  <span className="truncate">{command}</span>
+                </span>
+                {isOnline && proc.pid > 0 && <span className="tabular-nums">PID {proc.pid}</span>}
+                <span>{formatExecMode(proc.exec_mode)}</span>
+                {proc.instances > 1 && <span>{proc.instances} instances</span>}
+                {isErrored && proc.exit_code != null && (
+                  <span className="text-red-600 dark:text-red-400">exit {proc.exit_code}</span>
                 )}
-              </>
+                {proc.unstable_restarts > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {proc.unstable_restarts} unstable restart
+                    {proc.unstable_restarts === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+            );
+
+            const cwdLine = proc.cwd && (
+              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                <FolderOpen className="size-3 shrink-0 opacity-60" />
+                <code className="min-w-0 truncate font-mono" title={proc.cwd}>
+                  {proc.cwd}
+                </code>
+                <button
+                  type="button"
+                  className="shrink-0 cursor-pointer rounded p-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  title="Copy path"
+                  aria-label={`Copy working directory of ${proc.name}`}
+                  onClick={() => {
+                    navigator.clipboard.writeText(proc.cwd);
+                    setCopiedId(proc.pm_id);
+                    toast.success('Path copied');
+                    setTimeout(() => setCopiedId((v) => (v === proc.pm_id ? null : v)), 2000);
+                  }}
+                >
+                  {copiedId === proc.pm_id ? (
+                    <Check className="size-3 text-emerald-700 dark:text-emerald-400" />
+                  ) : (
+                    <Copy className="size-3" />
+                  )}
+                </button>
+              </div>
+            );
+
+            // Phones get one plain-language usage line instead of a labelled grid.
+            const usageLine = (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
+                {isOnline ? (
+                  <>
+                    <span>
+                      <span className="font-medium text-foreground">
+                        {proc.monit.cpu.toFixed(1)}%
+                      </span>{' '}
+                      CPU
+                    </span>
+                    <span>
+                      <span className="font-medium text-foreground">
+                        {formatBytes(proc.monit.memory)}
+                      </span>
+                    </span>
+                    <span>up {formatUptime(proc.pm_uptime)}</span>
+                  </>
+                ) : (
+                  isErrored &&
+                  proc.exit_code != null && (
+                    <span className="text-red-600 dark:text-red-400">exit {proc.exit_code}</span>
+                  )
+                )}
+                {(proc.restart_time > 0 || restartDanger) && (
+                  <span className={cn(restartDanger && 'text-red-600 dark:text-red-400')}>
+                    {restartValue} restarts
+                  </span>
+                )}
+              </p>
             );
 
             return (
@@ -450,7 +480,7 @@ export function ProcessTable({
                 <div
                   className={cn(
                     'px-4 transition-colors hover:bg-surface-muted/40',
-                    compact ? 'py-1.5' : 'py-3',
+                    compact ? 'py-2' : 'py-3',
                   )}
                 >
                   <div className="flex items-center gap-3 lg:gap-4">
@@ -486,7 +516,12 @@ export function ProcessTable({
                           #{proc.pm_id}
                         </span>
                       </div>
-                      {details && <div className="mt-1 hidden lg:block">{details}</div>}
+                      {!compact && (
+                        <div className="mt-1 hidden space-y-1 lg:block">
+                          {metaLine}
+                          {cwdLine}
+                        </div>
+                      )}
                     </div>
 
                     {/* Desktop metrics */}
@@ -506,23 +541,12 @@ export function ProcessTable({
                     </div>
                   </div>
 
-                  {/* Below lg the details get the row's full width. */}
-                  <div className="mt-2 lg:hidden">
-                    {details && <div className="mb-2.5">{details}</div>}
-                    <dl className="grid grid-cols-4 gap-2">
-                      {metrics.map((metric) => (
-                        <div key={metric.label} className="min-w-0">
-                          <dt className="text-[11px] text-muted-foreground">{metric.label}</dt>
-                          <dd className="truncate">
-                            <RowMetric
-                              value={metric.value}
-                              muted={metric.muted}
-                              danger={metric.danger}
-                            />
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
+                  {/* Below lg: usage and folder sit under the name, aligned with it. */}
+                  <div
+                    className={cn('mt-1 space-y-1 lg:hidden', onToggleSelect ? 'pl-12' : 'pl-5')}
+                  >
+                    {usageLine}
+                    {!compact && cwdLine}
                   </div>
                 </div>
 
