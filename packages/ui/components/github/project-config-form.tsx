@@ -204,7 +204,7 @@ export function ProjectConfigForm({
         </Button>
       </div>
 
-      <div className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
+      <div className="space-y-6 surface-card rounded-xl border border-border bg-card p-4 sm:p-6">
         {/* Project Name */}
         <div className="space-y-3">
           <Label className="text-foreground/90">Project Name</Label>
@@ -441,7 +441,7 @@ export function ProjectConfigForm({
           </p>
           {!isStatic && portStatus === 'available' && (
             <p className="text-sm text-foreground/90 flex items-center gap-1">
-              <Check className="h-3 w-3 text-emerald-400" /> Port is available
+              <Check className="h-3 w-3 text-emerald-700 dark:text-emerald-400" /> Port is available
             </p>
           )}
           {!isStatic && portStatus === 'unavailable' && (

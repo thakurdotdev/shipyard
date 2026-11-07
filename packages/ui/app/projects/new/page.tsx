@@ -24,7 +24,6 @@ export default function NewProject() {
             <ArrowLeft className="size-4" />
           </Button>
           <div>
-            <p className="eyebrow mb-2">New project</p>
             <h1 className="page-heading">Manual import</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Configure a public Git repository and its build settings.
@@ -39,7 +38,6 @@ export default function NewProject() {
   return (
     <div className="page-width max-w-4xl pb-16 pt-8 sm:pt-10">
       <header className="border-b border-border pb-6">
-        <p className="eyebrow mb-2">Deployment workspace</p>
         <h1 className="page-heading">Create a project</h1>
         <p className="mt-2 max-w-xl text-sm text-muted-foreground">
           Choose how to connect your code. You can review build settings before the first deploy.
@@ -50,7 +48,7 @@ export default function NewProject() {
         <button
           type="button"
           onClick={() => router.push('/import')}
-          className="group rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-border-strong hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group surface-card surface-card-interactive rounded-xl border border-border bg-card p-5 text-left hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <div className="mb-5 flex size-10 items-center justify-center rounded-lg border border-border bg-surface-muted text-foreground">
             <Github className="size-5" />
@@ -68,7 +66,7 @@ export default function NewProject() {
         <button
           type="button"
           onClick={() => setMode('manual')}
-          className="group rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-border-strong hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group surface-card surface-card-interactive rounded-xl border border-border bg-card p-5 text-left hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <div className="mb-5 flex size-10 items-center justify-center rounded-lg border border-border bg-surface-muted text-foreground">
             <Globe className="size-5" />

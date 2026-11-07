@@ -20,12 +20,12 @@ function StatusBadge({ status, type }: { status: string; type: 'dns' | 'ssl' }) 
       case 'created':
       case 'proxied':
       case 'issued':
-        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+        return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20';
       case 'creating':
       case 'issuing':
-        return 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse';
+        return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 animate-pulse';
       case 'failed':
-        return 'bg-red-500/10 text-red-400 border-red-500/20';
+        return 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20';
       default:
         return 'bg-surface-muted text-muted-foreground border-border';
     }
@@ -79,7 +79,7 @@ export function DomainStatusCard({ projectId, domainProvision, onRefresh }: Doma
   };
 
   return (
-    <Card className="border-border shadow-sm bg-surface-muted/20">
+    <Card className="border-border bg-surface-muted/20">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-[11px] font-medium text-muted-foreground uppercase tracking-[0.14em]">
@@ -143,7 +143,7 @@ export function DomainStatusCard({ projectId, domainProvision, onRefresh }: Doma
 
         {/* Error message */}
         {domainProvision.error_message && (
-          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-2 mt-2">
+          <div className="text-xs text-red-700 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded-md p-2 mt-2">
             {domainProvision.error_message}
           </div>
         )}

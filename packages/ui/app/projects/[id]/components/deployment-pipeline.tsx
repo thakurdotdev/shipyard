@@ -1,6 +1,8 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui/card';
+import { getDeployStatusLabel } from './build-row';
 import { Check, X, Loader2, Globe, Shield, Server, Rocket, HeartPulse, Circle } from 'lucide-react';
 
 interface DeploymentPipelineProps {
@@ -62,19 +64,19 @@ function StageIcon({ state, Icon }: { state: StageState; Icon: any }) {
     case 'completed':
       return (
         <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center">
-          <Check className="w-4 h-4 text-emerald-400" />
+          <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
         </div>
       );
     case 'in_progress':
       return (
-        <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-500/50 flex items-center justify-center animate-pulse">
-          <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+        <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center animate-pulse">
+          <Loader2 className="w-4 h-4 text-amber-700 dark:text-amber-400 animate-spin" />
         </div>
       );
     case 'failed':
       return (
         <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/50 flex items-center justify-center">
-          <X className="w-4 h-4 text-red-400" />
+          <X className="w-4 h-4 text-red-700 dark:text-red-400" />
         </div>
       );
     default:
@@ -92,7 +94,7 @@ function ConnectorLine({ state }: { state: StageState }) {
       className={cn(
         'flex-1 h-0.5 mx-1 rounded-full transition-colors duration-500',
         state === 'completed' && 'bg-emerald-500/50',
-        state === 'in_progress' && 'bg-blue-500/30 animate-pulse',
+        state === 'in_progress' && 'bg-amber-500/30 animate-pulse',
         state === 'failed' && 'bg-red-500/30',
         state === 'pending' && 'bg-surface-muted',
       )}
@@ -104,7 +106,7 @@ function ConnectorLine({ state }: { state: StageState }) {
  * Visual deployment pipeline showing each stage of the deployment process:
  * DNS → SSL → Nginx → App → Health Check → Live ✓
  *
- * Each step shows pending (grey), in-progress (blue spinner), success (green ✓), failed (red ✗)
+ * Each step shows pending (grey), in-progress (amber spinner), success (green ✓), failed (red ✗)
  */
 export function DeploymentPipeline({ status, statusMessage }: DeploymentPipelineProps) {
   // Don't show pipeline for simple statuses
@@ -118,7 +120,7 @@ export function DeploymentPipeline({ status, statusMessage }: DeploymentPipeline
   return (
     <div className="space-y-3">
       {/* Pipeline Visualization */}
-      <div className="flex items-center gap-0 py-2 px-1">
+      <div className="no-scrollbar flex items-center gap-0 overflow-x-auto px-1 py-2">
         {PIPELINE_STAGES.map((stage, index) => {
           const state = getStageState(stage.key, status);
           const nextState =
@@ -133,9 +135,9 @@ export function DeploymentPipeline({ status, statusMessage }: DeploymentPipeline
                 <span
                   className={cn(
                     'text-[10px] font-medium text-center leading-tight',
-                    state === 'completed' && 'text-emerald-400',
-                    state === 'in_progress' && 'text-blue-400',
-                    state === 'failed' && 'text-red-400',
+                    state === 'completed' && 'text-emerald-700 dark:text-emerald-400',
+                    state === 'in_progress' && 'text-amber-700 dark:text-amber-400',
+                    state === 'failed' && 'text-red-700 dark:text-red-400',
                     state === 'pending' && 'text-muted-foreground',
                   )}
                 >
@@ -166,7 +168,7 @@ export function DeploymentPipeline({ status, statusMessage }: DeploymentPipeline
           <span
             className={cn(
               'text-[10px] font-medium',
-              isActive ? 'text-emerald-400' : 'text-muted-foreground',
+              isActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground',
             )}
           >
             Live
@@ -180,15 +182,59 @@ export function DeploymentPipeline({ status, statusMessage }: DeploymentPipeline
           className={cn(
             'text-xs px-3 py-2 rounded-md',
             status === 'failed'
-              ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+              ? 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'
               : status === 'active'
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20',
           )}
         >
           {statusMessage}
         </div>
       )}
     </div>
+  );
+}
+
+/** Live progress for the deployment in flight, or where the last one failed. */
+export function DeploymentProgress({ deploymentStatus }: { deploymentStatus?: any }) {
+  const status: string | undefined = deploymentStatus?.status;
+  if (!status || status === 'active' || status === 'inactive') return null;
+  const failed = status === 'failed';
+
+  return (
+    <Card
+      role="status"
+      className={cn(
+        'gap-0 p-4 sm:p-5',
+        failed ? 'border-red-500/25 bg-red-500/5' : 'border-amber-500/25 bg-amber-500/5',
+      )}
+    >
+      <p
+        className={cn(
+          'flex items-center gap-2 text-sm font-semibold',
+          failed ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400',
+        )}
+      >
+        {!failed && <Loader2 className="size-3.5 animate-spin" />}
+        {failed ? 'Deployment failed' : 'Deployment in progress'}
+      </p>
+      {failed ? (
+        // The failure event doesn't say which step failed, so no step diagram is drawn.
+        <p className="mt-1 text-sm text-muted-foreground">
+          {deploymentStatus.status_message || 'The last deployment did not finish.'}
+        </p>
+      ) : (
+        <>
+          {status === 'pending' && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {deploymentStatus.status_message || getDeployStatusLabel(status)}
+            </p>
+          )}
+          <div className="mt-3">
+            <DeploymentPipeline status={status} statusMessage={deploymentStatus.status_message} />
+          </div>
+        </>
+      )}
+    </Card>
   );
 }

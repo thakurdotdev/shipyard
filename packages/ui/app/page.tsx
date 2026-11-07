@@ -2,19 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { ProjectCard } from '@/components/project-card';
+import { ProjectCard, ProjectCardSkeleton } from '@/components/project-card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Plus, Search, Loader2 } from 'lucide-react';
+import { AlertTriangle, Plus, Rocket, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { Project } from '@/lib/types';
 import { getProjectStatus } from '@/lib/project-status';
 import { pm0Api } from '@/lib/pm0-api';
+import { cn } from '@/lib/utils';
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -28,6 +30,7 @@ export default function Home() {
           pm0Api.getProcesses().catch(() => []),
         ]);
         if (!disposed) {
+          setLoadFailed(false);
           setProjects(
             latest.map((project) => {
               const process = processes
@@ -50,6 +53,7 @@ export default function Home() {
         }
       } catch (error) {
         console.error(error);
+        if (!disposed) setLoadFailed(true);
       } finally {
         refreshing = false;
         if (!disposed) setLoading(false);
@@ -83,22 +87,57 @@ export default function Home() {
         b.latest_build?.created_at ?? b.latest_deployment?.activated_at ?? b.created_at;
       return Date.parse(bLatest) - Date.parse(aLatest);
     });
-  const runningProjects = filteredProjects.filter(
-    (project) => getProjectStatus(project).tone === 'progress',
-  );
+  const countByTone = (tone: ReturnType<typeof getProjectStatus>['tone']) =>
+    projects.filter((project) => getProjectStatus(project).tone === tone).length;
+  const summary = [
+    { label: 'ready', count: countByTone('success'), dot: 'bg-emerald-500', pulse: false },
+    { label: 'in progress', count: countByTone('progress'), dot: 'bg-amber-500', pulse: true },
+    {
+      label: countByTone('error') === 1 ? 'needs attention' : 'need attention',
+      count: countByTone('error'),
+      dot: 'bg-red-500',
+      pulse: false,
+    },
+  ].filter((item) => item.count > 0);
 
   return (
     <div className="page-width space-y-7 pb-16 pt-8 sm:space-y-8 sm:pt-10">
       <header className="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow mb-2">Deployment workspace</p>
           <h1 className="page-heading">Projects</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Your apps, builds, and production services in one place.
-          </p>
+          {projects.length > 0 ? (
+            <p
+              role="status"
+              className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground"
+            >
+              <span>
+                {projects.length} {projects.length === 1 ? 'project' : 'projects'}
+              </span>
+              {summary.map((item) => (
+                <span key={item.label} className="inline-flex items-center gap-2">
+                  <span className="relative flex size-2">
+                    {item.pulse && (
+                      <span
+                        className={cn(
+                          'absolute inline-flex size-full animate-ping rounded-full opacity-60',
+                          item.dot,
+                        )}
+                      />
+                    )}
+                    <span className={cn('relative inline-flex size-2 rounded-full', item.dot)} />
+                  </span>
+                  {item.count} {item.label}
+                </span>
+              ))}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Your apps, builds, and production services in one place.
+            </p>
+          )}
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+        {projects.length > 0 && (
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search projects"
@@ -108,68 +147,80 @@ export default function Home() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button asChild className="h-10 shrink-0 gap-2 px-3 sm:px-4">
-            <Link href="/projects/new">
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">New project</span>
-              <span className="sm:hidden">New</span>
-            </Link>
-          </Button>
-        </div>
+        )}
       </header>
 
-      <div className="space-y-6">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-5 py-20 text-center">
-            <div className="mb-4 grid size-12 place-items-center rounded-xl border border-border bg-surface-muted">
-              <Search className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">No projects found</h3>
-            <p className="mb-6 mt-1 max-w-sm text-sm text-muted-foreground">
-              {search
-                ? `No projects matching "${search}"`
-                : 'Get started by creating your first project.'}
-            </p>
-            {search ? (
-              <Button variant="outline" onClick={() => setSearch('')}>
-                Clear Search
-              </Button>
-            ) : (
-              <Button asChild>
-                <Link href="/projects/new">Create Project</Link>
-              </Button>
-            )}
-          </div>
-        ) : (
-          <>
-            {runningProjects.length > 0 && (
-              <div
-                role="status"
-                className="flex items-center gap-3 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3"
-              >
-                <span className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500 opacity-40" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-500" />
-                </span>
-                <span className="text-sm font-medium text-foreground">
-                  {runningProjects.length === 1
-                    ? 'A build or deployment is currently running'
-                    : `${runningProjects.length} builds or deployments are currently running`}
-                </span>
-              </div>
-            )}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-          </>
-        )}
+      {loading ? (
+        <div
+          className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+          role="status"
+          aria-label="Loading projects"
+        >
+          {Array.from({ length: 6 }, (_, index) => (
+            <ProjectCardSkeleton key={index} />
+          ))}
+        </div>
+      ) : loadFailed && projects.length === 0 ? (
+        <EmptyState
+          icon={<AlertTriangle className="size-5 text-muted-foreground" />}
+          title="Couldn't load your projects"
+          description="We couldn't reach the Shipyard API. This page keeps retrying."
+        />
+      ) : projects.length === 0 ? (
+        <EmptyState
+          icon={<Rocket className="size-5 text-muted-foreground" />}
+          title="Deploy your first project"
+          description="Connect a GitHub repository or a Git URL, then review the build settings before it goes live."
+          action={
+            <Button asChild>
+              <Link href="/projects/new">
+                <Plus className="size-4" />
+                New project
+              </Link>
+            </Button>
+          }
+        />
+      ) : filteredProjects.length === 0 ? (
+        <EmptyState
+          icon={<Search className="size-5 text-muted-foreground" />}
+          title="No matching projects"
+          description={`Nothing matches "${search}".`}
+          action={
+            <Button variant="outline" onClick={() => setSearch('')}>
+              Clear search
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredProjects.map((project) => (
+            <ProjectCard key={project.id} project={project} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-5 py-20 text-center">
+      <div className="mb-4 grid size-11 place-items-center rounded-lg border border-border bg-surface-muted">
+        {icon}
       </div>
+      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }

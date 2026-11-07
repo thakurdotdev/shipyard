@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { Github } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowUpRight, Code2, GitBranch, Loader2, Play } from 'lucide-react';
+import { getFrameworkOption } from '@/lib/framework-config';
+import { ArrowLeft, ArrowUpRight, Code2, GitBranch, Globe, Loader2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectHeaderProps {
@@ -70,7 +71,8 @@ export function ProjectHeader({
       </Badge>
     );
   } else if (isPipelineActive) {
-    const step = deploymentStatus.status_message || getDeployStatusLabel(deploymentStatus.status);
+    // The full message is on the progress card; the badge keeps to the step name.
+    const step = getDeployStatusLabel(deploymentStatus.status);
     statusBadge = (
       <Badge
         variant="outline"
@@ -104,7 +106,7 @@ export function ProjectHeader({
       <span className="flex flex-wrap items-center gap-1.5">
         <Badge
           variant="outline"
-          className="h-6 gap-1.5 border-emerald-500/20 bg-emerald-500/5 text-emerald-400"
+          className="h-6 gap-1.5 border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           Production live
@@ -125,8 +127,8 @@ export function ProjectHeader({
   }
 
   return (
-    <header className="sticky top-16 z-30 border-b border-border bg-background/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <header className="border-b border-border bg-background/95 backdrop-blur lg:sticky lg:top-16 lg:z-30">
+      <div className="page-width flex flex-col gap-3 py-3.5 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <Link
             href="/"
@@ -139,8 +141,20 @@ export function ProjectHeader({
               {project.name}
             </h1>
             {statusBadge}
-            <span className="inline-flex items-center gap-1.5 text-xs capitalize text-muted-foreground">
-              <Code2 className="size-3.5" /> {project.app_type}
+            {project.domain && (
+              <a
+                href={liveUrl ?? undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-w-0 max-w-64 items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Globe className="size-3.5 shrink-0" />
+                <span className="truncate">{project.domain}</span>
+              </a>
+            )}
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Code2 className="size-3.5" />
+              {getFrameworkOption(project.app_type)?.label ?? project.app_type}
             </span>
             {project.github_branch && (
               <span className="inline-flex max-w-40 items-center gap-1.5 truncate text-xs text-muted-foreground">
@@ -183,7 +197,7 @@ export function ProjectHeader({
             className="h-9 gap-2 px-3 sm:px-4"
           >
             {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            <span>{isBusy ? 'Working' : 'Deploy'}</span>
+            <span>{isBusy ? 'Deploying' : 'Deploy'}</span>
           </Button>
         </div>
       </div>

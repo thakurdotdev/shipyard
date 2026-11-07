@@ -143,7 +143,6 @@ export default function ImportPage() {
   return (
     <div className="page-width relative min-h-[calc(100svh-4rem)] max-w-5xl pb-16 pt-8 sm:pt-10">
       <header className="mb-7 border-b border-border pb-6">
-        <p className="eyebrow mb-2">New project · GitHub</p>
         <h1 className="page-heading">Import a repository</h1>
         <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
           Choose an installation, select a repository, then review the deployment settings.
@@ -168,7 +167,7 @@ export default function ImportPage() {
           >
             <User className="size-4" />
           </div>
-          <span>Account</span>
+          <span className="max-[359px]:sr-only">Account</span>
         </div>
         <div className="h-px min-w-3 flex-1 bg-border sm:max-w-14" />
         <div
@@ -188,7 +187,7 @@ export default function ImportPage() {
           >
             <GitBranch className="size-4" />
           </div>
-          <span>Repository</span>
+          <span className="max-[359px]:sr-only">Repository</span>
         </div>
         <div className="h-px min-w-3 flex-1 bg-border sm:max-w-14" />
         <div
@@ -208,7 +207,7 @@ export default function ImportPage() {
           >
             <Settings2 className="size-4" />
           </div>
-          <span>Configure</span>
+          <span className="max-[359px]:sr-only">Configure</span>
         </div>
       </div>
 

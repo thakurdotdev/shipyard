@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { Project, UptimeSettings } from '@/lib/types';
+import { Project, UptimeCheck, UptimeSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -163,23 +163,21 @@ export function UptimeTab({ project }: UptimeTabProps) {
     : 'every 5 minutes';
 
   return (
-    <div className="space-y-6 animate-in fade-in-50 duration-300">
+    <div className="space-y-4 animate-in fade-in-50 duration-300">
       {/* Stat Cards Overview */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {/* Status */}
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Current Status
-          </p>
+        <Card className="gap-2 border-border bg-card p-4 sm:p-5">
+          <p className="text-xs text-muted-foreground">Current status</p>
           <div className="flex items-center gap-2">
             <span
               className={cn(
                 'h-2.5 w-2.5 rounded-full',
-                isUp ? 'bg-brand-500' : isDown ? 'bg-destructive' : 'bg-muted-foreground',
+                isUp ? 'bg-emerald-500' : isDown ? 'bg-destructive' : 'bg-muted-foreground',
               )}
             />
             <span className="text-lg font-semibold text-foreground">
-              {isUp ? 'Operational' : isDown ? 'Service Down' : 'Monitoring Paused'}
+              {isUp ? 'Operational' : isDown ? 'Service down' : 'Monitoring paused'}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -189,11 +187,9 @@ export function UptimeTab({ project }: UptimeTabProps) {
           </p>
         </Card>
 
-        {/* Success Rate */}
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Success Rate
-          </p>
+        {/* Success rate */}
+        <Card className="gap-2 border-border bg-card p-4 sm:p-5">
+          <p className="text-xs text-muted-foreground">Success rate</p>
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
             <span className="text-lg font-semibold text-foreground">
@@ -210,10 +206,8 @@ export function UptimeTab({ project }: UptimeTabProps) {
         </Card>
 
         {/* Response Latency */}
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Avg Latency
-          </p>
+        <Card className="gap-2 border-border bg-card p-4 sm:p-5">
+          <p className="text-xs text-muted-foreground">Avg latency</p>
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-muted-foreground" />
             <span className="text-lg font-semibold text-foreground">
@@ -232,10 +226,8 @@ export function UptimeTab({ project }: UptimeTabProps) {
         </Card>
 
         {/* Check Interval */}
-        <Card className="gap-3 border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            Check Frequency
-          </p>
+        <Card className="gap-2 border-border bg-card p-4 sm:p-5">
+          <p className="text-xs text-muted-foreground">Check frequency</p>
           <div className="flex items-center gap-2">
             <Clock3 className="h-4 w-4 text-muted-foreground" />
             <span className="text-lg font-semibold text-foreground">
@@ -252,108 +244,12 @@ export function UptimeTab({ project }: UptimeTabProps) {
         </Card>
       </section>
 
-      {/* Monitoring Configuration */}
-      <Card>
-        <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-foreground">
-              <Activity className="h-4 w-4" />
-            </span>
-            <div>
-              <CardTitle className="text-xl">Uptime Monitor Settings</CardTitle>
-              <CardDescription className="mt-1">
-                Configure destination endpoint, check intervals, and operational state.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
-          {/* Theme-Consistent State Row */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface-muted/40 p-4">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">Monitoring State</span>
-                <Badge
-                  variant={enabled ? 'outline' : 'secondary'}
-                  className="gap-1.5 text-xs font-normal"
-                >
-                  <span
-                    className={cn(
-                      'h-1.5 w-1.5 rounded-full',
-                      enabled ? 'bg-brand-500' : 'bg-muted-foreground/60',
-                    )}
-                  />
-                  {enabled ? 'Active' : 'Paused'}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Toggle automatic background health checks on or off at any time.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">{enabled ? 'Active' : 'Paused'}</span>
-              <Switch
-                checked={enabled}
-                onCheckedChange={(val) => handleToggleEnabled(val)}
-                disabled={!settings || togglingStatus}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="uptime-tab-endpoint">Monitored Endpoint URL</Label>
-              <Input
-                id="uptime-tab-endpoint"
-                type="url"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder={`Automatic: ${defaultMonitoredUrl}`}
-                className="font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to automatically monitor your project domain, or specify a custom path
-                (e.g. <code className="font-mono text-foreground">/api/health</code>).
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="uptime-tab-interval">Check Frequency</Label>
-              <Select value={interval} onValueChange={setInterval}>
-                <SelectTrigger id="uptime-tab-interval">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CHECK_INTERVALS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Email alerts will automatically be sent to your account email when status changes.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button onClick={handleSaveConfig} disabled={!settings || saving} className="gap-2">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Configuration
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Recent Checks History */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <div className="flex items-center gap-2.5">
-              <CardTitle className="text-lg">Recent Check History</CardTitle>
+              <CardTitle>Recent checks</CardTitle>
               {history.length > 0 && (
                 <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
                   Last {history.length} checks
@@ -391,77 +287,242 @@ export function UptimeTab({ project }: UptimeTabProps) {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-border">
-              <div className="grid grid-cols-[100px_1fr_120px_180px] border-b border-border bg-surface-muted/60 px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                <span>Status</span>
-                <span>Response / Error</span>
-                <span className="text-right">Latency</span>
-                <span className="text-right">Checked At</span>
-              </div>
-              <div className="divide-y divide-border">
-                {history.map((check) => {
-                  const isCheckUp = check.success;
-                  const latency = check.latency_ms;
+            <div className="space-y-5">
+              <CheckStrip history={history} />
+              <div className="max-h-[26rem] overflow-auto rounded-xl border border-border">
+                <div className="sticky top-0 z-10 grid min-w-[560px] grid-cols-[100px_1fr_120px_180px] border-b border-border bg-muted px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                  <span>Status</span>
+                  <span>Response / error</span>
+                  <span className="text-right">Latency</span>
+                  <span className="text-right">Checked at</span>
+                </div>
+                <div className="min-w-[560px] divide-y divide-border">
+                  {history.map((check) => {
+                    const isCheckUp = check.success;
+                    const latency = check.latency_ms;
 
-                  return (
-                    <div
-                      key={check.id}
-                      className="grid grid-cols-[100px_1fr_120px_180px] items-center px-4 py-3 text-xs transition-colors hover:bg-surface-muted/30"
-                    >
-                      <div>
-                        {isCheckUp ? (
-                          <Badge
-                            variant="outline"
-                            className="gap-1.5 font-mono text-xs font-normal"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-brand-500" /> UP
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="destructive"
-                            className="gap-1.5 font-mono text-xs font-normal"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-destructive-foreground" />{' '}
-                            DOWN
-                          </Badge>
-                        )}
-                      </div>
+                    return (
+                      <div
+                        key={check.id}
+                        className="grid grid-cols-[100px_1fr_120px_180px] items-center px-4 py-3 text-xs transition-colors hover:bg-surface-muted/30"
+                      >
+                        <div>
+                          {isCheckUp ? (
+                            <Badge
+                              variant="outline"
+                              className="gap-1.5 font-mono text-xs font-normal"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> UP
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="destructive"
+                              className="gap-1.5 font-mono text-xs font-normal"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-destructive-foreground" />{' '}
+                              DOWN
+                            </Badge>
+                          )}
+                        </div>
 
-                      <div className="truncate pr-4 font-mono">
-                        {check.status_code ? (
-                          <span
-                            className={
-                              check.status_code < 400 ? 'text-foreground' : 'text-destructive'
-                            }
-                          >
-                            HTTP {check.status_code}
-                          </span>
-                        ) : (
-                          <span className="text-destructive">
-                            {check.error || 'Connection Failed'}
-                          </span>
-                        )}
-                      </div>
+                        <div className="truncate pr-4 font-mono">
+                          {check.status_code ? (
+                            <span
+                              className={
+                                check.status_code < 400 ? 'text-foreground' : 'text-destructive'
+                              }
+                            >
+                              HTTP {check.status_code}
+                            </span>
+                          ) : (
+                            <span className="text-destructive">
+                              {check.error || 'Connection Failed'}
+                            </span>
+                          )}
+                        </div>
 
-                      <div className="text-right font-mono text-foreground">
-                        {latency !== null ? (
-                          <span>{latency} ms</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </div>
+                        <div className="text-right font-mono text-foreground">
+                          {latency !== null ? (
+                            <span>{latency} ms</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </div>
 
-                      <div className="text-right text-muted-foreground">
-                        {new Date(check.checked_at).toLocaleString()}
+                        <div className="text-right text-muted-foreground">
+                          {new Date(check.checked_at).toLocaleString()}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Monitoring Configuration */}
+      <Card>
+        <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-foreground">
+              <Activity className="h-4 w-4" />
+            </span>
+            <div>
+              <CardTitle>Monitor settings</CardTitle>
+              <CardDescription className="mt-1">
+                Configure destination endpoint, check intervals, and operational state.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {/* Theme-Consistent State Row */}
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface-muted/40 p-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">Monitoring</span>
+                <Badge
+                  variant={enabled ? 'outline' : 'secondary'}
+                  className="gap-1.5 text-xs font-normal"
+                >
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      enabled ? 'bg-emerald-500' : 'bg-muted-foreground/60',
+                    )}
+                  />
+                  {enabled ? 'Active' : 'Paused'}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Toggle automatic background health checks on or off at any time.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={enabled}
+                onCheckedChange={(val) => handleToggleEnabled(val)}
+                disabled={!settings || togglingStatus}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="uptime-tab-endpoint">Monitored endpoint URL</Label>
+              <Input
+                id="uptime-tab-endpoint"
+                type="url"
+                value={endpoint}
+                onChange={(e) => setEndpoint(e.target.value)}
+                placeholder={`Automatic: ${defaultMonitoredUrl}`}
+                className="font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to automatically monitor your project domain, or specify a custom path
+                (e.g. <code className="font-mono text-foreground">/api/health</code>).
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="uptime-tab-interval">Check frequency</Label>
+              <Select value={interval} onValueChange={setInterval}>
+                <SelectTrigger id="uptime-tab-interval" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHECK_INTERVALS.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Email alerts will automatically be sent to your account email when status changes.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleSaveConfig} disabled={!settings || saving} className="gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+const STRIP_SLOTS = 60;
+
+/** One mark per check, oldest to newest. Failures are also taller, so they don't rely on colour. */
+function CheckStrip({ history }: { history: UptimeCheck[] }) {
+  const [hovered, setHovered] = useState<UptimeCheck | null>(null);
+  const checks = history.slice(0, STRIP_SLOTS).reverse();
+  const passed = checks.filter((check) => check.success).length;
+  const failed = checks.length - passed;
+
+  return (
+    <div>
+      <p className="mb-2.5 min-h-5 truncate text-xs text-muted-foreground" aria-live="off">
+        {hovered ? (
+          <>
+            <span className="font-medium text-foreground">
+              {hovered.success
+                ? 'Passed'
+                : hovered.error || (hovered.status_code ? 'Failed' : 'Connection failed')}
+            </span>
+            {hovered.status_code ? ` · HTTP ${hovered.status_code}` : ''}
+            {hovered.latency_ms !== null ? ` · ${hovered.latency_ms} ms` : ''}
+            {` · ${new Date(hovered.checked_at).toLocaleString()}`}
+          </>
+        ) : (
+          <>
+            <span className="font-medium text-foreground">
+              {passed} of {checks.length} passed
+            </span>
+            {failed > 0 ? ` · ${failed} failed` : ''}
+          </>
+        )}
+      </p>
+      <div
+        role="img"
+        aria-label={`${passed} of the last ${checks.length} checks passed, ${failed} failed`}
+        className="flex h-8 items-end gap-0.5"
+        onMouseLeave={() => setHovered(null)}
+      >
+        {Array.from({ length: STRIP_SLOTS - checks.length }, (_, index) => (
+          <div key={index} className="h-1 min-w-0 flex-1 rounded-[2px] bg-border" />
+        ))}
+        {checks.map((check) => (
+          <div
+            key={check.id}
+            className="flex h-full min-w-0 flex-1 items-end"
+            onMouseEnter={() => setHovered(check)}
+          >
+            <div
+              className={cn(
+                'w-full rounded-[2px] transition-opacity',
+                check.success
+                  ? 'h-3/5 bg-emerald-600/80 dark:bg-emerald-500/70'
+                  : 'h-full bg-red-500',
+                hovered && hovered.id !== check.id && 'opacity-40',
+              )}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+        <span>Older</span>
+        <span>Latest</span>
+      </div>
     </div>
   );
 }
