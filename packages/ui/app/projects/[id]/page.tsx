@@ -164,18 +164,17 @@ function ProjectDetailsContent() {
   };
 
   const activateBuild = async (buildId: string) => {
-    try {
-      toast.promise(api.activateBuild(buildId), {
-        loading: 'Activating build...',
-        success: () => {
-          refreshData();
-          return 'Build activated';
-        },
-        error: 'Failed to activate build',
-      });
-    } catch (e) {
-      console.error(e);
-    }
+    const activation = api.activateBuild(buildId);
+    toast.promise(activation, {
+      loading: 'Activating build...',
+      success: () => {
+        refreshData();
+        return 'Build activated';
+      },
+      error: 'Failed to activate build',
+    });
+    // The toast reports failures; callers only need to know when it has settled.
+    await activation.catch(console.error);
   };
 
   const stopDeployment = async () => {
@@ -233,9 +232,9 @@ function ProjectDetailsContent() {
         onTriggerBuild={triggerBuild}
       />
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="page-width space-y-6 py-6 sm:py-8">
         <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-5 rounded-xl border border-border bg-card p-1 sm:w-auto sm:inline-flex">
+          <TabsList className="grid h-auto w-full grid-cols-5 surface-card rounded-xl border border-border bg-card p-1 sm:inline-flex sm:w-fit sm:self-start">
             <TabsTrigger
               value="overview"
               className="flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 text-[11px] font-medium leading-none sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"

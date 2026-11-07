@@ -59,11 +59,17 @@ export function SettingsTab({ project }: SettingsTabProps) {
   const [savingBuildSettings, setSavingBuildSettings] = useState(false);
 
   // Check if build settings have changed
+  const [savedBuildSettings, setSavedBuildSettings] = useState({
+    buildCommand: project.build_command,
+    appType: project.app_type,
+    rootDirectory: project.root_directory || './',
+    port: project.port ? String(project.port) : '',
+  });
   const buildSettingsChanged =
-    buildCommand !== project.build_command ||
-    appType !== project.app_type ||
-    rootDirectory !== (project.root_directory || './') ||
-    (!isStatic && port !== (project.port ? String(project.port) : ''));
+    buildCommand !== savedBuildSettings.buildCommand ||
+    appType !== savedBuildSettings.appType ||
+    rootDirectory !== savedBuildSettings.rootDirectory ||
+    (!isStatic && port !== savedBuildSettings.port);
 
   const handleSaveBuildSettings = async () => {
     setSavingBuildSettings(true);
@@ -88,6 +94,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
         root_directory: rootDirectory,
         port: parsedPort,
       });
+      setSavedBuildSettings({ buildCommand, appType, rootDirectory, port });
       toast.success('Build settings saved', {
         description: 'Changes will apply to your next build.',
       });
@@ -165,21 +172,21 @@ export function SettingsTab({ project }: SettingsTabProps) {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-500">
-      <div className="grid gap-8">
+    <div className="space-y-4 animate-in fade-in-50 duration-300">
+      <div className="grid gap-4">
         {/* Build Settings */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings2 className="w-5 h-5" />
-              Build Settings
+              Build settings
             </CardTitle>
             <CardDescription>Configure how your project is built and deployed.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="build-command">Build Command</Label>
+                <Label htmlFor="build-command">Build command</Label>
                 <Input
                   id="build-command"
                   value={buildCommand}
@@ -192,7 +199,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
               <div className="space-y-2">
                 <Label htmlFor="app-type">Framework</Label>
                 <Select value={appType} onValueChange={(v) => setAppType(v as AppType)}>
-                  <SelectTrigger id="app-type">
+                  <SelectTrigger id="app-type" className="w-full">
                     <SelectValue placeholder="Select framework" />
                   </SelectTrigger>
                   <SelectContent>
@@ -213,7 +220,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="root-directory">Root Directory</Label>
+                <Label htmlFor="root-directory">Root directory</Label>
                 <Input
                   id="root-directory"
                   value={rootDirectory}
@@ -258,7 +265,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    Save changes
                   </>
                 )}
               </Button>
@@ -270,10 +277,10 @@ export function SettingsTab({ project }: SettingsTabProps) {
         {project.github_installation_id && (
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2">
-                    <GitBranch className="w-5 h-5" /> Auto Deploy
+                    <GitBranch className="w-5 h-5" /> Auto-deploy
                   </CardTitle>
                   <CardDescription>
                     Automatically trigger a new deployment when you push to the connected git
@@ -281,6 +288,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
                   </CardDescription>
                 </div>
                 <Switch
+                  aria-label="Auto-deploy"
                   checked={autoDeploy}
                   onCheckedChange={handleAutoDeployChange}
                   disabled={updating}
@@ -299,7 +307,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
                   spellCheck={false}
                   disabled={!autoDeploy || savingAutoDeployPaths}
                   aria-describedby="auto-deploy-paths-help"
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  className="surface-input flex w-full rounded-lg border border-border bg-surface-muted/60 px-3 py-2 font-mono text-sm outline-none transition-[color,box-shadow,border-color] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <div
                   id="auto-deploy-paths-help"
@@ -342,7 +350,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
                     </>
                   ) : (
-                    'Save Filters'
+                    'Save filters'
                   )}
                 </Button>
               </div>
@@ -350,34 +358,36 @@ export function SettingsTab({ project }: SettingsTabProps) {
           </Card>
         )}
 
-        {/* Danger Zone */}
-        <Card className="border-red-500/20 bg-red-500/5 overflow-hidden">
-          <CardHeader className="border-b border-red-500/10 bg-red-500/10">
-            <CardTitle className="text-red-500 flex items-center gap-2">
-              <Trash2 className="w-5 h-5" /> Danger Zone
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <h4 className="font-medium">Delete Project</h4>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  Permanently remove this project and all of its resources (deployments, builds, and
-                  files) from the platform. This action is not reversible.
-                </p>
-              </div>
-              <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-                Delete Project
-              </Button>
-            </div>
-          </CardContent>
+        {/* Danger zone */}
+        <Card className="flex-col gap-4 border-red-500/25 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">Delete project</h3>
+            <p className="max-w-xl text-sm text-muted-foreground">
+              Permanently removes this project and its deployments, builds, and files. This can't be
+              undone.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="shrink-0 self-start border-red-500/30 text-red-700 hover:border-red-500/50 hover:bg-red-500/10 sm:self-auto dark:text-red-400"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            Delete project
+          </Button>
         </Card>
       </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setConfirmName('');
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the
               <span className="font-semibold text-foreground"> {project.name} </span>
@@ -398,7 +408,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmName('')}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -407,7 +417,7 @@ export function SettingsTab({ project }: SettingsTabProps) {
               disabled={confirmName !== project.name || isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting ? 'Deleting...' : 'Delete Project'}
+              {isDeleting ? 'Deleting...' : 'Delete project'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

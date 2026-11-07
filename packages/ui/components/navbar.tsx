@@ -39,7 +39,7 @@ export function Navbar() {
       className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
     >
       <div className="page-width flex h-16 items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-4 sm:gap-7">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-7">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -74,7 +74,7 @@ export function Navbar() {
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <ThemeSwitcher />
           {session ? (
             <>

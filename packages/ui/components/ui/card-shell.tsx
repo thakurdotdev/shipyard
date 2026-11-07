@@ -11,7 +11,7 @@ function CardShell({
   return (
     <div
       data-slot="card-shell"
-      className={cn('rounded-xl border border-border bg-card transition-colors', className)}
+      className={cn('surface-card rounded-xl border border-border bg-card', className)}
       {...props}
     >
       <div

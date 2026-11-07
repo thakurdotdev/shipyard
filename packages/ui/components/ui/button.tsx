@@ -5,20 +5,21 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  "inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "inline-flex items-center cursor-pointer justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
         // Brand surface. Text is --primary-foreground (near-black) because
         // white on brand-500 only reaches 3.1:1.
-        default: 'bg-brand-500 font-semibold text-primary-foreground hover:bg-brand-500/90',
+        default:
+          'btn-raised bg-brand-500 font-semibold text-primary-foreground hover:bg-brand-500/90',
         destructive:
-          'bg-destructive font-semibold text-destructive-foreground hover:bg-destructive/90',
+          'btn-raised bg-destructive font-semibold text-destructive-foreground hover:bg-destructive/90',
         outline:
-          'border border-border bg-surface-muted text-foreground hover:border-border-strong hover:bg-surface-muted/70',
+          'btn-surface border border-border bg-surface-muted text-foreground hover:border-border-strong hover:bg-surface-muted/70',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'text-muted-foreground hover:bg-accent hover:text-foreground',
-        link: 'text-brand-500 underline-offset-4 hover:underline',
+        link: 'text-brand-800 dark:text-brand-300 underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

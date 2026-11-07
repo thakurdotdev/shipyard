@@ -47,13 +47,13 @@ export function UptimeOverviewCard({
     status === 'up' ? 'Operational' : status === 'down' ? 'Experiencing issues' : 'Monitoring off';
   const statusColor =
     status === 'up'
-      ? 'text-emerald-400'
+      ? 'text-emerald-700 dark:text-emerald-400'
       : status === 'down'
-        ? 'text-red-400'
+        ? 'text-red-700 dark:text-red-400'
         : 'text-muted-foreground';
 
   return (
-    <Card className="flex h-full flex-col justify-between gap-5 border-border bg-card p-5 shadow-sm sm:p-6">
+    <Card className="flex h-full flex-col justify-between gap-5 border-border bg-card p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Uptime monitoring</p>

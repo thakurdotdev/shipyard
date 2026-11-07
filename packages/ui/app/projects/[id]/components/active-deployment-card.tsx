@@ -11,6 +11,7 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { timeAgo } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -28,6 +29,7 @@ import {
 
 interface ActiveDeploymentCardProps {
   activeDeployment: any;
+  builds?: any[];
   project: any;
   onStopDeployment: () => void;
 }
@@ -36,6 +38,7 @@ type PreviewState = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export function ActiveDeploymentCard({
   activeDeployment,
+  builds = [],
   project,
   onStopDeployment,
 }: ActiveDeploymentCardProps) {
@@ -54,6 +57,8 @@ export function ActiveDeploymentCard({
     : project.port
       ? `http://localhost:${project.port}`
       : null;
+
+  const liveBuild = builds.find((build) => build.id === activeDeployment?.build_id);
 
   useEffect(() => {
     setPreviewUrl(null);
@@ -109,7 +114,7 @@ export function ActiveDeploymentCard({
           <div>
             <h2 className="font-semibold">No production deployment</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Deploy a build to publish this project and enable its live preview.
+              Press Deploy to publish this project and enable its live preview.
             </p>
           </div>
         </div>
@@ -119,40 +124,74 @@ export function ActiveDeploymentCard({
 
   return (
     <>
-      <Card className="gap-0 overflow-hidden border-border bg-card py-0 shadow-sm">
-        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="mt-0.5 rounded-xl border border-border bg-surface-muted p-2.5 text-muted-foreground">
+      <Card className="gap-0 overflow-hidden border-border bg-card py-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="rounded-lg border border-border bg-surface-muted p-2 text-muted-foreground">
               <Globe className="h-4 w-4" />
             </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-semibold">Current production</h2>
-                {project?.uptime_status === 'down' && (
-                  <Badge variant="destructive" className="h-5 text-[11px]">
-                    Service down
-                  </Badge>
-                )}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>Released {new Date(activeDeployment.activated_at).toLocaleString()}</span>
-                {activeDeployment.build_id && (
-                  <span className="font-mono">Build #{activeDeployment.build_id.slice(0, 8)}</span>
-                )}
-              </div>
-            </div>
+            <h2 className="text-sm font-semibold">Production</h2>
+            {project?.uptime_status === 'down' && (
+              <Badge variant="destructive" className="h-5 text-[11px]">
+                Service down
+              </Badge>
+            )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
-              onClick={() => setStopDialogOpen(true)}
-            >
-              <StopCircle className="h-3.5 w-3.5" /> Stop
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400"
+            onClick={() => setStopDialogOpen(true)}
+          >
+            <StopCircle className="h-3.5 w-3.5" /> Stop deployment
+          </Button>
         </div>
+
+        <dl className="grid grid-cols-1 gap-px border-t border-border bg-border sm:grid-cols-3">
+          <div className="min-w-0 bg-card px-4 py-3 sm:px-5">
+            <dt className="text-[11px] text-muted-foreground">Address</dt>
+            <dd className="mt-0.5 truncate text-sm font-medium">
+              {deploymentUrl ? (
+                <a
+                  href={deploymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex max-w-full items-center gap-1.5 hover:underline"
+                >
+                  <span className="truncate">{deploymentUrl.replace(/^https?:\/\//, '')}</span>
+                  <ExternalLink className="size-3 shrink-0 opacity-50" />
+                </a>
+              ) : (
+                'No public address'
+              )}
+            </dd>
+          </div>
+          <div className="min-w-0 bg-card px-4 py-3 sm:px-5">
+            <dt className="text-[11px] text-muted-foreground">Released</dt>
+            <dd
+              className="mt-0.5 truncate text-sm font-medium"
+              title={new Date(activeDeployment.activated_at).toLocaleString()}
+            >
+              {timeAgo(activeDeployment.activated_at)}
+            </dd>
+          </div>
+          <div className="min-w-0 bg-card px-4 py-3 sm:px-5">
+            <dt className="text-[11px] text-muted-foreground">Build</dt>
+            <dd className="mt-0.5 flex min-w-0 items-baseline gap-2 text-sm">
+              <span className="shrink-0 font-mono font-medium">
+                #{activeDeployment.build_id?.slice(0, 8)}
+              </span>
+              {liveBuild?.commit_message && (
+                <span
+                  className="truncate text-xs text-muted-foreground"
+                  title={liveBuild.commit_message}
+                >
+                  {liveBuild.commit_message.split('\n')[0]}
+                </span>
+              )}
+            </dd>
+          </div>
+        </dl>
 
         <Collapsible
           open={previewOpen}
@@ -185,7 +224,7 @@ export function ActiveDeploymentCard({
                   </Button>
                 )}
                 <CollapsibleTrigger asChild>
-                  <Button variant="secondary" size="sm" className="h-8 gap-2">
+                  <Button variant="outline" size="sm" className="h-8 gap-2">
                     {previewOpen ? 'Hide preview' : 'Show preview'}
                     <ChevronDown
                       className={`h-4 w-4 transition-transform ${previewOpen ? 'rotate-180' : ''}`}
@@ -197,7 +236,7 @@ export function ActiveDeploymentCard({
           </div>
 
           <CollapsibleContent>
-            <div className="relative min-h-[260px] overflow-hidden border-t border-border bg-white sm:min-h-[420px]">
+            <div className="relative min-h-[260px] overflow-hidden border-t border-border bg-surface-muted/30 sm:min-h-[420px]">
               {previewState === 'ready' && previewUrl ? (
                 <>
                   {frameLoading && (
@@ -228,7 +267,7 @@ export function ActiveDeploymentCard({
                 </>
               ) : (
                 <div className="flex min-h-[260px] flex-col items-center justify-center px-6 text-center sm:min-h-[420px]">
-                  <span className="mb-3 rounded-xl border border-border bg-card p-3 text-muted-foreground">
+                  <span className="mb-3 surface-card rounded-xl border border-border bg-card p-3 text-muted-foreground">
                     {previewState === 'loading' ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
@@ -267,7 +306,10 @@ export function ActiveDeploymentCard({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={stopDeployment} className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction
+              onClick={stopDeployment}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Stop deployment
             </AlertDialogAction>
           </AlertDialogFooter>

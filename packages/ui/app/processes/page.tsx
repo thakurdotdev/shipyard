@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { pm0Api, PM0Process, PM0Health, PM0SystemStats } from '@/lib/pm0-api';
 import { ProcessTable } from '@/components/process-manager/process-table';
 import { Button } from '@/components/ui/button';
@@ -53,13 +53,22 @@ interface MetricCardProps {
   hint?: string;
   tone?: KpiTone;
   progress?: number | null;
+  className?: string;
 }
 
-function MetricCard({ label, value, unit, hint, tone = 'default', progress }: MetricCardProps) {
+function MetricCard({
+  label,
+  value,
+  unit,
+  hint,
+  tone = 'default',
+  progress,
+  className,
+}: MetricCardProps) {
   const pct = progress == null ? null : Math.max(0, Math.min(100, progress));
 
   return (
-    <div className="min-w-0 bg-card px-4 py-3.5">
+    <div className={cn('min-w-0 bg-card px-4 py-3.5', className)}>
       <p className="truncate text-xs text-muted-foreground">{label}</p>
       <div className="mt-1 flex items-baseline gap-1">
         <span className="font-mono text-xl font-semibold leading-none tracking-tight text-foreground tabular-nums">
@@ -93,6 +102,16 @@ function DaemonFact({ label, value }: { label: string; value: string | number })
 
 type StatusFilter = 'all' | 'online' | 'stopped' | 'errored';
 
+const POLL_INTERVAL_MS = 5000;
+
+/** Problems first, then anything mid-transition, running, and finally stopped. */
+function attentionRank(status: string): number {
+  if (status === 'errored') return 0;
+  if (status === 'online') return 2;
+  if (status === 'stopped') return 3;
+  return 1;
+}
+
 const filterDot: Record<StatusFilter, string | null> = {
   all: null,
   online: 'bg-emerald-500',
@@ -109,14 +128,18 @@ export default function ProcessesPage() {
   const [compact, setCompact] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<'stop' | 'restart' | 'delete' | null>(null);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<'stop' | 'restart' | 'delete' | null>(null);
   const [loading, setLoading] = useState(true);
   const [daemonDown, setDaemonDown] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setRefreshing(true);
+  const fetching = useRef(false);
+
+  const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (fetching.current) return;
+    fetching.current = true;
+    if (!silent) setRefreshing(true);
     try {
       const [list, h] = await Promise.all([pm0Api.getProcessesWithSystem(), pm0Api.getHealth()]);
       setProcesses(list.processes);
@@ -126,13 +149,25 @@ export default function ProcessesPage() {
     } catch {
       setDaemonDown(true);
     } finally {
+      fetching.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') void fetchData({ silent: true });
+    };
+    const interval = window.setInterval(refreshVisible, POLL_INTERVAL_MS);
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
   }, [fetchData]);
 
   // Drop selections for processes that no longer exist.
@@ -172,10 +207,13 @@ export default function ProcessesPage() {
     errored: searchedProcesses.filter((p) => p.status === 'errored').length,
   };
 
-  const filteredProcesses =
+  const filteredProcesses = (
     statusFilter === 'all'
       ? searchedProcesses
-      : searchedProcesses.filter((p) => p.status === statusFilter);
+      : searchedProcesses.filter((p) => p.status === statusFilter)
+  )
+    .slice()
+    .sort((a, b) => attentionRank(a.status) - attentionRank(b.status) || a.pm_id - b.pm_id);
 
   const selectedProcesses = processes.filter((p) => selectedIds.has(p.pm_id));
   const allVisibleSelected =
@@ -233,8 +271,8 @@ export default function ProcessesPage() {
 
     setSelectedIds(new Set());
     setBulkAction(null);
-    setBulkDeleteOpen(false);
-    fetchData();
+    setBulkConfirm(null);
+    void fetchData();
   };
 
   // Aggregated stats
@@ -243,6 +281,10 @@ export default function ProcessesPage() {
   const erroredCount = processes.filter((p) => p.status === 'errored').length;
   const totalCpu = processes.reduce((sum, p) => sum + (p.monit?.cpu ?? 0), 0);
   const totalMem = processes.reduce((sum, p) => sum + (p.monit?.memory ?? 0), 0);
+
+  // A failed poll keeps the last good numbers on screen, marked as stale.
+  const showOffline = daemonDown && processes.length === 0;
+  const stale = daemonDown && processes.length > 0;
 
   const processMemPct =
     system?.has_memory && system.memory_total_bytes > 0
@@ -305,7 +347,6 @@ export default function ProcessesPage() {
     <div className="page-width pb-16 pt-8 sm:pt-10">
       <header className="flex flex-col justify-between gap-5 border-b border-border pb-6 sm:flex-row sm:items-end">
         <div className="min-w-0">
-          <p className="eyebrow mb-2">Runtime</p>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="page-heading">Processes</h1>
             {daemonDown && (
@@ -340,10 +381,10 @@ export default function ProcessesPage() {
             variant="outline"
             size="icon"
             className="size-10 shrink-0"
-            onClick={fetchData}
+            onClick={() => void fetchData()}
             disabled={refreshing}
-            title="Refresh"
-            aria-label="Refresh"
+            title="Refresh now"
+            aria-label="Refresh now"
           >
             <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
           </Button>
@@ -353,9 +394,11 @@ export default function ProcessesPage() {
             className="h-10 shrink-0 gap-1.5"
             onClick={handleSave}
             disabled={saving || processes.length === 0}
+            title="Save the current process list to the PM0 dump"
+            aria-label="Save process list"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            <span className="hidden sm:inline">Save</span>
+            <span className="hidden sm:inline">Save list</span>
           </Button>
         </div>
       </header>
@@ -363,11 +406,11 @@ export default function ProcessesPage() {
       <div className="mt-7 space-y-6">
         {loading ? (
           <div className="space-y-4">
-            <div className="h-36 animate-pulse rounded-xl border border-border bg-card" />
-            <div className="h-64 animate-pulse rounded-xl border border-border bg-card" />
+            <div className="h-36 animate-pulse surface-card rounded-xl border border-border bg-card" />
+            <div className="h-64 animate-pulse surface-card rounded-xl border border-border bg-card" />
           </div>
-        ) : daemonDown ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
+        ) : showOffline ? (
+          <div className="flex flex-col items-center justify-center surface-card rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
             <div className="mb-4 grid size-11 place-items-center rounded-lg border border-border bg-surface-muted">
               <AlertTriangle className="size-5 text-muted-foreground" />
             </div>
@@ -378,15 +421,30 @@ export default function ProcessesPage() {
                 127.0.0.1:9615
               </code>
             </p>
-            <Button variant="outline" size="sm" className="mt-5" onClick={fetchData}>
+            <Button variant="outline" size="sm" className="mt-5" onClick={() => void fetchData()}>
               <RefreshCw className="size-3.5" />
               Retry
             </Button>
           </div>
         ) : (
           <>
+            {stale && (
+              <div
+                role="status"
+                className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                <span>
+                  <span className="font-medium">PM0 isn't responding.</span>{' '}
+                  <span className="text-muted-foreground">
+                    Showing the last known state. Retrying every few seconds.
+                  </span>
+                </span>
+              </div>
+            )}
+
             {/* System summary */}
-            <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <section className="overflow-hidden surface-card rounded-xl border border-border bg-card">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2.5">
                   <span className={cn('size-2 rounded-full', overall.dot)} />
@@ -395,15 +453,20 @@ export default function ProcessesPage() {
                     {processes.length > 0 ? `${processes.length} supervised` : 'Nothing running'}
                   </span>
                 </div>
-                {health && (
-                  <span className="text-xs text-muted-foreground">
-                    pm0 <span className="font-mono text-foreground">v{health.version}</span>
+                {!stale && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="relative flex size-1.5">
+                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                      <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+                    </span>
+                    Updates every {POLL_INTERVAL_MS / 1000}s
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-5">
                 <MetricCard
+                  className="col-span-2 lg:col-span-1"
                   label="Processes"
                   value={processes.length}
                   hint={statusSummary || 'No supervised processes'}
@@ -420,7 +483,7 @@ export default function ProcessesPage() {
                   hint={
                     processMemPct === null
                       ? 'Resident memory used'
-                      : `${processMemPct.toFixed(1)}% of host memory`
+                      : `${processMemPct.toFixed(1)}% of host`
                   }
                   tone={processMemPct === null ? 'default' : getPressureTone(processMemPct)}
                   progress={processMemPct}
@@ -454,8 +517,13 @@ export default function ProcessesPage() {
               {health && (
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-border px-4 py-2.5 text-xs">
                   <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                    <span className="size-1.5 rounded-full bg-emerald-500" />
-                    Daemon online
+                    <span
+                      className={cn(
+                        'size-1.5 rounded-full',
+                        stale ? 'bg-red-500' : 'bg-emerald-500',
+                      )}
+                    />
+                    {stale ? 'Daemon offline' : 'Daemon online'}
                   </span>
                   <DaemonFact label="PID" value={health.pid} />
                   <DaemonFact
@@ -510,7 +578,7 @@ export default function ProcessesPage() {
                 </div>
               </div>
 
-              <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-surface-muted/50 p-0.5">
+              <div className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-surface-muted/50 p-0.5">
                 {statusFilters.map((filter) => {
                   const active = statusFilter === filter.key;
                   return (
@@ -522,7 +590,7 @@ export default function ProcessesPage() {
                         setSelectedIds(new Set());
                       }}
                       className={cn(
-                        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         active
                           ? 'bg-card text-foreground shadow-xs'
                           : 'text-muted-foreground hover:text-foreground',
@@ -547,10 +615,15 @@ export default function ProcessesPage() {
 
               <ProcessTable
                 processes={filteredProcesses}
-                onRefresh={fetchData}
+                onRefresh={() => void fetchData({ silent: true })}
                 compact={compact}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                filtered={search !== '' || statusFilter !== 'all'}
+                onClearFilters={() => {
+                  setSearch('');
+                  setStatusFilter('all');
+                }}
               />
 
               {selectedIds.size > 0 && (
@@ -562,9 +635,10 @@ export default function ProcessesPage() {
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1.5"
-                    onClick={() => runBulkAction('stop')}
+                    onClick={() => setBulkConfirm('stop')}
                     disabled={!!bulkAction}
                     title="Stop selected"
+                    aria-label="Stop selected"
                   >
                     {bulkAction === 'stop' ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -577,9 +651,10 @@ export default function ProcessesPage() {
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1.5"
-                    onClick={() => runBulkAction('restart')}
+                    onClick={() => setBulkConfirm('restart')}
                     disabled={!!bulkAction}
                     title="Restart selected"
+                    aria-label="Restart selected"
                   >
                     {bulkAction === 'restart' ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -592,9 +667,10 @@ export default function ProcessesPage() {
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setBulkDeleteOpen(true)}
+                    onClick={() => setBulkConfirm('delete')}
                     disabled={!!bulkAction}
                     title="Delete selected"
+                    aria-label="Delete selected"
                   >
                     <Trash2 className="size-3.5" />
                     <span className="hidden sm:inline">Delete</span>
@@ -615,29 +691,40 @@ export default function ProcessesPage() {
         )}
       </div>
 
-      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+      <AlertDialog
+        open={bulkConfirm !== null}
+        onOpenChange={(open) => !open && !bulkAction && setBulkConfirm(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {selectedIds.size} process{selectedIds.size === 1 ? '' : 'es'}?
+              {bulkConfirm === 'delete' ? 'Delete' : bulkConfirm === 'stop' ? 'Stop' : 'Restart'}{' '}
+              {selectedIds.size} process{selectedIds.size === 1 ? '' : 'es'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will stop and remove the selected processes from PM0. This action cannot be
-              undone.
+              {bulkConfirm === 'delete'
+                ? 'This stops the selected processes and removes them from PM0. This cannot be undone.'
+                : bulkConfirm === 'stop'
+                  ? 'Anything they serve becomes unavailable until you start them again.'
+                  : 'They all restart at once, so anything they serve may briefly drop requests.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkAction === 'delete'}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={!!bulkAction}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={bulkAction === 'delete'}
+              className={
+                bulkConfirm === 'restart'
+                  ? undefined
+                  : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              }
+              disabled={!!bulkAction}
               onClick={(event) => {
                 event.preventDefault();
-                void runBulkAction('delete');
+                if (bulkConfirm) void runBulkAction(bulkConfirm);
               }}
             >
-              {bulkAction === 'delete' && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Delete
+              {bulkAction && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {bulkConfirm === 'delete' ? 'Delete' : bulkConfirm === 'stop' ? 'Stop' : 'Restart'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

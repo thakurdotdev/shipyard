@@ -28,15 +28,15 @@ import {
   Trash2,
   MoreVertical,
   ScrollText,
-  Cpu,
-  MemoryStick,
-  Clock,
+  ExternalLink,
   Terminal,
   FolderOpen,
   Copy,
   Check,
 } from 'lucide-react';
+import { formatUptime } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { ProcessLogViewer } from './process-log-viewer';
 
@@ -48,20 +48,6 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function formatUptime(uptimeMs: number): string {
-  if (!uptimeMs) return '—';
-  const diff = Date.now() - uptimeMs;
-  if (diff < 0) return '—';
-  const secs = Math.floor(diff / 1000);
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ${secs % 60}s`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ${hrs % 24}h`;
 }
 
 function formatExecMode(mode: string): string {
@@ -137,6 +123,9 @@ interface ProcessTableProps {
   compact?: boolean;
   selectedIds?: Set<number>;
   onToggleSelect?: (pmId: number) => void;
+  /** True when a search or status filter is hiding processes. */
+  filtered?: boolean;
+  onClearFilters?: () => void;
 }
 
 export function ProcessTable({
@@ -145,9 +134,14 @@ export function ProcessTable({
   compact = false,
   selectedIds,
   onToggleSelect,
+  filtered = false,
+  onClearFilters,
 }: ProcessTableProps) {
   const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<PM0Process | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{
+    action: 'stop' | 'delete';
+    process: PM0Process;
+  } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -187,38 +181,51 @@ export function ProcessTable({
 
   if (processes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
+      <div className="surface-card flex flex-col items-center justify-center rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
         <div className="mb-4 grid size-11 place-items-center rounded-lg border border-border bg-surface-muted">
           <Terminal className="size-5 text-muted-foreground" />
         </div>
-        <h3 className="text-base font-semibold tracking-tight">No processes to show</h3>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Nothing matched your filters, or the PM0 daemon has no supervised processes. Start one
-          with{' '}
-          <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
-            pm0 start app.js
-          </code>
-        </p>
+        {filtered ? (
+          <>
+            <h3 className="text-base font-semibold tracking-tight">No matching processes</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Nothing matches your search and status filter.
+            </p>
+            {onClearFilters && (
+              <Button variant="outline" size="sm" className="mt-5" onClick={onClearFilters}>
+                Clear filters
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <h3 className="text-base font-semibold tracking-tight">No supervised processes</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Deploy a project, or start a process with{' '}
+              <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
+                pm0 start app.js
+              </code>
+            </p>
+          </>
+        )}
       </div>
     );
   }
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="surface-card overflow-hidden rounded-xl border border-border bg-card">
         {/* Column header */}
-        <div className="hidden items-center gap-4 border-b border-border bg-surface-muted/40 px-4 py-2 lg:flex">
-          <div className="flex flex-1 items-center pl-[46px] text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Process
-          </div>
-          <div className="grid w-[340px] shrink-0 grid-cols-4 gap-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="hidden items-center gap-4 border-b border-border bg-surface-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground lg:flex">
+          <div className="flex-1 pl-14">Process</div>
+          <div className="grid w-[340px] shrink-0 grid-cols-4 gap-4">
             <span>CPU</span>
             <span>Memory</span>
             <span>Uptime</span>
             <span>Restarts</span>
           </div>
-          <span className="w-[132px] shrink-0 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Actions
+          <span className="w-[132px] shrink-0 text-right">
+            <span className="sr-only">Actions</span>
           </span>
         </div>
 
@@ -226,8 +233,10 @@ export function ProcessTable({
           {processes.map((proc) => {
             const sc = getStatusConfig(proc.status);
             const isOnline = proc.status === 'online';
+            const isErrored = proc.status === 'errored';
             const isLoading = (a: string) => actionLoading === `${a}-${proc.pm_id}`;
             const logsOpen = expandedLogs === String(proc.pm_id);
+            const selected = selectedIds?.has(proc.pm_id) ?? false;
 
             const scriptName = proc.script?.split('/').pop() || proc.script || '—';
             const interpreter =
@@ -241,16 +250,29 @@ export function ProcessTable({
               proc.max_restarts > 0
                 ? `${proc.restart_time}/${proc.max_restarts}`
                 : String(proc.restart_time);
-
-            const selectBox = onToggleSelect ? (
-              <input
-                type="checkbox"
-                checked={selectedIds?.has(proc.pm_id) ?? false}
-                onChange={() => onToggleSelect(proc.pm_id)}
-                aria-label={`Select ${proc.name}`}
-                className="mt-0.5 size-3.5 shrink-0 cursor-pointer rounded border-border bg-surface-muted accent-brand-500 lg:mt-0"
-              />
-            ) : null;
+            const metrics = [
+              {
+                label: 'CPU',
+                value: isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—',
+                muted: !isOnline,
+              },
+              {
+                label: 'Memory',
+                value: isOnline ? formatBytes(proc.monit.memory) : '—',
+                muted: !isOnline,
+              },
+              {
+                label: 'Uptime',
+                value: isOnline ? formatUptime(proc.pm_uptime) : '—',
+                muted: !isOnline,
+              },
+              {
+                label: 'Restarts',
+                value: restartValue,
+                muted: proc.restart_time === 0,
+                danger: restartDanger,
+              },
+            ];
 
             const actions = (
               <div className="flex shrink-0 items-center gap-0.5">
@@ -263,6 +285,8 @@ export function ProcessTable({
                   )}
                   onClick={() => setExpandedLogs(logsOpen ? null : String(proc.pm_id))}
                   title={logsOpen ? 'Hide logs' : 'View logs'}
+                  aria-label={`${logsOpen ? 'Hide' : 'View'} logs for ${proc.name}`}
+                  aria-expanded={logsOpen}
                 >
                   <ScrollText className="size-3.5" />
                   <span className={cn(compact ? 'hidden' : 'hidden md:inline')}>
@@ -275,9 +299,10 @@ export function ProcessTable({
                     variant="ghost"
                     size="icon-sm"
                     className="text-muted-foreground hover:text-foreground"
-                    onClick={() => runAction('stop', proc)}
-                    disabled={!!isLoading('stop')}
+                    onClick={() => setConfirmTarget({ action: 'stop', process: proc })}
+                    disabled={isLoading('stop')}
                     title="Stop"
+                    aria-label={`Stop ${proc.name}`}
                   >
                     {isLoading('stop') ? (
                       <RotateCw className="size-3.5 animate-spin" />
@@ -291,8 +316,9 @@ export function ProcessTable({
                     size="icon-sm"
                     className="text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
                     onClick={() => runAction('restart', proc)}
-                    disabled={!!isLoading('restart')}
+                    disabled={isLoading('restart')}
                     title="Start"
+                    aria-label={`Start ${proc.name}`}
                   >
                     {isLoading('restart') ? (
                       <RotateCw className="size-3.5 animate-spin" />
@@ -314,17 +340,28 @@ export function ProcessTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
+                    {proc.project_id && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/projects/${proc.project_id}`}>
+                            <ExternalLink className="mr-2 size-4" />
+                            Open project
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem
                       onClick={() => runAction('restart', proc)}
-                      disabled={!!isLoading('restart')}
+                      disabled={isLoading('restart')}
                     >
                       <RotateCw className="mr-2 size-4" />
-                      Restart
+                      {isOnline ? 'Restart' : 'Start'}
                     </DropdownMenuItem>
                     {isOnline && (
                       <DropdownMenuItem
                         onClick={() => runAction('reload', proc)}
-                        disabled={!!isLoading('reload')}
+                        disabled={isLoading('reload')}
                       >
                         <RefreshCcw className="mr-2 size-4" />
                         Reload (graceful)
@@ -332,8 +369,8 @@ export function ProcessTable({
                     )}
                     {isOnline && (
                       <DropdownMenuItem
-                        onClick={() => runAction('stop', proc)}
-                        disabled={!!isLoading('stop')}
+                        onClick={() => setConfirmTarget({ action: 'stop', process: proc })}
+                        disabled={isLoading('stop')}
                       >
                         <Square className="mr-2 size-4" />
                         Stop
@@ -342,7 +379,7 @@ export function ProcessTable({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onClick={() => setDeleteTarget(proc)}
+                      onClick={() => setConfirmTarget({ action: 'delete', process: proc })}
                     >
                       <Trash2 className="mr-2 size-4" />
                       Delete
@@ -352,174 +389,171 @@ export function ProcessTable({
               </div>
             );
 
-            const logPanel = logsOpen ? (
-              <div className="border-t border-border">
-                <ProcessLogViewer
-                  target={String(proc.pm_id)}
-                  processName={proc.name}
-                  onClose={() => setExpandedLogs(null)}
-                />
-              </div>
-            ) : null;
+            const details = !compact && (
+              <>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <span
+                    className="inline-flex min-w-0 max-w-[260px] items-center gap-1 font-mono"
+                    title={commandTitle}
+                  >
+                    <Terminal className="size-3 shrink-0 opacity-60" />
+                    <span className="truncate">{command}</span>
+                  </span>
+                  {isOnline && proc.pid > 0 && <span className="tabular-nums">PID {proc.pid}</span>}
+                  <span>{formatExecMode(proc.exec_mode)}</span>
+                  {proc.instances > 1 && <span>{proc.instances} instances</span>}
+                  {isErrored && proc.exit_code != null && (
+                    <span className="text-red-600 dark:text-red-400">exit {proc.exit_code}</span>
+                  )}
+                  {proc.unstable_restarts > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {proc.unstable_restarts} unstable restart
+                      {proc.unstable_restarts === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+
+                {proc.cwd && (
+                  <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <FolderOpen className="size-3 shrink-0 opacity-60" />
+                    <code className="min-w-0 truncate font-mono" title={proc.cwd}>
+                      {proc.cwd}
+                    </code>
+                    <button
+                      type="button"
+                      className="shrink-0 cursor-pointer rounded p-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      title="Copy path"
+                      aria-label={`Copy working directory of ${proc.name}`}
+                      onClick={() => {
+                        navigator.clipboard.writeText(proc.cwd);
+                        setCopiedId(proc.pm_id);
+                        toast.success('Path copied');
+                        setTimeout(() => setCopiedId((v) => (v === proc.pm_id ? null : v)), 2000);
+                      }}
+                    >
+                      {copiedId === proc.pm_id ? (
+                        <Check className="size-3 text-emerald-700 dark:text-emerald-400" />
+                      ) : (
+                        <Copy className="size-3" />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
+            );
 
             return (
               <div
                 key={proc.pm_id}
-                className={cn(selectedIds?.has(proc.pm_id) && 'bg-surface-muted/50')}
+                className={cn(isErrored && 'bg-red-500/[0.04]', selected && 'bg-surface-muted/50')}
               >
                 <div
                   className={cn(
-                    'flex items-start gap-3 px-4 transition-colors hover:bg-surface-muted/40 lg:items-center lg:gap-4',
-                    compact ? 'py-2' : 'py-3',
+                    'px-4 transition-colors hover:bg-surface-muted/40',
+                    compact ? 'py-1.5' : 'py-3',
                   )}
                 >
-                  {selectBox}
-                  <span
-                    className={cn('mt-1.5 size-2 shrink-0 rounded-full lg:mt-0', sc.dot)}
-                    aria-hidden
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="truncate text-sm font-medium text-foreground">
-                        {proc.name}
-                      </span>
-                      <span className={cn('text-[11px] font-medium', sc.text)}>{sc.label}</span>
-                      <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
-                        #{proc.pm_id}
-                      </span>
-                    </div>
-
-                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                      <span
-                        className="inline-flex min-w-0 max-w-[260px] items-center gap-1 font-mono"
-                        title={commandTitle}
-                      >
-                        <Terminal className="size-3 shrink-0 opacity-60" />
-                        <span className="truncate">{command}</span>
-                      </span>
-                      {isOnline && proc.pid > 0 && (
-                        <span className="tabular-nums">PID {proc.pid}</span>
-                      )}
-                      <span>{formatExecMode(proc.exec_mode)}</span>
-                      {proc.instances > 1 && <span>{proc.instances} instances</span>}
-                      {proc.status === 'errored' && proc.exit_code != null && (
-                        <span className="text-red-600 dark:text-red-400">
-                          exit {proc.exit_code}
-                        </span>
-                      )}
-                      {proc.unstable_restarts > 0 && (
-                        <span className="text-amber-600 dark:text-amber-400">
-                          {proc.unstable_restarts} unstable restart
-                          {proc.unstable_restarts === 1 ? '' : 's'}
-                        </span>
-                      )}
-                    </div>
-
-                    {proc.cwd && (
-                      <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <FolderOpen className="size-3 shrink-0 opacity-60" />
-                        <code
-                          className="min-w-0 truncate rounded bg-surface-muted px-1 py-px font-mono text-foreground"
-                          title={proc.cwd}
-                        >
-                          {proc.cwd}
-                        </code>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
-                          title="Copy path"
-                          onClick={() => {
-                            navigator.clipboard.writeText(proc.cwd);
-                            setCopiedId(proc.pm_id);
-                            toast.success('Path copied');
-                            setTimeout(
-                              () => setCopiedId((v) => (v === proc.pm_id ? null : v)),
-                              2000,
-                            );
-                          }}
-                        >
-                          {copiedId === proc.pm_id ? (
-                            <Check className="size-3 text-emerald-400" />
-                          ) : (
-                            <Copy className="size-3" />
-                          )}
-                        </button>
-                      </div>
+                  <div className="flex items-center gap-3 lg:gap-4">
+                    {onToggleSelect && (
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => onToggleSelect(proc.pm_id)}
+                        aria-label={`Select ${proc.name}`}
+                        className="size-4 shrink-0 cursor-pointer rounded border-border bg-surface-muted accent-brand-500"
+                      />
                     )}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground lg:hidden">
-                      <span className="flex items-center gap-1" title="CPU">
-                        <Cpu className="size-3" />
-                        <span className="font-mono text-foreground tabular-nums">
-                          {isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—'}
+                    <span className={cn('size-2 shrink-0 rounded-full', sc.dot)} aria-hidden />
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {proc.project_id ? (
+                          <Link
+                            href={`/projects/${proc.project_id}`}
+                            className="max-w-full truncate rounded-sm text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {proc.name}
+                          </Link>
+                        ) : (
+                          <span className="max-w-full truncate text-sm font-medium text-foreground">
+                            {proc.name}
+                          </span>
+                        )}
+                        <span className={cn('shrink-0 text-[11px] font-medium', sc.text)}>
+                          {sc.label}
                         </span>
-                      </span>
-                      <span className="flex items-center gap-1" title="Memory">
-                        <MemoryStick className="size-3" />
-                        <span className="font-mono text-foreground tabular-nums">
-                          {isOnline ? formatBytes(proc.monit.memory) : '—'}
+                        <span className="hidden shrink-0 font-mono text-[11px] text-muted-foreground sm:inline">
+                          #{proc.pm_id}
                         </span>
-                      </span>
-                      <span className="flex items-center gap-1" title="Uptime">
-                        <Clock className="size-3" />
-                        <span className="font-mono text-foreground tabular-nums">
-                          {isOnline ? formatUptime(proc.pm_uptime) : '—'}
-                        </span>
-                      </span>
-                      <span className="flex items-center gap-1" title="Restarts">
-                        <RotateCw className="size-3" />
-                        <span
-                          className={cn(
-                            'font-mono tabular-nums',
-                            restartDanger ? 'text-red-600 dark:text-red-400' : 'text-foreground',
-                          )}
-                        >
-                          {restartValue}
-                        </span>
-                      </span>
+                      </div>
+                      {details && <div className="mt-1 hidden lg:block">{details}</div>}
+                    </div>
+
+                    {/* Desktop metrics */}
+                    <div className="hidden w-[340px] shrink-0 grid-cols-4 items-center gap-4 lg:grid">
+                      {metrics.map((metric) => (
+                        <RowMetric
+                          key={metric.label}
+                          value={metric.value}
+                          muted={metric.muted}
+                          danger={metric.danger}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="flex w-auto shrink-0 items-center justify-end lg:w-[132px]">
+                      {actions}
                     </div>
                   </div>
 
-                  {/* Desktop metrics */}
-                  <div className="hidden w-[340px] shrink-0 grid-cols-4 items-center gap-4 lg:grid">
-                    <RowMetric
-                      value={isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—'}
-                      muted={!isOnline}
-                    />
-                    <RowMetric
-                      value={isOnline ? formatBytes(proc.monit.memory) : '—'}
-                      muted={!isOnline}
-                    />
-                    <RowMetric
-                      value={isOnline ? formatUptime(proc.pm_uptime) : '—'}
-                      muted={!isOnline}
-                    />
-                    <RowMetric
-                      value={restartValue}
-                      muted={proc.restart_time === 0}
-                      danger={restartDanger}
-                    />
-                  </div>
-
-                  <div className="flex w-auto shrink-0 items-center justify-end lg:w-[132px]">
-                    {actions}
+                  {/* Below lg the details get the row's full width. */}
+                  <div className="mt-2 lg:hidden">
+                    {details && <div className="mb-2.5">{details}</div>}
+                    <dl className="grid grid-cols-4 gap-2">
+                      {metrics.map((metric) => (
+                        <div key={metric.label} className="min-w-0">
+                          <dt className="text-[11px] text-muted-foreground">{metric.label}</dt>
+                          <dd className="truncate">
+                            <RowMetric
+                              value={metric.value}
+                              muted={metric.muted}
+                              danger={metric.danger}
+                            />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
                   </div>
                 </div>
-                {logPanel}
+
+                {logsOpen && (
+                  <div className="border-t border-border">
+                    <ProcessLogViewer
+                      target={String(proc.pm_id)}
+                      processName={proc.name}
+                      onClose={() => setExpandedLogs(null)}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Delete confirmation dialog */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      {/* Stopping or deleting takes a service down, so both ask first. */}
+      <AlertDialog open={!!confirmTarget} onOpenChange={(open) => !open && setConfirmTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete process</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirmTarget?.action === 'delete'
+                ? `Delete ${confirmTarget.process.name}?`
+                : `Stop ${confirmTarget?.process.name}?`}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will stop <strong>{deleteTarget?.name}</strong> and remove it from PM0. Its pm_id
-              may be reused. This action cannot be undone.
+              {confirmTarget?.action === 'delete'
+                ? 'This stops the process and removes it from PM0. Its ID may be reused. This cannot be undone.'
+                : 'Anything it serves becomes unavailable until you start it again.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -527,11 +561,11 @@ export function ProcessTable({
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                if (deleteTarget) runAction('delete', deleteTarget);
-                setDeleteTarget(null);
+                if (confirmTarget) runAction(confirmTarget.action, confirmTarget.process);
+                setConfirmTarget(null);
               }}
             >
-              Delete
+              {confirmTarget?.action === 'delete' ? 'Delete' : 'Stop process'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

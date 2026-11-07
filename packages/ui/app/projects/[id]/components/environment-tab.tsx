@@ -201,11 +201,11 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-foreground">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-foreground">
                 <KeyRound className="h-4 w-4" />
               </span>
               <div>
-                <CardTitle className="text-xl">Environment Variables</CardTitle>
+                <CardTitle>Environment variables</CardTitle>
                 <CardDescription className="mt-1">
                   Variables defined here are encrypted and injected into your build and runtime
                   environments.
@@ -226,7 +226,7 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
                 }`}
               >
                 <ListFilter className="h-3.5 w-3.5" />
-                Table View
+                Table view
               </button>
               <button
                 type="button"
@@ -252,11 +252,11 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
               >
                 {showValues ? (
                   <>
-                    <EyeOff className="h-3.5 w-3.5" /> Hide Values
+                    <EyeOff className="h-3.5 w-3.5" /> Hide values
                   </>
                 ) : (
                   <>
-                    <Eye className="h-3.5 w-3.5" /> Show Values
+                    <Eye className="h-3.5 w-3.5" /> Show values
                   </>
                 )}
               </Button>
@@ -270,7 +270,7 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
                 onClick={addRow}
                 className="h-8 gap-1.5 text-xs"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Variable
+                <Plus className="h-3.5 w-3.5" /> Add variable
               </Button>
             )}
           </div>
@@ -304,24 +304,28 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
                   Clicking apply will parse these lines into the structured table.
                 </p>
                 <Button size="sm" onClick={handleApplyRaw} className="gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" /> Apply to Table
+                  <Sparkles className="h-3.5 w-3.5" /> Apply to table
                 </Button>
               </div>
             </div>
           ) : (
             <div className="space-y-3">
               {vars.length > 0 && (
-                <div className="grid grid-cols-[1fr_1.5fr_auto] gap-3 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="hidden grid-cols-[1fr_1.5fr_2.25rem] gap-3 px-1 text-xs font-medium text-muted-foreground sm:grid">
                   <span>Key</span>
                   <span>Value</span>
-                  <span className="w-9 text-center">Action</span>
+                  <span className="sr-only">Actions</span>
                 </div>
               )}
 
               {vars.map((row, index) => (
-                <div key={index} className="grid grid-cols-[1fr_1.5fr_auto] items-center gap-3">
+                <div
+                  key={index}
+                  className="grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-x-3 gap-y-2 border-b border-border pb-3 last:border-0 last:pb-0 sm:grid-cols-[1fr_1.5fr_2.25rem] sm:border-0 sm:pb-0"
+                >
                   <Input
                     placeholder="VARIABLE_NAME"
+                    aria-label="Variable name"
                     value={row.key}
                     onChange={(e) => updateRow(index, 'key', e.target.value)}
                     onPaste={(e) => handleInlinePaste(e, index)}
@@ -329,19 +333,21 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
                   />
                   <Input
                     placeholder="value"
+                    aria-label={`Value for ${row.key || 'variable'}`}
                     type={showValues ? 'text' : 'password'}
                     value={row.value}
                     onChange={(e) => updateRow(index, 'value', e.target.value)}
                     onPaste={(e) => handleInlinePaste(e, index)}
-                    className="font-mono text-xs"
+                    className="col-start-1 row-start-2 font-mono text-xs sm:col-start-2 sm:row-start-1"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="col-start-2 row-span-2 row-start-1 h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:col-start-3 sm:row-span-1"
                     onClick={() => removeRow(index)}
                     title="Delete variable"
+                    aria-label={`Delete ${row.key || 'variable'}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -371,7 +377,7 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
                       addRow();
                     }}
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add Variable
+                    <Plus className="h-3.5 w-3.5" /> Add variable
                   </Button>
                 </div>
               )}
@@ -409,7 +415,7 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
                   ) : (
                     <Save className="h-3.5 w-3.5" />
                   )}
-                  Save Changes
+                  Save changes
                 </Button>
               </div>
             </div>
@@ -417,10 +423,10 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
         </CardContent>
       </Card>
 
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-xs text-muted-foreground">
+      <div className="flex items-start gap-3 surface-card rounded-xl border border-border bg-card p-4 text-xs text-muted-foreground">
         <Info className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
         <div className="space-y-1">
-          <p className="font-medium text-foreground">Next Deployment Required</p>
+          <p className="font-medium text-foreground">Next deployment required</p>
           <p>
             Environment variable updates are encrypted at rest and will automatically be supplied to
             your app during its next build and deployment.

@@ -78,7 +78,7 @@ export function RepositoryList({ repositories, loading, onSelect }: RepositoryLi
             filteredRepos.map((repo) => (
               <div
                 key={repo.id}
-                className="group flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-4 transition-colors duration-150 hover:border-border-strong hover:bg-surface-muted/50 sm:flex-row sm:items-center sm:gap-0"
+                className="group flex flex-col justify-between gap-4 surface-card rounded-xl border border-border bg-card p-4 transition-colors duration-150 hover:border-border-strong hover:bg-surface-muted/50 sm:flex-row sm:items-center sm:gap-0"
               >
                 <div className="flex min-w-0 items-start gap-4">
                   <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted">

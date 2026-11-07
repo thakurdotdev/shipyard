@@ -1,19 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Check,
-  Copy,
-  Cpu,
-  FolderOpen,
-  HardDrive,
-  Loader2,
-  RotateCw,
-  Server,
-  Square,
-  Terminal,
-} from 'lucide-react';
+import { Check, Copy, FolderOpen, Loader2, RotateCw, Server, Square, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatUptime } from '@/lib/format';
+import { isStaticFramework } from '@/lib/framework-config';
 import { pm0Api, type PM0Process } from '@/lib/pm0-api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,12 +34,34 @@ function formatMemory(bytes: number): string {
 }
 
 function statusColor(status: string): string {
-  if (status === 'online') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400';
-  if (status === 'errored') return 'border-red-500/20 bg-red-500/10 text-red-400';
-  return 'border-amber-500/20 bg-amber-500/10 text-amber-400';
+  if (status === 'online')
+    return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400';
+  if (status === 'errored') return 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400';
+  return 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400';
 }
 
-export function ProjectProcessCard({ projectId }: { projectId: string }) {
+function Stat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <div className="min-w-0 bg-card px-4 py-3 sm:px-5">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p
+        className={`mt-0.5 truncate text-sm font-semibold tabular-nums ${
+          danger ? 'text-red-700 dark:text-red-400' : ''
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+export function ProjectProcessCard({
+  projectId,
+  appType,
+}: {
+  projectId: string;
+  appType?: string;
+}) {
   const [process, setProcess] = useState<PM0Process | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +100,7 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
     try {
       if (nextAction === 'restart') {
         await pm0Api.restartProcess(String(process.pm_id));
-        toast.success('Process restarted');
+        toast.success(process.status === 'online' ? 'Process restarted' : 'Process started');
       } else {
         await pm0Api.stopProcess(String(process.pm_id));
         toast.success('Process stopped');
@@ -101,17 +114,24 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
     }
   };
 
+  // Static sites are served by Nginx, so having no process is the normal state.
+  if (!loading && !process && !error && appType && isStaticFramework(appType)) return null;
+
+  const online = process?.status === 'online';
+  const restartsExhausted =
+    !!process && process.max_restarts > 0 && process.restart_time >= process.max_restarts;
+
   return (
     <>
-      <Card className="gap-0 overflow-hidden border-border bg-card p-0 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+      <Card className="gap-0 overflow-hidden border-border bg-card p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="rounded-lg border border-border bg-surface-muted p-2 text-muted-foreground">
               <Server className="h-4 w-4" />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-semibold">Managed process</h2>
+                <h2 className="text-sm font-semibold">Process</h2>
                 {process && (
                   <Badge
                     variant="outline"
@@ -121,85 +141,80 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
                   </Badge>
                 )}
               </div>
-              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                {process?.name ?? (loading ? 'Checking PM0…' : 'PM0')}
-              </p>
+              {process && (
+                <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                  {process.name} · #{process.pm_id}
+                  {online && process.pid > 0 ? ` · PID ${process.pid}` : ''}
+                  {process.status === 'errored' && process.exit_code != null
+                    ? ` · exit ${process.exit_code}`
+                    : ''}
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {process && (
-              <>
+          {process && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => setLogsOpen(true)}
+              >
+                <Terminal className="h-3.5 w-3.5" /> Logs
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                disabled={action !== null}
+                onClick={() => void runAction('restart')}
+              >
+                {action === 'restart' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCw className="h-3.5 w-3.5" />
+                )}
+                {online ? 'Restart' : 'Start'}
+              </Button>
+              {online && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 gap-1.5"
-                  onClick={() => setLogsOpen(true)}
-                >
-                  <Terminal className="h-3.5 w-3.5" /> Logs
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5"
+                  className="h-8 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400"
                   disabled={action !== null}
-                  onClick={() => void runAction('restart')}
-                >
-                  {action === 'restart' ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RotateCw className="h-3.5 w-3.5" />
-                  )}
-                  {process.status === 'online' ? 'Restart' : 'Start'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
-                  disabled={action !== null || process.status !== 'online'}
                   onClick={() => setStopDialogOpen(true)}
                 >
                   <Square className="h-3 w-3" /> Stop
                 </Button>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         {process ? (
-          <div className="grid grid-cols-2 divide-x divide-border sm:grid-cols-3">
-            <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
-              <Cpu className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">CPU</p>
-                <p className="text-sm font-semibold tabular-nums">
-                  {(process.monit?.cpu ?? 0).toFixed(1)}%
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
-              <HardDrive className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Memory</p>
-                <p className="text-sm font-semibold tabular-nums">
-                  {formatMemory(process.monit?.memory ?? 0)}
-                </p>
-              </div>
-            </div>
-            <div className="col-span-2 flex items-center gap-2 border-t border-border px-4 py-2.5 text-xs text-muted-foreground sm:col-span-1 sm:border-l sm:border-t-0 sm:px-5">
-              Process ID <span className="font-mono text-foreground">{process.pm_id}</span>
-              {process.pid > 0 && (
-                <>
-                  <span>·</span> PID{' '}
-                  <span className="font-mono text-foreground">{process.pid}</span>
-                </>
-              )}
+          <>
+            <div className="grid grid-cols-2 gap-px border-t border-border bg-border sm:grid-cols-4">
+              <Stat label="CPU" value={online ? `${(process.monit?.cpu ?? 0).toFixed(1)}%` : '—'} />
+              <Stat
+                label="Memory"
+                value={online ? formatMemory(process.monit?.memory ?? 0) : '—'}
+              />
+              <Stat label="Uptime" value={online ? formatUptime(process.pm_uptime) : '—'} />
+              <Stat
+                label="Restarts"
+                value={
+                  process.max_restarts > 0
+                    ? `${process.restart_time} of ${process.max_restarts}`
+                    : String(process.restart_time)
+                }
+                danger={restartsExhausted}
+              />
             </div>
             {process.cwd && (
-              <div className="col-span-2 flex items-center gap-2 border-t border-border px-4 py-2.5 sm:col-span-3 sm:px-5">
+              <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 sm:px-5">
                 <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Dir</span>
                 <code
-                  className="min-w-0 flex-1 truncate rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
+                  className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
                   title={process.cwd}
                 >
                   {process.cwd}
@@ -209,6 +224,7 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
                   size="sm"
                   className="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-foreground"
                   title="Copy path"
+                  aria-label="Copy working directory path"
                   onClick={() => {
                     navigator.clipboard.writeText(process.cwd);
                     setCopied(true);
@@ -217,19 +233,19 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
                   }}
                 >
                   {copied ? (
-                    <Check className="h-3 w-3 text-emerald-400" />
+                    <Check className="h-3 w-3 text-emerald-700 dark:text-emerald-400" />
                   ) : (
                     <Copy className="h-3 w-3" />
                   )}
                 </Button>
               </div>
             )}
-          </div>
+          </>
         ) : (
-          <div className="px-4 py-3 text-sm text-muted-foreground sm:px-5">
+          <div className="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5">
             {loading
-              ? 'Loading process status and resource usage…'
-              : error || 'No PM0 process is linked to this project.'}
+              ? 'Checking PM0…'
+              : error || 'No PM0 process is linked to this project yet. Deploy to start one.'}
           </div>
         )}
       </Card>
@@ -267,7 +283,7 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
                 event.preventDefault();
                 void runAction('stop');
               }}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={action !== null}
             >
               Stop process
