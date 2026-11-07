@@ -15,6 +15,8 @@ export interface Project {
   github_installation_id: string | null;
   auto_deploy: boolean;
   auto_deploy_paths: string | null;
+  /** Builds kept after each successful deploy; null keeps all. */
+  keep_builds?: number | null;
   created_at: string;
   updated_at: string;
   latest_build?: Pick<Build, 'id' | 'status' | 'created_at' | 'completed_at'> | null;

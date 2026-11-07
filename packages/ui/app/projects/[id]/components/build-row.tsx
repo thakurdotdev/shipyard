@@ -108,6 +108,9 @@ interface BuildRowProps {
   onDelete?: () => void;
   deleting?: boolean;
   deleteDisabled?: boolean;
+  /** Present on lists that support bulk selection. */
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 export function BuildRow({
@@ -120,6 +123,8 @@ export function BuildRow({
   onDelete,
   deleting,
   deleteDisabled,
+  selected,
+  onToggleSelect,
 }: BuildRowProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const shortId = build.id.slice(0, 8);
@@ -135,6 +140,20 @@ export function BuildRow({
   return (
     <div className="flex flex-col gap-3 px-4 py-3.5 transition-colors hover:bg-surface-muted/30 sm:flex-row sm:items-center sm:px-5">
       <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+        {onToggleSelect !== undefined &&
+          (onDelete && !isCurrent ? (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={onToggleSelect}
+              disabled={deleteDisabled}
+              aria-label={`Select build ${shortId}`}
+              className="mt-2.5 size-4 shrink-0 cursor-pointer rounded border-border accent-brand-500 sm:mt-0"
+            />
+          ) : (
+            // Keeps rows aligned where the build can't be deleted.
+            <span className="size-4 shrink-0" aria-hidden="true" />
+          ))}
         <span
           className={cn(
             'flex size-9 shrink-0 items-center justify-center rounded-lg border',

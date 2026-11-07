@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "keep_builds" integer;

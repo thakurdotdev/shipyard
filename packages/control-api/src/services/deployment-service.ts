@@ -268,6 +268,11 @@ export const DeploymentService = {
           'active',
           'Application is live! 🎉',
         );
+
+        // Retention runs after the switch, so a failed deploy never deletes anything.
+        void import('./build-retention')
+          .then(({ pruneProjectBuilds }) => pruneProjectBuilds(projectId, buildId))
+          .catch((error) => console.error('[DeploymentService] Build retention failed:', error));
       } catch (dbError: any) {
         console.error(
           `[DeploymentService] Database transaction FAILED for build ${buildId}:`,

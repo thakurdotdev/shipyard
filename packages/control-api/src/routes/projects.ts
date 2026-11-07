@@ -8,6 +8,7 @@ import { deployments, uptimeMonitors } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { DeploymentService } from '../services/deployment-service';
 import { AppType, APP_TYPES, isStaticFramework } from '../config/framework-config';
+import { MAX_KEEP_BUILDS, MIN_KEEP_BUILDS } from '../services/build-retention';
 import { EventStreamService } from '../services/event-stream-service';
 
 const appTypeSchema = t.Union(
@@ -154,6 +155,9 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         port: t.Optional(t.Integer({ minimum: 1024, maximum: 65535 })),
         auto_deploy: t.Optional(t.Boolean()),
         auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
+        keep_builds: t.Optional(
+          t.Union([t.Integer({ minimum: MIN_KEEP_BUILDS, maximum: MAX_KEEP_BUILDS }), t.Null()]),
+        ),
       }),
     },
   )

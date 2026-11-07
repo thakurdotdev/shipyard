@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { Trash2, GitBranch, Settings2, Save, Loader2 } from 'lucide-react';
+import { Trash2, GitBranch, Settings2, Save, Loader2, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,6 +49,11 @@ export function SettingsTab({ project }: SettingsTabProps) {
     .replace(/\/$/, '');
   const [savingAutoDeployPaths, setSavingAutoDeployPaths] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [keepBuilds, setKeepBuilds] = useState<number | null>(project.keep_builds ?? null);
+  const [savingRetention, setSavingRetention] = useState(false);
+  const retentionOptions = Array.from(
+    new Set([2, 3, 5, 10, ...(keepBuilds ? [keepBuilds] : [])]),
+  ).sort((a, b) => a - b);
 
   // Build settings state
   const [buildCommand, setBuildCommand] = useState(project.build_command);
@@ -146,6 +151,28 @@ export function SettingsTab({ project }: SettingsTabProps) {
       });
     } finally {
       setSavingAutoDeployPaths(false);
+    }
+  };
+
+  const handleRetentionChange = async (value: string) => {
+    const next = value === 'all' ? null : Number(value);
+    const previous = keepBuilds;
+    setKeepBuilds(next);
+    setSavingRetention(true);
+    try {
+      await api.updateProject(project.id, { keep_builds: next });
+      toast.success('Build retention saved', {
+        description: next
+          ? `After each successful deploy, builds older than the newest ${next} are deleted.`
+          : 'Every build is kept.',
+      });
+    } catch (e: any) {
+      setKeepBuilds(previous);
+      toast.error('Failed to save build retention', {
+        description: e.message || 'An unexpected error occurred',
+      });
+    } finally {
+      setSavingRetention(false);
     }
   };
 
@@ -357,6 +384,46 @@ export function SettingsTab({ project }: SettingsTabProps) {
             </CardContent>
           </Card>
         )}
+
+        {/* Build retention */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Archive className="w-5 h-5" />
+              Build retention
+            </CardTitle>
+            <CardDescription>
+              Delete old builds automatically to free disk space on the server.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-[minmax(0,16rem)_1fr] sm:items-start">
+            <div className="space-y-2">
+              <Label htmlFor="keep-builds">Keep</Label>
+              <Select
+                value={keepBuilds ? String(keepBuilds) : 'all'}
+                onValueChange={handleRetentionChange}
+                disabled={savingRetention}
+              >
+                <SelectTrigger id="keep-builds" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All builds</SelectItem>
+                  {retentionOptions.map((count) => (
+                    <SelectItem key={count} value={String(count)}>
+                      Newest {count} builds
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground sm:pt-7">
+              {keepBuilds
+                ? `After each successful deploy, builds beyond the newest ${keepBuilds} are deleted along with their logs and files. The live build is always kept, so you can still roll back to anything that remains.`
+                : 'Every build is kept until you delete it. You can also select builds to delete on the Deployments tab.'}
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Danger zone */}
         <Card className="flex-col gap-4 border-red-500/25 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
