@@ -66,6 +66,11 @@ function ProjectDetailsContent() {
     const handleBuildUpdated = (e: MessageEvent) => {
       try {
         const updatedBuild = JSON.parse(e.data);
+        // Deletions (manual, bulk, or retention) arrive as { id, deleted: true }.
+        if (updatedBuild.deleted) {
+          setBuilds((prev) => prev.filter((b) => b.id !== updatedBuild.id));
+          return;
+        }
         setBuilds((prev) => {
           const exists = prev.find((b) => b.id === updatedBuild.id);
           if (exists) {
@@ -299,6 +304,7 @@ function ProjectDetailsContent() {
               }
               activeDeployment={activeDeployment}
               deploymentStatus={deploymentStatus}
+              keepBuilds={project.keep_builds}
             />
           </TabsContent>
 
