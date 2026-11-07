@@ -1,7 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Cpu, HardDrive, Loader2, RotateCw, Server, Square, Terminal } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Cpu,
+  FolderOpen,
+  HardDrive,
+  Loader2,
+  RotateCw,
+  Server,
+  Square,
+  Terminal,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { pm0Api, type PM0Process } from '@/lib/pm0-api';
 import { Card } from '@/components/ui/card';
@@ -44,6 +55,7 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
   const [action, setAction] = useState<'restart' | 'stop' | null>(null);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -182,6 +194,36 @@ export function ProjectProcessCard({ projectId }: { projectId: string }) {
                 </>
               )}
             </div>
+            {process.cwd && (
+              <div className="col-span-2 flex items-center gap-2 border-t border-border px-4 py-2.5 sm:col-span-3 sm:px-5">
+                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Dir</span>
+                <code
+                  className="min-w-0 flex-1 truncate rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
+                  title={process.cwd}
+                >
+                  {process.cwd}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                  title="Copy path"
+                  onClick={() => {
+                    navigator.clipboard.writeText(process.cwd);
+                    setCopied(true);
+                    toast.success('Path copied to clipboard');
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                >
+                  {copied ? (
+                    <Check className="h-3 w-3 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="px-4 py-3 text-sm text-muted-foreground sm:px-5">

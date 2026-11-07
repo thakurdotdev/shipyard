@@ -32,6 +32,9 @@ import {
   MemoryStick,
   Clock,
   Terminal,
+  FolderOpen,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -146,6 +149,7 @@ export function ProcessTable({
   const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PM0Process | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const runAction = async (
     action: 'stop' | 'restart' | 'reload' | 'delete',
@@ -412,7 +416,37 @@ export function ProcessTable({
                       )}
                     </div>
 
-                    {/* Inline metrics for narrow screens */}
+                    {proc.cwd && (
+                      <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <FolderOpen className="size-3 shrink-0 opacity-60" />
+                        <code
+                          className="min-w-0 truncate rounded bg-surface-muted px-1 py-px font-mono text-foreground"
+                          title={proc.cwd}
+                        >
+                          {proc.cwd}
+                        </code>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                          title="Copy path"
+                          onClick={() => {
+                            navigator.clipboard.writeText(proc.cwd);
+                            setCopiedId(proc.pm_id);
+                            toast.success('Path copied');
+                            setTimeout(
+                              () => setCopiedId((v) => (v === proc.pm_id ? null : v)),
+                              2000,
+                            );
+                          }}
+                        >
+                          {copiedId === proc.pm_id ? (
+                            <Check className="size-3 text-emerald-400" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </button>
+                      </div>
+                    )}
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground lg:hidden">
                       <span className="flex items-center gap-1" title="CPU">
                         <Cpu className="size-3" />
