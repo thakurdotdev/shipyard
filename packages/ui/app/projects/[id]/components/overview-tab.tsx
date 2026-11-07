@@ -135,7 +135,7 @@ export function OverviewTab({
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold">Health & domain</span>
                     <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                      {project.domain || 'No public domain'}
+                      Uptime checks, DNS and SSL
                     </span>
                   </span>
                 </span>

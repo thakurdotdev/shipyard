@@ -126,79 +126,83 @@ export function ProjectHeader({
     );
   }
 
+  const meta = 'inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground';
+
   return (
     <header className="border-b border-border bg-background/95 backdrop-blur lg:sticky lg:top-16 lg:z-30">
-      <div className="page-width flex flex-col gap-3 py-3.5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <Link
-            href="/"
-            className="mb-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-3" /> All projects
-          </Link>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <h1 className="max-w-full truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-              {project.name}
-            </h1>
-            {statusBadge}
-            {project.domain && (
+      <div className="page-width py-3">
+        <Link
+          href="/"
+          className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-3" /> All projects
+        </Link>
+
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            {project.name}
+          </h1>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="outline" size="icon" className="size-9" asChild>
               <a
-                href={liveUrl ?? undefined}
+                href={project.github_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-w-0 max-w-64 items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                aria-label="Open GitHub repository"
+                title="Open GitHub repository"
               >
-                <Globe className="size-3.5 shrink-0" />
-                <span className="truncate">{project.domain}</span>
+                <Github className="h-4 w-4" />
               </a>
-            )}
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Code2 className="size-3.5" />
-              {getFrameworkOption(project.app_type)?.label ?? project.app_type}
-            </span>
-            {project.github_branch && (
-              <span className="inline-flex max-w-40 items-center gap-1.5 truncate text-xs text-muted-foreground">
-                <GitBranch className="size-3.5 shrink-0" />
-                <span className="truncate">{project.github_branch}</span>
-              </span>
-            )}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() =>
+                toast.promise(onTriggerBuild(), {
+                  loading: 'Starting deployment...',
+                  success: 'Deployment started',
+                  error: 'Failed to start deployment',
+                })
+              }
+              disabled={isBusy}
+              className="h-9 gap-2 px-3 sm:px-4"
+            >
+              {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              <span>{isBusy ? 'Deploying' : 'Deploy'}</span>
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 lg:shrink-0">
-          <Button variant="outline" size="icon" className="size-9" asChild>
-            <a
-              href={project.github_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open GitHub repository"
-              title="Open GitHub repository"
-            >
-              <Github className="h-4 w-4" />
-            </a>
-          </Button>
-          {activeDeployment && liveUrl && (
-            <Button variant="outline" size="sm" className="h-9 gap-2" asChild>
-              <a href={liveUrl} target="_blank" rel="noopener noreferrer">
-                Open site <ArrowUpRight className="h-4 w-4" />
+        {/* One line of facts; the address is the only link to the live site. */}
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+          {statusBadge}
+          {project.domain &&
+            (activeDeployment && liveUrl ? (
+              <a
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${meta} max-w-64 font-medium text-foreground hover:underline`}
+              >
+                <Globe className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{project.domain}</span>
+                <ArrowUpRight className="size-3 shrink-0 text-muted-foreground" />
               </a>
-            </Button>
+            ) : (
+              <span className={`${meta} max-w-64`}>
+                <Globe className="size-3.5 shrink-0" />
+                <span className="truncate">{project.domain}</span>
+              </span>
+            ))}
+          <span className={meta}>
+            <Code2 className="size-3.5" />
+            {getFrameworkOption(project.app_type)?.label ?? project.app_type}
+          </span>
+          {project.github_branch && (
+            <span className={`${meta} max-w-40`}>
+              <GitBranch className="size-3.5 shrink-0" />
+              <span className="truncate">{project.github_branch}</span>
+            </span>
           )}
-          <Button
-            size="sm"
-            onClick={() =>
-              toast.promise(onTriggerBuild(), {
-                loading: 'Starting deployment...',
-                success: 'Deployment started',
-                error: 'Failed to start deployment',
-              })
-            }
-            disabled={isBusy}
-            className="h-9 gap-2 px-3 sm:px-4"
-          >
-            {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            <span>{isBusy ? 'Deploying' : 'Deploy'}</span>
-          </Button>
         </div>
       </div>
     </header>

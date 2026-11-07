@@ -143,29 +143,12 @@ export function ActiveDeploymentCard({
             className="h-8 gap-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400"
             onClick={() => setStopDialogOpen(true)}
           >
-            <StopCircle className="h-3.5 w-3.5" /> Stop deployment
+            <StopCircle className="h-3.5 w-3.5" /> Stop
+            <span className="-ml-0.5 hidden sm:inline">deployment</span>
           </Button>
         </div>
 
-        <dl className="grid grid-cols-1 gap-px border-t border-border bg-border sm:grid-cols-3">
-          <div className="min-w-0 bg-card px-4 py-3 sm:px-5">
-            <dt className="text-[11px] text-muted-foreground">Address</dt>
-            <dd className="mt-0.5 truncate text-sm font-medium">
-              {deploymentUrl ? (
-                <a
-                  href={deploymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex max-w-full items-center gap-1.5 hover:underline"
-                >
-                  <span className="truncate">{deploymentUrl.replace(/^https?:\/\//, '')}</span>
-                  <ExternalLink className="size-3 shrink-0 opacity-50" />
-                </a>
-              ) : (
-                'No public address'
-              )}
-            </dd>
-          </div>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-px border-t border-border bg-border">
           <div className="min-w-0 bg-card px-4 py-3 sm:px-5">
             <dt className="text-[11px] text-muted-foreground">Released</dt>
             <dd
