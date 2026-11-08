@@ -29,9 +29,12 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    crossSubDomainCookies: {
-      enabled: true,
-    },
+    // Other *.thakur.dev apps (e.g. SyncVibe) also use better-auth and set
+    // `__Secure-better-auth.session_token` on `.thakur.dev`. The browser sends that
+    // cookie here too, ahead of ours, and the session lookup fails. A unique
+    // prefix keeps the two cookies apart. The UI and API share one origin, so
+    // the cookie also doesn't need to be shared across subdomains.
+    cookiePrefix: 'shipyard',
     ipAddress: {
       ipAddressHeaders: ['x-forwarded-for', 'cf-connecting-ip', 'x-real-ip'],
     },
