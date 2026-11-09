@@ -6,6 +6,73 @@ const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
 const DASHBOARD_ORIGIN = process.env.DASHBOARD_ORIGIN || `https://deploy.${BASE_DOMAIN}`;
 
+/** Public path on a protected site that nginx proxies to the Control API's login page. */
+export const GATE_PATH = '/__shipyard_gate';
+const GATE_MARKER = '# shipyard-gate: on';
+
+function gateUpstream(): string {
+  const upstream = (process.env.CONTROL_API_URL || 'http://localhost:4010').replace(/\/+$/, '');
+  // Interpolated into nginx config, so anything but a plain origin is rejected.
+  if (!/^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/.test(upstream)) {
+    throw new Error(
+      'CONTROL_API_URL must be a plain http(s)://host[:port] origin to protect sites',
+    );
+  }
+  return upstream;
+}
+
+/**
+ * Password gate for a site. Every request first goes to the Control API, which accepts or
+ * rejects it from the visitor's cookie; rejected visitors get the login page at their own URL.
+ * The gate's own routes and the ACME challenge are exempt.
+ */
+function gateDirectives(): string {
+  const upstream = gateUpstream();
+  return `
+    # Password gate (managed by ShipYard)
+    auth_request /__shipyard_auth;
+    error_page 401 ${GATE_PATH}/login;
+
+    location = /__shipyard_auth {
+        internal;
+        proxy_pass ${upstream}/gate/verify;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Gate-Host $host;
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 5s;
+    }
+
+    location ^~ ${GATE_PATH}/ {
+        auth_request off;
+        client_max_body_size 4k;
+        proxy_pass ${upstream}/gate/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Gate-Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+    }
+`;
+}
+
+function acmeLocation(gated: boolean): string {
+  return `location /.well-known/acme-challenge/ { ${gated ? 'auth_request off; ' : ''}root ${CERTBOT_WEBROOT}; }`;
+}
+
+function configHeader(root: string | null, gated: boolean): string {
+  return [
+    root ? `# shipyard-static-root: ${JSON.stringify(root)}` : null,
+    gated ? GATE_MARKER : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function validateStaticRoot(root: string) {
   if (!root.startsWith('/') || /[\r\n\0"\\$]/.test(root)) {
     throw new Error('Invalid static site directory');
@@ -171,9 +238,17 @@ export const NginxService = {
     return root;
   },
 
-  generateStaticDomainConfig(sub: string, root: string | null): string {
+  /** Whether the live config for this subdomain currently has the password gate on. */
+  getGate(sub: string): boolean {
+    this.domainForSubdomain(sub);
+    const path = join(getNginxDirs().available, `${sub}.conf`);
+    return existsSync(path) && /^# shipyard-gate: on$/m.test(readFileSync(path, 'utf8'));
+  },
+
+  generateStaticDomainConfig(sub: string, root: string | null, gate?: boolean): string {
     const domain = this.domainForSubdomain(sub);
-    return `${root ? `# shipyard-static-root: ${JSON.stringify(root)}\n` : ''}
+    const gated = gate ?? this.getGate(sub);
+    return `${configHeader(root, gated)}
 server {
     listen 80;
     server_name ${domain};
@@ -188,14 +263,19 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
-    location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
-${staticDomainLocations(root)}
+    ${acmeLocation(gated)}
+${gated ? gateDirectives() : ''}${staticDomainLocations(root)}
 }
 `;
   },
 
-  async createStaticDomainConfig(sub: string, root: string, verify: () => Promise<void>) {
-    await this.applyDomainConfig(sub, this.generateStaticDomainConfig(sub, root), verify);
+  async createStaticDomainConfig(
+    sub: string,
+    root: string,
+    verify: () => Promise<void>,
+    gated?: boolean,
+  ) {
+    await this.applyDomainConfig(sub, this.generateStaticDomainConfig(sub, root, gated), verify);
   },
 
   staticConfigPath(projectId: string) {
@@ -226,10 +306,11 @@ ${staticDomainLocations(root)}
    * Generate nginx config with per-domain SSL certificate paths.
    * Uses the domain's own Let's Encrypt cert instead of a wildcard cert.
    */
-  generateConfig(sub: string, port: number | null) {
-    if (port === null) return this.generateStaticDomainConfig(sub, this.getStaticRoot(sub));
+  generateConfig(sub: string, port: number | null, gate?: boolean) {
+    const gated = gate ?? this.getGate(sub);
+    if (port === null) return this.generateStaticDomainConfig(sub, this.getStaticRoot(sub), gated);
     const fullDomain = `${sub}.${BASE_DOMAIN}`;
-    return `
+    return `${configHeader(null, gated)}
 server {
     listen 80;
     server_name ${fullDomain};
@@ -254,7 +335,7 @@ server {
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
-
+${gated ? gateDirectives() : ''}
     # The isolated preview route can be embedded only by the ShipYard dashboard.
     # Keep these header changes scoped here; the public application route below
     # preserves the app's own framing policy.
@@ -305,15 +386,28 @@ server {
    * Used BEFORE SSL cert is issued — only serves ACME challenge + proxy.
    * This allows certbot webroot validation to work.
    */
-  generateHttpOnlyConfig(sub: string, port: number | null) {
+  generateHttpOnlyConfig(sub: string, port: number | null, gate?: boolean) {
+    const gated = gate ?? this.getGate(sub);
     const fullDomain = `${sub}.${BASE_DOMAIN}`;
-    if (port === null) {
-      const root = this.getStaticRoot(sub);
-      return `${root ? `# shipyard-static-root: ${JSON.stringify(root)}\n` : ''}
+    // The login page needs HTTPS (its cookie is Secure), so until the certificate exists a
+    // protected site serves nothing but the ACME challenge rather than its content.
+    if (gated) {
+      return `${configHeader(port === null ? this.getStaticRoot(sub) : null, true)}
 server {
     listen 80;
     server_name ${fullDomain};
     location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
+    location / { return 503; }
+}
+`;
+    }
+    if (port === null) {
+      const root = this.getStaticRoot(sub);
+      return `${configHeader(root, false)}
+server {
+    listen 80;
+    server_name ${fullDomain};
+    ${acmeLocation(false)}
 ${staticDomainLocations(root)}
 }
 `;
@@ -343,8 +437,27 @@ server {
 `;
   },
 
-  async createConfig(sub: string, port: number | null) {
-    await this.applyDomainConfig(sub, this.generateConfig(sub, port));
+  async createConfig(sub: string, port: number | null, gated?: boolean) {
+    await this.applyDomainConfig(sub, this.generateConfig(sub, port, gated));
+  },
+
+  /**
+   * Turn the password gate on or off for a live site without redeploying it.
+   * Returns false when the site has no config yet; the next activation applies the setting.
+   */
+  async setGate(sub: string, port: number | null, gated: boolean): Promise<boolean> {
+    this.domainForSubdomain(sub);
+    const path = join(getNginxDirs().available, `${sub}.conf`);
+    if (!existsSync(path)) return false;
+
+    const hasHttps = /^\s*listen 443\b/m.test(readFileSync(path, 'utf8'));
+    const root = this.getStaticRoot(sub);
+    if (!root && port === null) throw new Error('No active static site configuration found');
+    const config = hasHttps
+      ? this.generateConfig(sub, root ? null : port, gated)
+      : this.generateHttpOnlyConfig(sub, root ? null : port, gated);
+    await this.applyDomainConfig(sub, config);
+    return true;
   },
 
   async applyDomainConfig(sub: string, content: string, verify?: () => Promise<void>) {
@@ -411,7 +524,7 @@ server {
    * Create an HTTP-only nginx config (no SSL) for ACME challenge serving.
    * Used during initial domain provisioning before SSL cert is issued.
    */
-  async createHttpOnlyConfig(sub: string, port: number | null) {
+  async createHttpOnlyConfig(sub: string, port: number | null, gated?: boolean) {
     if (!this.isSubdomainAllowed(sub)) {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
     }
@@ -420,7 +533,7 @@ server {
     const availablePath = join(available, `${sub}.conf`);
     const enabledPath = join(enabled, `${sub}.conf`);
 
-    await writeNginxFile(availablePath, this.generateHttpOnlyConfig(sub, port));
+    await writeNginxFile(availablePath, this.generateHttpOnlyConfig(sub, port, gated));
     await linkNginxFile(availablePath, enabledPath);
     await this.reload();
   },
@@ -428,8 +541,8 @@ server {
   /**
    * Upgrade an existing HTTP-only config to full HTTPS after SSL cert is issued.
    */
-  async upgradeToHttps(sub: string, port: number | null) {
-    await this.createConfig(sub, port);
+  async upgradeToHttps(sub: string, port: number | null, gated?: boolean) {
+    await this.createConfig(sub, port, gated);
   },
 
   async removeConfig(sub: string) {

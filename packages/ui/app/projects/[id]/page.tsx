@@ -317,7 +317,12 @@ function ProjectDetailsContent() {
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
-            <SettingsTab project={project} />
+            <SettingsTab
+              project={project}
+              onProtectionChange={(enabled) =>
+                setProject((prev: any) => (prev ? { ...prev, access_protected: enabled } : prev))
+              }
+            />
           </TabsContent>
         </Tabs>
       </div>

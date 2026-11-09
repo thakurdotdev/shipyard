@@ -12,6 +12,7 @@ import {
   user,
 } from '../db/schema';
 import { EventStreamService } from './event-stream-service';
+import { GateService } from './gate-service';
 
 const QUEUE_NAME = 'uptime-queue';
 const FAILURE_THRESHOLD = 2;
@@ -97,7 +98,11 @@ async function validatePublicEndpoint(value: string): Promise<URL> {
   return url;
 }
 
-async function performCheck(endpoint: string, timeoutSeconds: number) {
+async function performCheck(
+  endpoint: string,
+  timeoutSeconds: number,
+  extraHeaders: Record<string, string> = {},
+) {
   const startedAt = Date.now();
   try {
     const url = await validatePublicEndpoint(endpoint);
@@ -105,7 +110,7 @@ async function performCheck(endpoint: string, timeoutSeconds: number) {
       method: 'GET',
       redirect: 'manual',
       signal: AbortSignal.timeout(timeoutSeconds * 1000),
-      headers: { 'User-Agent': 'ShipYard-Uptime/1.0' },
+      headers: { 'User-Agent': 'ShipYard-Uptime/1.0', ...extraHeaders },
     });
     await response.body?.cancel();
     return {
@@ -327,7 +332,9 @@ export const UptimeService = {
       endpoint = `https://${project.domain}`;
     }
 
-    const result = await performCheck(endpoint, monitor.timeout_seconds);
+    // A password-protected project would otherwise answer every check with its login page.
+    const gateHeaders = await GateService.monitorHeaders(project.id, endpoint);
+    const result = await performCheck(endpoint, monitor.timeout_seconds, gateHeaders);
     const checkedAt = new Date();
     let finalStatus: string | null = null;
     let finalTransition: 'up' | 'down' | null = null;

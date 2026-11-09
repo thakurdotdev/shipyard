@@ -7,6 +7,7 @@ import { DomainService } from './domain-service';
 import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
 import { isStaticFramework } from '../config/framework-config';
+import { GateService } from './gate-service';
 
 const IS_PLATFORM_PROD =
   process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
@@ -227,6 +228,7 @@ export const DeploymentService = {
           rootDirectory: project.root_directory,
           envVars: envVarsObject,
           projectName: project.name,
+          gated: await GateService.isEnabled(projectId),
         }),
       });
 

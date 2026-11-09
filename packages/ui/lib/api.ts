@@ -1,6 +1,14 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4010';
 
-import { Project, Build, Deployment, EnvVar, LogEntry, UptimeSettings } from '@/lib/types';
+import {
+  AccessSettings,
+  Project,
+  Build,
+  Deployment,
+  EnvVar,
+  LogEntry,
+  UptimeSettings,
+} from '@/lib/types';
 
 export const api = {
   getProjects: async (): Promise<Project[]> => {
@@ -166,6 +174,31 @@ export const api = {
       credentials: 'include',
     });
     if (!res.ok) throw new Error('Failed to configure the deployment preview');
+    return res.json();
+  },
+
+  async getAccessSettings(projectId: string): Promise<AccessSettings> {
+    const res = await fetch(`${API_URL}/projects/${projectId}/access`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Failed to fetch access settings');
+    return res.json();
+  },
+
+  async updateAccessSettings(
+    projectId: string,
+    data: { enabled?: boolean; password?: string; session_hours?: number },
+  ): Promise<AccessSettings> {
+    const res = await fetch(`${API_URL}/projects/${projectId}/access`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to update access settings' }));
+      throw new Error(error.error || error.message || 'Failed to update access settings');
+    }
     return res.json();
   },
 

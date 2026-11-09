@@ -4,6 +4,7 @@ import { domainProvisions, projects } from '../db/schema';
 import type { DomainDnsStatus, DomainSslStatus } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { CloudflareService } from './cloudflare-service';
+import { GateService } from './gate-service';
 
 const DEPLOY_ENGINE_URL = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
 const SERVER_HOST = process.env.SERVER_HOST || '127.0.0.1';
@@ -42,6 +43,8 @@ export const DomainService = {
   }> {
     const fullDomain = `${subdomain}.${BASE_DOMAIN}`;
     const notify = onStatus || (async () => {});
+    // Protected sites must never be served unauthenticated, even briefly while the domain is set up.
+    const gated = await GateService.isEnabled(projectId);
 
     console.log(`[DomainService] Starting provision for ${fullDomain} (project: ${projectId})`);
 
@@ -127,7 +130,7 @@ export const DomainService = {
       const httpConfigRes = await fetch(`${DEPLOY_ENGINE_URL}/nginx/http-only`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subdomain, port }),
+        body: JSON.stringify({ subdomain, port, gated }),
       });
 
       if (!httpConfigRes.ok) {
@@ -223,7 +226,7 @@ export const DomainService = {
       const nginxRes = await fetch(`${DEPLOY_ENGINE_URL}/nginx/upgrade-https`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subdomain, port }),
+        body: JSON.stringify({ subdomain, port, gated }),
       });
 
       if (!nginxRes.ok) {

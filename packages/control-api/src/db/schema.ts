@@ -41,6 +41,23 @@ export const projects = pgTable(
   }),
 );
 
+/**
+ * Password gate for a project's public site. Kept out of `projects` so the hash
+ * can never be returned by the project APIs, which serialize whole project rows.
+ */
+export const projectAccess = pgTable('project_access', {
+  project_id: uuid('project_id')
+    .references(() => projects.id, { onDelete: 'cascade' })
+    .primaryKey(),
+  enabled: boolean('enabled').notNull().default(false),
+  /** Argon2id hash of the visitor password. Null until one is set. */
+  password_hash: text('password_hash'),
+  /** How long a visitor stays signed in after entering the password. */
+  session_hours: integer('session_hours').notNull().default(168),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const uptimeMonitors = pgTable(
   'uptime_monitors',
   {

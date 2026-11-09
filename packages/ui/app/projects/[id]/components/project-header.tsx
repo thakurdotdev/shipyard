@@ -5,7 +5,16 @@ import { Github } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { getFrameworkOption } from '@/lib/framework-config';
-import { ArrowLeft, ArrowUpRight, Code2, GitBranch, Globe, Loader2, Play } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Code2,
+  GitBranch,
+  Globe,
+  Loader2,
+  Lock,
+  Play,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectHeaderProps {
@@ -197,6 +206,12 @@ export function ProjectHeader({
             <Code2 className="size-3.5" />
             {getFrameworkOption(project.app_type)?.label ?? project.app_type}
           </span>
+          {project.access_protected && (
+            <span className={meta} title="Visitors must enter a password to open this site">
+              <Lock className="size-3.5" />
+              Password protected
+            </span>
+          )}
           {project.github_branch && (
             <span className={`${meta} max-w-40`}>
               <GitBranch className="size-3.5 shrink-0" />

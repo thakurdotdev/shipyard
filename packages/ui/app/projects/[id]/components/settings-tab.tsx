@@ -29,13 +29,15 @@ import {
 } from '@/components/ui/select';
 
 import { Project } from '@/lib/types';
+import { AccessProtectionCard } from './access-protection-card';
 import { FRAMEWORK_OPTIONS, AppType, isStaticFramework } from '@/lib/framework-config';
 
 interface SettingsTabProps {
   project: Project;
+  onProtectionChange?: (enabled: boolean) => void;
 }
 
-export function SettingsTab({ project }: SettingsTabProps) {
+export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
   const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [confirmName, setConfirmName] = useState('');
@@ -299,6 +301,8 @@ export function SettingsTab({ project }: SettingsTabProps) {
             </div>
           </CardContent>
         </Card>
+
+        <AccessProtectionCard projectId={project.id} onProtectionChange={onProtectionChange} />
 
         {/* Auto Deploy */}
         {project.github_installation_id && (
