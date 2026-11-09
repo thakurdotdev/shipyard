@@ -8,6 +8,9 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
+        // Bun inlines NODE_ENV when bundling, so a build made without it silently turns
+        // production behaviour (domain provisioning, nginx) off. Set the runtime flag too.
+        PLATFORM_ENV: 'production',
         PORT: 4010,
         DEPLOY_ENGINE_URL: 'http://localhost:4012',
       },
