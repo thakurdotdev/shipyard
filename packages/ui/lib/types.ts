@@ -35,6 +35,8 @@ export interface Project {
     memory: number;
   } | null;
   uptime_status?: 'unknown' | 'up' | 'down' | null;
+  /** True when visitors must enter a password to reach the deployed site. */
+  access_protected?: boolean;
 }
 
 export type DeploymentStatus =
@@ -67,6 +69,15 @@ export interface Deployment {
   build_id: string;
   status: 'active' | 'inactive';
   activated_at: string;
+}
+
+export interface AccessSettings {
+  enabled: boolean;
+  has_password: boolean;
+  session_hours: number;
+  /** False on development servers, where nothing sits in front of deployed apps. */
+  enforced: boolean;
+  domain: string | null;
 }
 
 export interface UptimeCheck {

@@ -21,6 +21,31 @@ The project is structured as a monorepo with the following services:
 
 Uptime email alerts use the Resend API. Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the Control API environment. Monitoring can be set to check every 1, 5, 10, 15, or 30 minutes. Custom endpoints must resolve to public IP addresses; leaving the endpoint blank uses the project's generated domain once an active deployment exists.
 
+### Password-protected sites
+
+Any project can be put behind a password from **Project → Settings → Password protection**
+(turn it on, set a password, choose how long a browser stays signed in). Visitors see a
+ShipYard-styled password page on the project's own domain, at the URL they asked for, before
+anything from the site is served. Use it for private or personal projects.
+
+How it works: the project's Nginx server block gets an `auth_request` that asks the Control
+API (`GET /gate/verify`) about every request, using a signed, HttpOnly session cookie.
+`/__shipyard_gate/*` on the site is proxied to the Control API's login routes. Toggling the
+setting regenerates and reloads that one Nginx config (`POST /nginx/gate` on the Deploy Engine),
+so no redeploy is needed, and later deploys keep the setting.
+
+- The password is stored as an Argon2id hash in `project_access` (never in `projects`, so the
+  project APIs cannot return it). Session cookies are signed with a key derived from
+  `BETTER_AUTH_SECRET` and the password hash, so changing the password signs everyone out.
+- Failed logins are throttled per project and client address (5 per 10 minutes).
+- It covers the whole site, including any API routes or webhooks the app exposes.
+- If the Control API is unreachable, protected sites fail closed (HTTP 500), never open.
+- Uptime checks of the project's own domain carry a signed bypass header so they keep working.
+- The dashboard's embedded preview is replaced by an "Open live site" link while protected.
+- Enforced by Nginx, so only in production. In development the apps are served directly.
+- Deploy Engine reads `CONTROL_API_URL` (a plain `http(s)://host:port`) to reach the gate.
+- Apps with their own port must not be reachable from outside the server except through Nginx.
+
 ## Tech Stack
 
 - **Runtime**: [Bun](https://bun.sh)

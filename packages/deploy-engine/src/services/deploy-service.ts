@@ -76,6 +76,7 @@ export const DeployService = {
     envVars: Record<string, string> = {},
     rootDirectory?: string,
     projectName?: string,
+    gated?: boolean,
   ) {
     const paths = this.getPaths(projectId, buildId);
     const directStatic = appType === 'vite' && IS_PLATFORM_PROD;
@@ -155,7 +156,7 @@ export const DeployService = {
       await LogService.step(buildId, 'Configuring domain routing');
       await LogService.detail(buildId, `Subdomain: ${subdomain}`);
       try {
-        await retry(() => NginxService.createConfig(subdomain, port), {
+        await retry(() => NginxService.createConfig(subdomain, port, gated), {
           name: `nginx config ${subdomain}`,
           timeoutMs: 6000,
         });
@@ -171,17 +172,22 @@ export const DeployService = {
     if (staticDir && directStatic) {
       await LogService.step(buildId, 'Serving Vite build as static files with Nginx');
       await LogService.detail(buildId, `Static root: ${staticDir}`);
-      await NginxService.createStaticDomainConfig(subdomain, staticDir, async () => {
-        await LogService.step(buildId, 'Checking static site readiness');
-        await this.performHealthCheck(
-          443,
-          buildId,
-          true,
-          await Bun.file(join(staticDir, 'index.html')).text(),
-          15000,
-          NginxService.domainForSubdomain(subdomain),
-        );
-      });
+      await NginxService.createStaticDomainConfig(
+        subdomain,
+        staticDir,
+        async () => {
+          await LogService.step(buildId, 'Checking static site readiness');
+          await this.performHealthCheck(
+            443,
+            buildId,
+            true,
+            await Bun.file(join(staticDir, 'index.html')).text(),
+            15000,
+            NginxService.domainForSubdomain(subdomain),
+          );
+        },
+        gated,
+      );
       domainConfigured = true;
       await LogService.success(buildId, 'Static domain configured and responding');
       // Retire the older per-project listener only after the domain serves the new build.

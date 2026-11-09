@@ -5,6 +5,7 @@ import { BuildQueue } from './queue';
 import { buildsRoutes, internalBuildRoutes } from './routes/builds';
 import { deploymentsRoutes } from './routes/deployments';
 import { domainsRoutes } from './routes/domains';
+import { gateRoutes } from './routes/gate';
 import { envRoutes } from './routes/env';
 import { githubRoutes } from './routes/github';
 import { infraRoutes } from './routes/infra';
@@ -13,7 +14,11 @@ import { projectsRoutes } from './routes/projects';
 import { githubWebhook } from './routes/webhook-handler';
 import { UptimeService } from './services/uptime-service';
 
-const publicRoutes = new Elysia().use(githubWebhook).use(githubRoutes).use(internalBuildRoutes);
+const publicRoutes = new Elysia()
+  .use(githubWebhook)
+  .use(githubRoutes)
+  .use(internalBuildRoutes)
+  .use(gateRoutes);
 
 const protectedRoutes = new Elysia()
   .use(projectsRoutes)

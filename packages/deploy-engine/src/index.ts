@@ -56,10 +56,20 @@ const app = new Elysia()
         rootDirectory?: string;
         envVars?: Record<string, string>;
         projectName?: string;
+        gated?: boolean;
       };
     }) => {
-      const { projectId, buildId, port, appType, subdomain, rootDirectory, envVars, projectName } =
-        body;
+      const {
+        projectId,
+        buildId,
+        port,
+        appType,
+        subdomain,
+        rootDirectory,
+        envVars,
+        projectName,
+        gated,
+      } = body;
 
       try {
         await DeployService.activateDeployment(
@@ -71,6 +81,7 @@ const app = new Elysia()
           envVars || {},
           rootDirectory,
           projectName,
+          gated,
         );
         return { success: true };
       } catch (e: unknown) {
@@ -95,6 +106,7 @@ const app = new Elysia()
         rootDirectory: t.Optional(t.String()),
         envVars: t.Optional(t.Record(t.String(), t.String())),
         projectName: t.Optional(t.String()),
+        gated: t.Optional(t.Boolean()),
       }),
     },
   )
@@ -217,26 +229,34 @@ const app = new Elysia()
   })
   // Nginx configuration management endpoints
   .post('/nginx/http-only', async ({ body }) => {
-    const { subdomain, port } = (body || {}) as { subdomain: string; port: number | null };
+    const { subdomain, port, gated } = (body || {}) as {
+      subdomain: string;
+      port: number | null;
+      gated?: boolean;
+    };
     if (!subdomain || port === undefined)
       return new Response('subdomain and port (or null for static hosting) required', {
         status: 400,
       });
     try {
-      await NginxService.createHttpOnlyConfig(subdomain, port);
+      await NginxService.createHttpOnlyConfig(subdomain, port, gated);
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
     }
   })
   .post('/nginx/upgrade-https', async ({ body }) => {
-    const { subdomain, port } = body as { subdomain: string; port: number | null };
+    const { subdomain, port, gated } = body as {
+      subdomain: string;
+      port: number | null;
+      gated?: boolean;
+    };
     if (!subdomain || port === undefined)
       return new Response('subdomain and port (or null for static hosting) required', {
         status: 400,
       });
     try {
-      await NginxService.upgradeToHttps(subdomain, port);
+      await NginxService.upgradeToHttps(subdomain, port, gated);
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
@@ -253,6 +273,25 @@ const app = new Elysia()
     try {
       await NginxService.ensurePreviewConfig(subdomain, port);
       return { success: true };
+    } catch (e: any) {
+      return new Response(e.message, { status: 500 });
+    }
+  })
+  .post('/nginx/gate', async ({ body }) => {
+    const { subdomain, port, gated } = body as {
+      subdomain: string;
+      port: number | null;
+      gated: boolean;
+    };
+    if (
+      !NginxService.isSubdomainAllowed(subdomain) ||
+      typeof gated !== 'boolean' ||
+      (port !== null && (!Number.isInteger(port) || port < 1024 || port > 65535))
+    ) {
+      return new Response('valid subdomain, port and gated flag required', { status: 400 });
+    }
+    try {
+      return { success: true, applied: await NginxService.setGate(subdomain, port, gated) };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
     }

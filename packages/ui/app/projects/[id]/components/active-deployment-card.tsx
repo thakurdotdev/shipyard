@@ -67,7 +67,7 @@ export function ActiveDeploymentCard({
     setFrameKey(0);
     previewRequest.current = null;
     setPreviewOpen(false);
-  }, [activeDeployment?.id]);
+  }, [activeDeployment?.id, project.access_protected]);
 
   const loadPreview = () => {
     if (!activeDeployment || previewState === 'loading' || previewState === 'ready') return;
@@ -263,7 +263,9 @@ export function ActiveDeploymentCard({
                   <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                     {previewState === 'loading'
                       ? 'Connecting to the secure preview route.'
-                      : 'This site cannot be embedded. You can still open it in a new tab.'}
+                      : project.access_protected
+                        ? 'This site is password protected, so it is not embedded here. Open it in a new tab and enter the password.'
+                        : 'This site cannot be embedded. You can still open it in a new tab.'}
                   </p>
                   {deploymentUrl && previewState === 'unavailable' && (
                     <Button variant="outline" size="sm" className="mt-4 gap-2" asChild>

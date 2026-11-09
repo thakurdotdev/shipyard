@@ -3,6 +3,8 @@ import { ProjectService } from '../services/project-service';
 import { ProjectAccessService } from '../services/project-access-service';
 import { UptimeService } from '../services/uptime-service';
 import { SecurityService } from '../services/security-service';
+import { GateError, GateService } from '../services/gate-service';
+import { MAX_SESSION_HOURS, MIN_SESSION_HOURS } from '../services/gate-session';
 import { db } from '../db';
 import { deployments, uptimeMonitors } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -108,6 +110,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     return {
       ...project,
       uptime_status: monitor?.enabled ? monitor.current_status : null,
+      access_protected: await GateService.isEnabled(id),
     };
   })
   .get('/:id/events', async ({ params: { id }, request, set }) => {
@@ -232,6 +235,12 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       return { preview_url: null, embeddable: false };
     }
 
+    // The embedded preview bypasses nothing, so a password-protected site would only show its
+    // login page inside the frame. Send the owner to the real site instead.
+    if (await GateService.isEnabled(id)) {
+      return { preview_url: `https://${project.domain}`, embeddable: false };
+    }
+
     const subdomain = project.domain.slice(0, -(BASE_DOMAIN.length + 1));
     if (!subdomain || project.domain !== `${subdomain}.${BASE_DOMAIN}`) {
       return {
@@ -261,6 +270,52 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       return { error: 'Could not configure the embedded preview' };
     }
   })
+  .get('/:id/access', async ({ params: { id }, request, set }) => {
+    if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
+    return GateService.getSettings(id);
+  })
+  .put(
+    '/:id/access',
+    async ({ params: { id }, request, body, set }) => {
+      const project = await ProjectAccessService.getOwnedProject(request, id);
+      if (!project) {
+        set.status = 404;
+        return { error: 'Project not found' };
+      }
+      const previous = await GateService.snapshot(id);
+      try {
+        const settings = await GateService.updateSettings(id, body);
+        // Apply to the live site now; a project with nothing deployed picks it up on activation.
+        try {
+          await GateService.applyToProxy(project, settings.enabled);
+        } catch (error) {
+          await GateService.restore(id, previous);
+          throw error;
+        }
+        return settings;
+      } catch (error) {
+        if (error instanceof GateError) {
+          set.status = 400;
+          return { error: error.message };
+        }
+        console.error(`[Access] Failed to update protection for ${id}`, error);
+        set.status = 500;
+        return { error: 'Could not update access protection' };
+      }
+    },
+    {
+      body: t.Object({
+        enabled: t.Optional(t.Boolean()),
+        password: t.Optional(t.String({ maxLength: 1024 })),
+        session_hours: t.Optional(
+          t.Integer({ minimum: MIN_SESSION_HOURS, maximum: MAX_SESSION_HOURS }),
+        ),
+      }),
+    },
+  )
   .get(
     '/:id/uptime',
     async ({ params: { id }, query, request, set }) => {
