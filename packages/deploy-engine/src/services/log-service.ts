@@ -1,6 +1,7 @@
+import { config } from '@thakur-deploy/config';
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
-const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://localhost:4010';
+const CONTROL_API_URL = config.controlApiUrl;
 
 /**
  * Streams deployment logs to the control-api for persistence and WebSocket broadcast.

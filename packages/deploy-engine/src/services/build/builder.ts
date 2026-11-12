@@ -1,3 +1,4 @@
+import { childProcessEnv, config } from '@thakur-deploy/config';
 import { spawn } from 'child_process';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { rm } from 'fs/promises';
@@ -47,7 +48,7 @@ export const Builder = {
     console.log(`[Builder] Starting execution for build ${job.build_id}`);
 
     const buildDir = getBuildExtractDir(job.project_id, job.build_id);
-    const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4010';
+    const controlApiUrl = config.controlApiUrl;
     const sentinelPath = join(buildDir, BUILT_SENTINEL);
 
     const updateStatus = async (status: 'building' | 'success' | 'failed') => {
@@ -388,7 +389,7 @@ export const Builder = {
       const child = spawn(cmd, args, {
         cwd,
         shell: true,
-        env: { ...process.env, ...envVars },
+        env: { ...childProcessEnv(), ...envVars },
       });
 
       // Timeout to prevent indefinite hangs

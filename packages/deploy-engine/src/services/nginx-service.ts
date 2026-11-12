@@ -1,17 +1,20 @@
+import { config } from '@thakur-deploy/config';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { staticSiteLocations } from './static-site';
 
-const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
-const DASHBOARD_ORIGIN = process.env.DASHBOARD_ORIGIN || `https://deploy.${BASE_DOMAIN}`;
+
+// Read on use: the engine learns these from the Control API shortly after it starts.
+const baseDomain = () => config.baseDomain;
+const dashboardOrigin = () => config.publicUrl;
 
 /** Public path on a protected site that nginx proxies to the Control API's login page. */
 export const GATE_PATH = '/__shipyard_gate';
 const GATE_MARKER = '# shipyard-gate: on';
 
 function gateUpstream(): string {
-  const upstream = (process.env.CONTROL_API_URL || 'http://localhost:4010').replace(/\/+$/, '');
+  const upstream = config.controlApiUrl;
   // Interpolated into nginx config, so anything but a plain origin is rejected.
   if (!/^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/.test(upstream)) {
     throw new Error(
@@ -97,7 +100,7 @@ ${staticSiteLocations()}
         rewrite ^/__shipyard_preview/(.*)$ /$1 break;
         try_files $uri @shipyard_preview_fallback;
         add_header Cache-Control "no-cache" always;
-        add_header Content-Security-Policy "frame-ancestors ${DASHBOARD_ORIGIN}" always;
+        add_header Content-Security-Policy "frame-ancestors ${dashboardOrigin()}" always;
     }
 
     location @shipyard_preview_fallback {
@@ -111,7 +114,7 @@ ${staticSiteLocations()}
         try_files /index.html =404;
         default_type text/html;
         add_header Cache-Control "no-cache" always;
-        add_header Content-Security-Policy "frame-ancestors ${DASHBOARD_ORIGIN}" always;
+        add_header Content-Security-Policy "frame-ancestors ${dashboardOrigin()}" always;
     }
 `;
 }
@@ -223,7 +226,7 @@ async function retry(fn: () => Promise<void>, retries = 3, delayMs = 300) {
 export const NginxService = {
   domainForSubdomain(sub: string) {
     if (!this.isSubdomainAllowed(sub)) throw new Error(`Invalid or reserved subdomain: ${sub}`);
-    return `${sub}.${BASE_DOMAIN}`;
+    return `${sub}.${baseDomain()}`;
   },
 
   getStaticRoot(sub: string): string | null {
@@ -309,7 +312,7 @@ ${gated ? gateDirectives() : ''}${staticDomainLocations(root)}
   generateConfig(sub: string, port: number | null, gate?: boolean) {
     const gated = gate ?? this.getGate(sub);
     if (port === null) return this.generateStaticDomainConfig(sub, this.getStaticRoot(sub), gated);
-    const fullDomain = `${sub}.${BASE_DOMAIN}`;
+    const fullDomain = `${sub}.${baseDomain()}`;
     return `${configHeader(null, gated)}
 server {
     listen 80;
@@ -355,7 +358,7 @@ ${gated ? gateDirectives() : ''}
 
         proxy_hide_header X-Frame-Options;
         proxy_hide_header Content-Security-Policy;
-        add_header Content-Security-Policy "frame-ancestors ${DASHBOARD_ORIGIN}" always;
+        add_header Content-Security-Policy "frame-ancestors ${dashboardOrigin()}" always;
 
         proxy_read_timeout 300;
         proxy_connect_timeout 300;
@@ -388,7 +391,7 @@ ${gated ? gateDirectives() : ''}
    */
   generateHttpOnlyConfig(sub: string, port: number | null, gate?: boolean) {
     const gated = gate ?? this.getGate(sub);
-    const fullDomain = `${sub}.${BASE_DOMAIN}`;
+    const fullDomain = `${sub}.${baseDomain()}`;
     // The login page needs HTTPS (its cookie is Secure), so until the certificate exists a
     // protected site serves nothing but the ACME challenge rather than its content.
     if (gated) {
@@ -562,7 +565,7 @@ server {
     const content = `
 server {
     listen 80;
-    server_name _ *.${BASE_DOMAIN};
+    server_name _ *.${baseDomain()};
 
     # ACME challenge for Let's Encrypt
     location /.well-known/acme-challenge/ {
@@ -575,11 +578,11 @@ server {
 
 server {
     listen 443 ssl;
-    server_name _ *.${BASE_DOMAIN};
+    server_name _ *.${baseDomain()};
 
     # Fallback wildcard cert (if available), otherwise self-signed
-    ssl_certificate     /etc/letsencrypt/live/${BASE_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${BASE_DOMAIN}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${baseDomain()}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${baseDomain()}/privkey.pem;
 
     add_header Content-Type text/plain;
     return 404 "Unknown subdomain. No project deployed.\\n";

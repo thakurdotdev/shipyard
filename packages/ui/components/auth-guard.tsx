@@ -10,7 +10,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
-  const isPublicRoute = pathname === '/login';
+  // /setup works before any account exists (it is how the first one gets created).
+  const isPublicRoute = pathname === '/login' || pathname === '/setup';
 
   useEffect(() => {
     if (!isPublicRoute && !isPending && !session) {

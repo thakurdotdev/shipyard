@@ -1,4 +1,6 @@
+import '@thakur-deploy/config';
 import { Elysia, t } from 'elysia';
+import { syncPlatformInfo } from './services/platform-sync';
 import { DeployService } from './services/deploy-service';
 import { NginxService } from './services/nginx-service';
 import { SSLService } from './services/ssl-service';
@@ -317,6 +319,9 @@ const app = new Elysia()
   .listen(PORT);
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
+
+// Learn the dashboard URL and base domain from the Control API when not set here.
+syncPlatformInfo();
 
 // Start the in-engine build worker (consumes the shared BullMQ build queue)
 BuildWorker.initialize().catch((err) => {

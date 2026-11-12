@@ -1,3 +1,4 @@
+import { config, getServerHost } from '@thakur-deploy/config';
 import { promises as dnsPromises } from 'dns';
 import { db } from '../db';
 import { domainProvisions, projects } from '../db/schema';
@@ -6,9 +7,8 @@ import { eq } from 'drizzle-orm';
 import { CloudflareService } from './cloudflare-service';
 import { GateService } from './gate-service';
 
-const DEPLOY_ENGINE_URL = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
-const SERVER_HOST = process.env.SERVER_HOST || '127.0.0.1';
-const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
+const DEPLOY_ENGINE_URL = config.deployEngineUrl;
+const BASE_DOMAIN = config.baseDomain;
 
 /**
  * DomainService orchestrates the full DNS + SSL provisioning lifecycle:
@@ -43,6 +43,7 @@ export const DomainService = {
   }> {
     const fullDomain = `${subdomain}.${BASE_DOMAIN}`;
     const notify = onStatus || (async () => {});
+    const serverHost = await getServerHost();
     // Protected sites must never be served unauthenticated, even briefly while the domain is set up.
     const gated = await GateService.isEnabled(projectId);
 
@@ -68,7 +69,7 @@ export const DomainService = {
         .set({
           subdomain,
           full_domain: fullDomain,
-          server_ip: SERVER_HOST,
+          server_ip: serverHost,
           error_message: null,
           updated_at: new Date(),
         })
@@ -81,7 +82,7 @@ export const DomainService = {
           project_id: projectId,
           subdomain,
           full_domain: fullDomain,
-          server_ip: SERVER_HOST,
+          server_ip: serverHost,
           dns_status: 'pending',
           ssl_status: 'pending',
         })
@@ -92,12 +93,29 @@ export const DomainService = {
     // ──────────────────────────────────────────────
     // Step 1: Create Cloudflare A record (grey cloud)
     // ──────────────────────────────────────────────
+    if (
+      provision.dns_status !== 'created' &&
+      provision.dns_status !== 'proxied' &&
+      !CloudflareService.isConfigured()
+    ) {
+      // No Cloudflare: the domain must already resolve here (e.g. a *.<base domain> record).
+      await db
+        .update(domainProvisions)
+        .set({ dns_status: 'created', updated_at: new Date() })
+        .where(eq(domainProvisions.id, provision.id));
+      provision.dns_status = 'created';
+      await notify(
+        'dns_created',
+        `Cloudflare isn't connected; expecting ${fullDomain} to resolve to ${serverHost} already (wildcard DNS record).`,
+      );
+    }
+
     if (provision.dns_status !== 'created' && provision.dns_status !== 'proxied') {
       await notify('dns_creating', `Creating DNS A record for ${fullDomain}...`);
       await this.updateDnsStatus(provision.id, 'creating');
 
       try {
-        const { recordId } = await CloudflareService.createARecord(subdomain, SERVER_HOST);
+        const { recordId } = await CloudflareService.createARecord(subdomain, serverHost);
 
         await db
           .update(domainProvisions)
@@ -111,7 +129,7 @@ export const DomainService = {
         provision.dns_record_id = recordId;
         provision.dns_status = 'created';
 
-        await notify('dns_created', `DNS A record created: ${fullDomain} → ${SERVER_HOST}`);
+        await notify('dns_created', `DNS A record created: ${fullDomain} → ${serverHost}`);
         console.log(`[DomainService] DNS record created: ${fullDomain} (ID: ${recordId})`);
       } catch (error: any) {
         console.error(`[DomainService] DNS creation failed:`, error);

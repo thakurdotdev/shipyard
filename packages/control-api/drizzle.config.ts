@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import type { Config } from 'drizzle-kit';
 
 export default {
@@ -5,6 +6,6 @@ export default {
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: config.databaseUrl,
   },
 } satisfies Config;

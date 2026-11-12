@@ -1,7 +1,9 @@
 import { db } from '../db';
 import { infrastructureServices, ServiceType, ServiceStatus, user } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { config, getServerHost } from '@thakur-deploy/config';
+import { randomBytes } from 'crypto';
+import { decrypt, encrypt } from '../lib/crypto';
 import {
   generateCredentials,
   generateConnectionUrl,
@@ -9,44 +11,25 @@ import {
   PostgresCredentials,
 } from '../utils/credential-generator';
 
-const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!;
-
 // Port range for infrastructure services
 const PORT_RANGE_START = 20000;
 const PORT_RANGE_END = 25000;
 
-// Server host for connection strings
-const SERVER_HOST = process.env.SERVER_HOST || 'localhost';
-
 // Deploy engine URL
-const DEPLOY_ENGINE_URL = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
+const DEPLOY_ENGINE_URL = config.deployEngineUrl;
 
 /**
  * Encrypt credentials for storage
  */
 function encryptCredentials(creds: RedisCredentials | PostgresCredentials): string {
-  const json = JSON.stringify(creds);
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(json, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+  return encrypt(JSON.stringify(creds));
 }
 
 /**
  * Decrypt credentials from storage
  */
 function decryptCredentials(text: string): RedisCredentials | PostgresCredentials {
-  const [ivHex, authTagHex, encryptedHex] = text.split(':');
-  const iv = Buffer.from(ivHex, 'hex');
-  const authTag = Buffer.from(authTagHex, 'hex');
-  const decipher = createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-  decipher.setAuthTag(authTag);
-  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return JSON.parse(decrypted);
+  return JSON.parse(decrypt(text));
 }
 
 /**
@@ -95,6 +78,7 @@ export const InfraService = {
 
     // Generate unique port and container name
     const port = await findAvailablePort();
+    const serverHost = await getServerHost();
     const containerName = generateContainerName(service_type, name);
 
     // Generate credentials
@@ -108,7 +92,7 @@ export const InfraService = {
         name,
         service_type,
         container_name: containerName,
-        host: SERVER_HOST,
+        host: serverHost,
         port,
         credentials: encryptedCredentials,
         status: 'starting',
@@ -160,7 +144,7 @@ export const InfraService = {
         ...service,
         status: 'running' as ServiceStatus,
         container_id: result.containerId,
-        connection_url: generateConnectionUrl(service_type, SERVER_HOST, port, credentials),
+        connection_url: generateConnectionUrl(service_type, serverHost, port, credentials),
       };
     } catch (error: any) {
       // Update status to error

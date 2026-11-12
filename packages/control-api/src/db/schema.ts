@@ -233,6 +233,18 @@ export const verification = pgTable('verification', {
   updatedAt: timestamp('updated_at'),
 });
 
+/**
+ * Platform settings edited from the dashboard (GitHub App, Cloudflare, email alerts...).
+ * Secret values are encrypted with the platform encryption key. A row here overrides the
+ * matching variable from `.env`; deleting the row falls back to `.env` again.
+ */
+export const platformSettings = pgTable('platform_settings', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  value: text('value').notNull(),
+  encrypted: boolean('encrypted').notNull().default(false),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const githubInstallations = pgTable('github_installations', {
   id: uuid('id').defaultRandom().primaryKey(),
   github_installation_id: text('github_installation_id').notNull().unique(),

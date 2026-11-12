@@ -5,6 +5,7 @@ import { db } from '../db';
 import { account, githubInstallations } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { GitHubService } from '../services/github-service';
+import { githubAppConfig } from '../services/settings-service';
 
 interface GitHubInstallation {
   id: number;
@@ -88,8 +89,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  client_id: process.env.GITHUB_CLIENT_ID,
-                  client_secret: process.env.GITHUB_CLIENT_SECRET,
+                  client_id: githubAppConfig().clientId,
+                  client_secret: githubAppConfig().clientSecret,
                   grant_type: 'refresh_token',
                   refresh_token: accountData.refreshToken,
                 }),

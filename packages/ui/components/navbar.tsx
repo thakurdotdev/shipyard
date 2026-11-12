@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
-import { Activity, FolderKanban, LogOut, Plus } from 'lucide-react';
+import { Activity, FolderKanban, LogOut, Plus, Settings } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -23,7 +23,7 @@ export function Navbar() {
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const projectRoute = pathname === '/' || pathname.startsWith('/projects');
-  const isLogin = pathname === '/login';
+  const isLogin = pathname === '/login' || pathname === '/setup';
 
   const navLinkClass = (active: boolean) =>
     cn(
@@ -69,6 +69,15 @@ export function Navbar() {
               >
                 <Activity className="size-4" />
                 <span className="hidden sm:inline">Processes</span>
+              </Link>
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                className={navLinkClass(pathname === '/settings')}
+                aria-current={pathname === '/settings' ? 'page' : undefined}
+              >
+                <Settings className="size-4" />
+                <span className="hidden sm:inline">Settings</span>
               </Link>
             </div>
           )}

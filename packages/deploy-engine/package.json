@@ -8,6 +8,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@thakur-deploy/config": "workspace:*",
     "bullmq": "^5.81.1",
     "elysia": "^1.4.29",
     "ioredis": "^5.9.1",

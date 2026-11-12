@@ -4,7 +4,9 @@ import { join } from 'path';
 import { LogService } from './log-service';
 
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
-const CERTBOT_EMAIL = process.env.CERTBOT_EMAIL || 'admin@thakur.dev';
+// Optional: certbot registers its account once (the installer does it with your email);
+// Let's Encrypt no longer sends expiry emails, so later requests don't need one.
+const CERTBOT_EMAIL = process.env.CERTBOT_EMAIL?.trim();
 const LETSENCRYPT_DIR = '/etc/letsencrypt/live';
 
 interface SSLResult {
@@ -57,8 +59,7 @@ export const SSLService = {
         domain,
         '--non-interactive',
         '--agree-tos',
-        '--email',
-        CERTBOT_EMAIL,
+        ...(CERTBOT_EMAIL ? ['--email', CERTBOT_EMAIL] : ['--register-unsafely-without-email']),
         '--no-eff-email',
         // Force renewal if cert exists but is invalid
         '--force-renewal',

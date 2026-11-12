@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
 const FLUSH_INTERVAL = 300; // 300ms - flush more frequently for real-time feel
@@ -55,7 +56,7 @@ export const LogStreamer = {
     const entriesToSend = [...buffer.entries];
     buffer.entries = []; // Clear buffer immediately
 
-    const controlApiUrl = process.env.CONTROL_API_URL || 'http://localhost:4010';
+    const controlApiUrl = config.controlApiUrl;
 
     // Batch into a single request with combined message per level
     const byLevel = new Map<LogLevel, string>();

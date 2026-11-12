@@ -4,10 +4,11 @@
 #   curl -fsSL https://raw.githubusercontent.com/thakurdotdev/shipyard/main/scripts/install.sh | bash
 #   ./scripts/install.sh [install|update|doctor] [options]
 #
-# Every step checks before it acts, so re-running is safe. Existing .env values are never
-# replaced unless you pass a new value for them, and secrets (ENCRYPTION_KEY,
-# BETTER_AUTH_SECRET) are never regenerated: a new ENCRYPTION_KEY would make every
-# project's stored env vars unreadable.
+# Every step checks before it acts, so re-running is safe. Configuration is one `.env` at
+# the repository root with four values (PUBLIC_URL, SECRET, DATABASE_URL, REDIS_URL);
+# everything else is derived or set from the dashboard (Settings, and /setup on first run).
+# Existing values are never replaced unless you pass a new one, and SECRET is never
+# regenerated: keys derived from it encrypt every project's stored env vars.
 #
 # Run `install.sh --help` for options.
 
@@ -38,18 +39,9 @@ A_EMAIL="${SHIPYARD_EMAIL:-}"
 A_SERVER_HOST="${SHIPYARD_SERVER_HOST:-}"
 A_DATABASE_URL="${SHIPYARD_DATABASE_URL:-}"
 A_REDIS_URL="${SHIPYARD_REDIS_URL:-}"
-A_GITHUB_APP_ID="${SHIPYARD_GITHUB_APP_ID:-}"
-A_GITHUB_CLIENT_ID="${SHIPYARD_GITHUB_CLIENT_ID:-}"
-A_GITHUB_CLIENT_SECRET="${SHIPYARD_GITHUB_CLIENT_SECRET:-}"
-A_GITHUB_PEM="${SHIPYARD_GITHUB_PEM:-}"
-A_GITHUB_WEBHOOK_SECRET="${SHIPYARD_GITHUB_WEBHOOK_SECRET:-}"
-A_CLOUDFLARE_TOKEN="${SHIPYARD_CLOUDFLARE_TOKEN:-}"
-A_CLOUDFLARE_ZONE="${SHIPYARD_CLOUDFLARE_ZONE:-}"
-A_RESEND_KEY="${SHIPYARD_RESEND_KEY:-}"
-A_RESEND_FROM="${SHIPYARD_RESEND_FROM:-}"
 
 # Keys that are generated once and must never be replaced on an existing install.
-PROTECTED_KEYS=" ENCRYPTION_KEY BETTER_AUTH_SECRET "
+PROTECTED_KEYS=" SECRET ENCRYPTION_KEY BETTER_AUTH_SECRET "
 
 usage() {
   cat <<'EOF'
@@ -67,20 +59,15 @@ Options (environment variable in brackets):
   --branch NAME           Git branch to install (default: main)                     [SHIPYARD_BRANCH]
   --domain HOST           Dashboard domain, e.g. deploy.example.com. Leave empty to
                           serve the dashboard over plain HTTP on the server IP.      [SHIPYARD_DOMAIN]
-  --base-domain HOST      Apps get <name>.<base-domain>                              [SHIPYARD_BASE_DOMAIN]
-  --email ADDR            Let's Encrypt account email                                [SHIPYARD_EMAIL]
+  --base-domain HOST      Apps get <name>.<base-domain> (default: the dashboard domain
+                          without its first label, deploy.example.com -> example.com) [SHIPYARD_BASE_DOMAIN]
+  --email ADDR            Let's Encrypt account email (optional)                     [SHIPYARD_EMAIL]
   --server-host IP        Public IP of this server (auto-detected)                   [SHIPYARD_SERVER_HOST]
   --database-url URL      Use an existing Postgres instead of installing one         [SHIPYARD_DATABASE_URL]
   --redis-url URL         Use an existing Redis instead of installing one            [SHIPYARD_REDIS_URL]
-  --github-app-id ID                                                                 [SHIPYARD_GITHUB_APP_ID]
-  --github-client-id ID                                                              [SHIPYARD_GITHUB_CLIENT_ID]
-  --github-client-secret S                                                           [SHIPYARD_GITHUB_CLIENT_SECRET]
-  --github-pem PATH       GitHub App private key (.pem); copied into the install dir [SHIPYARD_GITHUB_PEM]
-  --github-webhook-secret S (generated when not given)                               [SHIPYARD_GITHUB_WEBHOOK_SECRET]
-  --cloudflare-token T    Optional: automatic DNS records for apps                   [SHIPYARD_CLOUDFLARE_TOKEN]
-  --cloudflare-zone ID                                                               [SHIPYARD_CLOUDFLARE_ZONE]
-  --resend-key KEY        Optional: uptime alert emails                              [SHIPYARD_RESEND_KEY]
-  --resend-from ADDR                                                                 [SHIPYARD_RESEND_FROM]
+
+GitHub, Cloudflare and email alerts are set up in the dashboard afterwards: the installer
+prints a one-time setup link that creates the GitHub App in a click.
   --skip-node             Don't install Node.js (Bun is always installed)            [SHIPYARD_SKIP_NODE=1]
   --skip-tls              Don't request a Let's Encrypt certificate for the dashboard [SHIPYARD_SKIP_TLS=1]
   --no-pull               Don't git pull an existing checkout
@@ -215,15 +202,6 @@ parse_args() {
       --server-host) A_SERVER_HOST="$val"; shift ;;
       --database-url) A_DATABASE_URL="$val"; shift ;;
       --redis-url) A_REDIS_URL="$val"; shift ;;
-      --github-app-id) A_GITHUB_APP_ID="$val"; shift ;;
-      --github-client-id) A_GITHUB_CLIENT_ID="$val"; shift ;;
-      --github-client-secret) A_GITHUB_CLIENT_SECRET="$val"; shift ;;
-      --github-pem) A_GITHUB_PEM="$val"; shift ;;
-      --github-webhook-secret) A_GITHUB_WEBHOOK_SECRET="$val"; shift ;;
-      --cloudflare-token) A_CLOUDFLARE_TOKEN="$val"; shift ;;
-      --cloudflare-zone) A_CLOUDFLARE_ZONE="$val"; shift ;;
-      --resend-key) A_RESEND_KEY="$val"; shift ;;
-      --resend-from) A_RESEND_FROM="$val"; shift ;;
       --skip-node) SKIP_NODE=1 ;;
       --skip-tls) SKIP_TLS=1 ;;
       --no-pull) NO_PULL=1 ;;
@@ -251,9 +229,30 @@ resolve_dir() {
 }
 
 set_paths() {
+  ROOT_ENV="$INSTALL_DIR/.env"
+  # Per-package files from installs before the single .env. Still read (and they still win
+  # at runtime), never written.
   API_ENV="$INSTALL_DIR/packages/control-api/.env"
   ENGINE_ENV="$INSTALL_DIR/packages/deploy-engine/.env"
-  UI_ENV="$INSTALL_DIR/packages/ui/.env"
+}
+
+# cfg_get KEY: the root .env first, then the legacy per-package files.
+cfg_get() {
+  local key="$1" value file
+  for file in "$ROOT_ENV" "$API_ENV" "$ENGINE_ENV"; do
+    value="$(env_get "$file" "$key")"
+    if [[ -n "$value" ]]; then printf '%s' "$value"; return; fi
+  done
+}
+
+# The one-time code that unlocks /setup: HMAC-SHA256(SECRET, "shipyard:setup"), as the
+# Control API derives it (packages/config).
+setup_token() {
+  local secret
+  secret="$(cfg_get SECRET)"
+  [[ -n "$secret" ]] || secret="$(cfg_get BETTER_AUTH_SECRET)"
+  [[ -n "$secret" ]] || return 0
+  printf 'shipyard:setup' | openssl dgst -sha256 -hmac "$secret" | awk '{print $NF}' | cut -c1-24
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -419,7 +418,7 @@ fetch_code() {
 ensure_postgres() {
   step "PostgreSQL"
   local existing
-  existing="$(env_get "$API_ENV" DATABASE_URL)"
+  existing="$(cfg_get DATABASE_URL)"
   if [[ -n "$A_DATABASE_URL" ]]; then
     DATABASE_URL="$A_DATABASE_URL"
     info "using the database URL you provided"
@@ -462,7 +461,7 @@ pg_root() { (cd / && sudo -u postgres psql "$@"); }
 ensure_redis() {
   step "Redis"
   local existing
-  existing="$(env_get "$API_ENV" REDIS_URL)"
+  existing="$(cfg_get REDIS_URL)"
   if [[ -n "$A_REDIS_URL" ]]; then
     REDIS_URL="$A_REDIS_URL"
   elif [[ -n "$existing" ]]; then
@@ -487,13 +486,14 @@ detect_ip() {
 }
 
 configure_env() {
-  step "Configuration (.env files)"
-  touch "$API_ENV" "$ENGINE_ENV" "$UI_ENV"
-  chmod 600 "$API_ENV" "$ENGINE_ENV" "$UI_ENV"
+  step "Configuration (.env)"
+  touch "$ROOT_ENV"
+  chmod 600 "$ROOT_ENV"
 
   # Existing values become the defaults, so re-running only asks about what's missing.
   local cur_origin cur_domain=""
-  cur_origin="$(env_get "$API_ENV" CLIENT_URL)"
+  cur_origin="$(cfg_get PUBLIC_URL)"
+  [[ -n "$cur_origin" ]] || cur_origin="$(cfg_get CLIENT_URL)"
   if [[ "$cur_origin" =~ ^https://([^/:]+) ]]; then cur_domain="${BASH_REMATCH[1]}"; fi
   if [[ -n "$cur_origin" && -z "$cur_domain" ]]; then cur_domain="-"; fi # existing IP-only install
 
@@ -506,146 +506,48 @@ configure_env() {
   fi
   [[ "$DOMAIN" == "-" ]] && DOMAIN=""
 
-  local default_base="${DOMAIN#*.}"
-  [[ "$default_base" == "$DOMAIN" ]] && default_base=""
-  [[ -z "$BASE_DOMAIN" ]] && BASE_DOMAIN="$(env_get "$API_ENV" BASE_DOMAIN)"
-  ask BASE_DOMAIN "Base domain for apps (apps get <name>.<base domain>)" "$default_base"
+  # Apps go under the dashboard's parent domain unless told otherwise; only an override is
+  # stored, so changing PUBLIC_URL later moves both.
+  local derived_base="${DOMAIN#*.}"
+  if [[ -z "$DOMAIN" ]]; then derived_base=""; elif [[ "$derived_base" != *.* ]]; then derived_base="$DOMAIN"; fi
+  [[ -z "$BASE_DOMAIN" ]] && BASE_DOMAIN="$(cfg_get BASE_DOMAIN)"
+  if [[ -n "$DOMAIN" && -z "$BASE_DOMAIN" && "$CAN_PROMPT" == "1" ]]; then
+    ask BASE_DOMAIN "Base domain for apps (apps get <name>.<base domain>)" "$derived_base"
+  fi
+  [[ "$BASE_DOMAIN" == "$derived_base" ]] && BASE_DOMAIN=""
+  [[ -z "$DOMAIN" && -z "$BASE_DOMAIN" ]] && warn "no domain: apps are reachable only once you set one (re-run with --domain)."
 
-  [[ -z "$EMAIL" ]] && EMAIL="$(env_get "$ENGINE_ENV" CERTBOT_EMAIL)"
-  if [[ -n "$DOMAIN" || -n "$BASE_DOMAIN" ]]; then
-    ask EMAIL "Email for Let's Encrypt certificates" ""
+  [[ -z "$EMAIL" ]] && EMAIL="$(cfg_get CERTBOT_EMAIL)"
+  if [[ -n "$DOMAIN" && -z "$EMAIL" && "$CAN_PROMPT" == "1" ]]; then
+    ask EMAIL "Email for the Let's Encrypt account (optional)" ""
   fi
 
-  [[ -z "$SERVER_HOST" ]] && SERVER_HOST="$(env_get "$API_ENV" SERVER_HOST)"
-  if [[ -z "$SERVER_HOST" ]]; then
-    local ip
-    ip="$(detect_ip)"
-    ask SERVER_HOST "Public IP of this server" "$ip"
-  fi
+  [[ -z "$SERVER_HOST" ]] && SERVER_HOST="$(cfg_get SERVER_HOST)"
+  local ip="$SERVER_HOST"
+  [[ -n "$ip" ]] || ip="$(detect_ip)"
 
-  [[ -z "$BASE_DOMAIN" ]] && warn "no base domain set: deployed apps won't get working domains until you set one (re-run with --base-domain)."
-  if [[ -n "$DOMAIN" ]]; then ORIGIN="https://$DOMAIN"; else ORIGIN="http://$SERVER_HOST"; fi
+  if [[ -n "$DOMAIN" ]]; then ORIGIN="https://$DOMAIN"; else ORIGIN="http://$ip"; fi
   DASHBOARD_DOMAIN="$DOMAIN"
   CERT_EMAIL="$EMAIL"
+  SERVER_HOST_FOR_SUMMARY="$ip"
 
-  # --- GitHub (login and repository access) ---
-  local gh_app="$A_GITHUB_APP_ID" gh_cid="$A_GITHUB_CLIENT_ID" gh_secret="$A_GITHUB_CLIENT_SECRET"
-  local gh_pem="$A_GITHUB_PEM" gh_hook="$A_GITHUB_WEBHOOK_SECRET"
-  local have_gh=1
-  [[ -z "$gh_app" ]] && gh_app="$(env_get "$API_ENV" GITHUB_APP_ID)"
-  [[ -z "$gh_cid" ]] && gh_cid="$(env_get "$API_ENV" GITHUB_CLIENT_ID)"
-  [[ -z "$gh_secret" ]] && gh_secret="$(env_get "$API_ENV" GITHUB_CLIENT_SECRET)"
-  if [[ -z "$gh_app" || -z "$gh_cid" || -z "$gh_secret" ]]; then
-    info ""
-    info "GitHub App: sign-in and repository access. Create one at https://github.com/settings/apps/new"
-    info "  Homepage URL:  $ORIGIN"
-    info "  Callback URL:  $ORIGIN/api/auth/callback/github"
-    info "  Webhook URL:   $ORIGIN/api/github/webhook"
-    info "  Permissions:   Contents (read), Metadata (read); events: Push"
-    [[ "$CAN_PROMPT" == "1" ]] && info "Press Enter to skip any of these and fill them in later."
-    ask gh_app "GitHub App ID" ""
-    ask gh_cid "GitHub App client ID" ""
-    ask gh_secret "GitHub App client secret" "" secret
-  fi
-  local pem_dest="$INSTALL_DIR/github-app.pem"
-  local cur_pem
-  cur_pem="$(env_get "$API_ENV" GITHUB_APP_PRIVATE_KEY_PATH)"
-  if [[ -z "$gh_pem" && -n "$cur_pem" && -f "$cur_pem" ]]; then
-    gh_pem="$cur_pem"
-  elif [[ -z "$gh_pem" && -f "$pem_dest" ]]; then
-    gh_pem="$pem_dest"
-  fi
-  [[ -z "$gh_pem" ]] && ask gh_pem "Path to the GitHub App private key (.pem)" ""
-  if [[ -n "$gh_pem" ]]; then
-    gh_pem="${gh_pem/#\~/$HOME}"
-    [[ -f "$gh_pem" ]] || die "private key not found: $gh_pem"
-    if [[ "$(readlink -f "$gh_pem")" != "$(readlink -f "$pem_dest" 2>/dev/null || echo "$pem_dest")" ]]; then
-      install -m 600 "$gh_pem" "$pem_dest"
-      ok "copied the private key to $pem_dest"
-    fi
-    gh_pem="$pem_dest"
-  fi
-  [[ -z "$gh_hook" ]] && gh_hook="$(env_get "$API_ENV" GITHUB_WEBHOOK_SECRET)"
-  [[ -z "$gh_hook" ]] && gh_hook="$(rand_hex 20)"
-  if [[ -z "$gh_app" || -z "$gh_cid" || -z "$gh_secret" || -z "$gh_pem" ]]; then
-    have_gh=0
-    warn "GitHub App not fully configured: nobody can sign in until it is. Re-run the installer to add it."
-  fi
-
-  # --- Optional integrations ---
-  local cf_token="$A_CLOUDFLARE_TOKEN" cf_zone="$A_CLOUDFLARE_ZONE" rs_key="$A_RESEND_KEY" rs_from="$A_RESEND_FROM"
-  [[ -z "$cf_token" ]] && cf_token="$(env_get "$API_ENV" CLOUDFLARE_API_TOKEN)"
-  [[ -z "$cf_zone" ]] && cf_zone="$(env_get "$API_ENV" CLOUDFLARE_ZONE_ID)"
-  if [[ -z "$cf_token" && -n "$BASE_DOMAIN" ]]; then
-    info ""
-    info "Optional: Cloudflare creates a DNS record for each app automatically."
-    info "Skip it if you add a wildcard record (*.$BASE_DOMAIN -> $SERVER_HOST) yourself."
-    ask cf_token "Cloudflare API token (Zone:DNS:Edit)" ""
-    [[ -n "$cf_token" ]] && ask cf_zone "Cloudflare zone ID for $BASE_DOMAIN" ""
-  fi
-  [[ -z "$rs_key" ]] && rs_key="$(env_get "$API_ENV" RESEND_API_KEY)"
-  [[ -z "$rs_from" ]] && rs_from="$(env_get "$API_ENV" RESEND_FROM_EMAIL)"
-  if [[ -z "$rs_key" ]]; then
-    info ""
-    info "Optional: Resend sends uptime alert emails. Alerts wait in a queue until it's set."
-    ask rs_key "Resend API key" ""
-    [[ -n "$rs_key" ]] && ask rs_from "Alert sender, e.g. ShipYard <uptime@$BASE_DOMAIN>" ""
-  fi
-
-  # Values the user just gave (flags or prompts) replace old ones ("set");
-  # generated and derived values only fill gaps ("fill").
-  local f
-  # --- control-api ---
-  f="$API_ENV"
+  local f="$ROOT_ENV"
   env_put "$f" NODE_ENV production set
-  env_put "$f" PLATFORM_ENV production set
-  env_put "$f" PORT 4010 fill
+  env_put "$f" PUBLIC_URL "$ORIGIN" set
   env_put "$f" DATABASE_URL "$DATABASE_URL" set
   env_put "$f" REDIS_URL "$REDIS_URL" set
-  env_put "$f" DEPLOY_ENGINE_URL "http://127.0.0.1:4012" fill
-  env_put "$f" CLIENT_URL "$ORIGIN" set
-  env_put "$f" BETTER_AUTH_URL "$ORIGIN" set
-  env_put "$f" BETTER_AUTH_SECRET "$(rand_hex 32)" fill
-  env_put "$f" ENCRYPTION_KEY "$(rand_hex 16)" fill # exactly 32 characters
-  env_put "$f" BASE_DOMAIN "$BASE_DOMAIN" set
-  env_put "$f" SERVER_HOST "$SERVER_HOST" set
-  env_put "$f" GITHUB_APP_ID "$gh_app" set
-  env_put "$f" GITHUB_CLIENT_ID "$gh_cid" set
-  env_put "$f" GITHUB_CLIENT_SECRET "$gh_secret" set
-  env_put "$f" GITHUB_APP_PRIVATE_KEY_PATH "$gh_pem" set
-  env_put "$f" GITHUB_WEBHOOK_SECRET "$gh_hook" set
-  env_put "$f" CLOUDFLARE_API_TOKEN "$cf_token" set
-  env_put "$f" CLOUDFLARE_ZONE_ID "$cf_zone" set
-  env_put "$f" RESEND_API_KEY "$rs_key" set
-  env_put "$f" RESEND_FROM_EMAIL "$rs_from" set
+  # One master secret; installs that predate it keep their BETTER_AUTH_SECRET and
+  # ENCRYPTION_KEY (still in the legacy files), which take precedence over derived keys.
+  env_put "$f" SECRET "$(rand_hex 32)" fill
+  [[ -n "$BASE_DOMAIN" ]] && env_put "$f" BASE_DOMAIN "$BASE_DOMAIN" set
+  [[ -n "$A_SERVER_HOST" ]] && env_put "$f" SERVER_HOST "$A_SERVER_HOST" set
+  [[ -n "$A_EMAIL" ]] && env_put "$f" CERTBOT_EMAIL "$A_EMAIL" set
 
-  local key_len
-  key_len="$(env_get "$f" ENCRYPTION_KEY)"
-  [[ ${#key_len} -eq 32 ]] || warn "ENCRYPTION_KEY in $f is ${#key_len} characters; it must be exactly 32."
-
-  # --- deploy-engine ---
-  f="$ENGINE_ENV"
-  env_put "$f" NODE_ENV production set
-  env_put "$f" PLATFORM_ENV production set
-  env_put "$f" USE_DOCKER false fill
-  env_put "$f" PORT 4012 fill
-  env_put "$f" CONTROL_API_URL "http://127.0.0.1:4010" fill
-  env_put "$f" REDIS_URL "$REDIS_URL" set
-  env_put "$f" DASHBOARD_ORIGIN "$ORIGIN" set
-  env_put "$f" BASE_DIR "$APPS_DIR" fill
-  env_put "$f" BASE_DOMAIN "$BASE_DOMAIN" set
-  env_put "$f" CERTBOT_EMAIL "$EMAIL" set
-  env_put "$f" CERTBOT_WEBROOT "$CERTBOT_WEBROOT_DIR" fill
-  env_put "$f" GITHUB_APP_ID "$gh_app" set
-  env_put "$f" GITHUB_APP_PRIVATE_KEY_PATH "$gh_pem" set
-
-  # --- ui (NEXT_PUBLIC_* are baked into the build) ---
-  f="$UI_ENV"
-  env_put "$f" NEXT_PUBLIC_SITE_URL "$ORIGIN" set
-  env_put "$f" NEXT_PUBLIC_API_URL "$ORIGIN/api" set
-
-  ok "wrote packages/{control-api,deploy-engine,ui}/.env (mode 600)"
-  ((have_gh)) && ok "GitHub App configured"
+  if [[ -f "$API_ENV" || -f "$ENGINE_ENV" ]]; then
+    ok "wrote .env (the older per-package .env files are still read and take precedence)"
+  else
+    ok "wrote .env (mode 600)"
+  fi
   return 0
 }
 
@@ -707,9 +609,6 @@ build_package() {
   info "building $pkg"
   (cd "$INSTALL_DIR/packages/$pkg" && NODE_ENV=production PLATFORM_ENV=production bun run build >"/tmp/shipyard-build-$pkg.log" 2>&1) \
     || { tail -n 40 "/tmp/shipyard-build-$pkg.log" >&2; die "build of $pkg failed (full log: /tmp/shipyard-build-$pkg.log)"; }
-  if [[ "$pkg" == "control-api" ]] && ! grep -q "IS_PLATFORM_PROD = true" "$INSTALL_DIR/packages/control-api/dist/index.js"; then
-    die "control-api was built without the production flag"
-  fi
   ok "built $pkg"
 }
 
@@ -892,22 +791,21 @@ health_check() {
 }
 
 summary() {
-  local origin
-  origin="$(env_get "$API_ENV" CLIENT_URL)"
+  local origin token status=""
+  origin="$(cfg_get PUBLIC_URL)"
+  [[ -n "$origin" ]] || origin="$(cfg_get CLIENT_URL)"
+  token="$(setup_token)"
+  status="$(curl -fsS --max-time 5 http://127.0.0.1:4010/setup/status 2>/dev/null || true)"
   printf '\n%s ShipYard is installed%s\n\n' "$C_BOLD$C_GREEN" "$C_RESET"
   printf '  Dashboard:        %s\n' "$origin"
-  printf '  Install dir:      %s\n' "$INSTALL_DIR"
+  printf '  Install dir:      %s  (settings: %s)\n' "$INSTALL_DIR" "$ROOT_ENV"
   printf '  Deployed apps:    %s\n' "$APPS_DIR"
   printf '  Processes:        pm0 ls   |   logs: pm0 logs control-api\n'
-  printf '  Update later:     %s/scripts/install.sh update\n\n' "$INSTALL_DIR"
-  printf '  GitHub App settings:\n'
-  printf '    Callback URL:   %s/api/auth/callback/github\n' "$origin"
-  printf '    Webhook URL:    %s/api/github/webhook\n' "$origin"
-  printf '    Webhook secret: %s\n' "$(env_get "$API_ENV" GITHUB_WEBHOOK_SECRET)"
-  local base
-  base="$(env_get "$API_ENV" BASE_DOMAIN)"
-  if [[ -n "$base" && -z "$(env_get "$API_ENV" CLOUDFLARE_API_TOKEN)" ]]; then
-    printf '\n  DNS: add a wildcard A record  *.%s -> %s\n' "$base" "$(env_get "$API_ENV" SERVER_HOST)"
+  printf '  Update later:     %s/scripts/install.sh update\n' "$INSTALL_DIR"
+  if [[ "$status" == *'"github_login_ready":false'* && -n "$token" ]]; then
+    printf '\n%s  Next: connect GitHub (one click) at%s\n' "$C_BOLD" "$C_RESET"
+    printf '    %s/setup?token=%s\n' "$origin" "$token"
+    printf '  The first GitHub account to sign in becomes the owner.\n'
   fi
   if ((${#WARNINGS[@]})); then
     printf '\n%s  Needs attention:%s\n' "$C_YELLOW" "$C_RESET"
@@ -920,6 +818,26 @@ summary() {
 # ---------------------------------------------------------------------------------------------
 # update: pull, rebuild what changed, migrate if needed, restart what changed
 # ---------------------------------------------------------------------------------------------
+# Older installs keep settings in packages/*/.env. Add the root .env next to them (without
+# touching them) so every service sees the same PUBLIC_URL and SECRET. Never prompts.
+ensure_root_env() {
+  [[ -f "$API_ENV" || -f "$ENGINE_ENV" ]] || return 0
+  local origin
+  origin="$(cfg_get PUBLIC_URL)"
+  [[ -n "$origin" ]] || origin="$(cfg_get CLIENT_URL)"
+  [[ -n "$origin" ]] || origin="$(cfg_get BETTER_AUTH_URL)"
+  touch "$ROOT_ENV"
+  chmod 600 "$ROOT_ENV"
+  [[ -n "$origin" ]] && env_put "$ROOT_ENV" PUBLIC_URL "${origin%/}" fill
+  env_put "$ROOT_ENV" SECRET "$(rand_hex 32)" fill
+  local k v
+  for k in DATABASE_URL REDIS_URL; do
+    v="$(cfg_get "$k")"
+    [[ -n "$v" ]] && env_put "$ROOT_ENV" "$k" "$v" fill
+  done
+  return 0
+}
+
 cmd_update() {
   preflight
   export PATH="$HOME/.bun/bin:/usr/local/bin:$PATH"
@@ -936,12 +854,18 @@ cmd_update() {
     return
   fi
   ok "${before:0:7} -> ${after:0:7}"
+  ensure_root_env
   local changed
   changed="$(git -C "$INSTALL_DIR" diff --name-only "$before" "$after")"
-  local deps_changed=0 pkgs=() p
+  local deps_changed=0 config_changed=0 pkgs=() p
   grep -qE '(^|/)(package\.json|bun\.lock)$' <<<"$changed" && deps_changed=1
+  # Shared config is loaded at runtime by both services, so it restarts both.
+  grep -q '^packages/config/' <<<"$changed" && config_changed=1
   for p in control-api deploy-engine ui; do
-    if ((deps_changed)) || grep -q "^packages/$p/" <<<"$changed"; then pkgs+=("$p"); fi
+    if ((deps_changed)) || grep -q "^packages/$p/" <<<"$changed" \
+      || { ((config_changed)) && [[ "$p" != ui ]]; }; then
+      pkgs+=("$p")
+    fi
   done
 
   step "Rebuild changed packages"
@@ -979,34 +903,33 @@ cmd_doctor() {
   check "git" have git
   check "nginx" have nginx
   check "certbot" have certbot
-  step "Install"
+  step "Configuration"
   check "checkout at $INSTALL_DIR" test -d "$INSTALL_DIR/.git"
+  check ".env at $ROOT_ENV" test -f "$ROOT_ENV"
   local k
-  for k in DATABASE_URL REDIS_URL BETTER_AUTH_SECRET ENCRYPTION_KEY CLIENT_URL BETTER_AUTH_URL BASE_DOMAIN \
-    GITHUB_APP_ID GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET GITHUB_APP_PRIVATE_KEY_PATH; do
-    check "control-api $k" test -n "$(env_get "$API_ENV" "$k")"
+  for k in PUBLIC_URL SECRET DATABASE_URL; do
+    check "$k set" test -n "$(cfg_get "$k")"
   done
   local key
-  key="$(env_get "$API_ENV" ENCRYPTION_KEY)"
-  check "ENCRYPTION_KEY is 32 characters" test "${#key}" -eq 32
-  check "GitHub private key file exists" test -f "$(env_get "$API_ENV" GITHUB_APP_PRIVATE_KEY_PATH)"
-  for k in REDIS_URL CONTROL_API_URL BASE_DIR GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY_PATH; do
-    check "deploy-engine $k" test -n "$(env_get "$ENGINE_ENV" "$k")"
-  done
-  check "ui NEXT_PUBLIC_API_URL" test -n "$(env_get "$UI_ENV" NEXT_PUBLIC_API_URL)"
-  check "control-api built for production" grep -q "IS_PLATFORM_PROD = true" "$INSTALL_DIR/packages/control-api/dist/index.js"
+  key="$(cfg_get ENCRYPTION_KEY)"
+  [[ -n "$key" ]] && check "legacy ENCRYPTION_KEY is 32 characters" test "${#key}" -eq 32
   local apps
-  apps="$(env_get "$ENGINE_ENV" BASE_DIR)"
+  apps="$(cfg_get BASE_DIR)"
   check "apps dir ${apps:-$APPS_DIR} writable" test -w "${apps:-$APPS_DIR}"
   step "Services"
-  check "Postgres reachable" psql "$(env_get "$API_ENV" DATABASE_URL)" -qtAc 'SELECT 1'
-  check "Redis reachable" test "$(redis-cli -u "$(env_get "$API_ENV" REDIS_URL)" ping 2>/dev/null)" = PONG
+  check "Postgres reachable" psql "$(cfg_get DATABASE_URL)" -qtAc 'SELECT 1'
+  local redis_url
+  redis_url="$(cfg_get REDIS_URL)"
+  check "Redis reachable" test "$(redis-cli -u "${redis_url:-redis://127.0.0.1:6379/0}" ping 2>/dev/null)" = PONG
   check "nginx config valid" sudo -n nginx -t
   check "passwordless sudo for nginx/certbot" sudo -n -l certbot --version
   check "pm0 boot unit" test -f "/etc/systemd/system/pm0-$(id -un).service"
   check "control-api on :4010" curl -fsS --max-time 3 http://127.0.0.1:4010/api
   check "deploy-engine on :4012" curl -s -o /dev/null --max-time 3 http://127.0.0.1:4012/
   check "dashboard on :4013" curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:4013/login
+  local status
+  status="$(curl -fsS --max-time 3 http://127.0.0.1:4010/setup/status 2>/dev/null || true)"
+  check "GitHub App connected (Settings in the dashboard)" grep -q '"github_app_ready":true' <<<"$status"
   echo
   if ((bad)); then printf '%s%d problem(s) found.%s\n' "$C_YELLOW" "$bad" "$C_RESET"; return 1; fi
   printf '%sEverything looks good.%s\n' "$C_GREEN" "$C_RESET"
@@ -1032,7 +955,6 @@ main() {
   ensure_postgres
   ensure_redis
   configure_env
-  SERVER_HOST_FOR_SUMMARY="$(env_get "$API_ENV" SERVER_HOST)"
   ensure_dirs_and_sudo
   build_all
   migrate_db

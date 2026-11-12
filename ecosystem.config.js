@@ -1,3 +1,5 @@
+// pm0 / PM2 process file for the ShipYard platform itself. Settings come from `.env` at the
+// repository root (see .env.example); only per-process values live here.
 module.exports = {
   apps: [
     {
@@ -6,14 +8,7 @@ module.exports = {
       cwd: 'packages/control-api',
       interpreter: 'bun',
       max_memory_restart: '1G',
-      env: {
-        NODE_ENV: 'production',
-        // Bun inlines NODE_ENV when bundling, so a build made without it silently turns
-        // production behaviour (domain provisioning, nginx) off. Set the runtime flag too.
-        PLATFORM_ENV: 'production',
-        PORT: 4010,
-        DEPLOY_ENGINE_URL: 'http://localhost:4012',
-      },
+      env: { NODE_ENV: 'production', PORT: 4010 },
     },
     {
       // Deploy engine also runs the build worker: it clones, installs and builds
@@ -25,16 +20,10 @@ module.exports = {
       max_memory_restart: '2G',
       env: {
         NODE_ENV: 'production',
-        PLATFORM_ENV: 'production',
         PORT: 4012,
-        CONTROL_API_URL: 'http://localhost:4010',
-        REDIS_URL: 'redis://localhost:6379/0',
         // Keep deployed apps OUTSIDE the platform repo so framework workspace-root
-        // detection doesn't pick up this repo's own package.json/lockfile.
-        // NOTE: the pm2 user must be able to write here. Create it once with:
-        //   sudo mkdir -p /var/lib/shipyard/apps && sudo chown -R <pm2-user>:<pm2-user> /var/lib/shipyard/apps
-        // If you'd rather keep the old location, point BASE_DIR at it instead:
-        //   BASE_DIR: '/opt/shipyard/packages/deploy-engine/apps',
+        // detection doesn't pick up this repo's own package.json/lockfile. The installer
+        // creates it; by hand: sudo mkdir -p /var/lib/shipyard/apps && sudo chown $USER /var/lib/shipyard/apps
         BASE_DIR: '/var/lib/shipyard/apps',
       },
     },

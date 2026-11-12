@@ -1,7 +1,6 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
-import { readFileSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { githubAppConfig } from './settings-service';
 
 interface GitHubInstallationToken {
   token: string;
@@ -9,7 +8,7 @@ interface GitHubInstallationToken {
 }
 
 export interface GitHubAppInfo {
-  /** App id as configured on the server (from GITHUB_APP_ID). */
+  /** App id as configured on the server. */
   id: string;
   /** Public slug, e.g. "thakur-deploy". */
   slug: string;
@@ -28,52 +27,23 @@ export interface GitHubAppInfo {
 let appInfoCache: { appId: string; fetchedAt: number; info: GitHubAppInfo } | null = null;
 const APP_INFO_TTL_MS = 60 * 60 * 1000;
 
-/**
- * Resolves the path to the GitHub App private key file.
- * Priority: GITHUB_APP_PRIVATE_KEY_PATH env var > default project root location
- */
-function getPrivateKeyPath(): string {
-  if (process.env.GITHUB_APP_PRIVATE_KEY_PATH) {
-    return resolve(process.env.GITHUB_APP_PRIVATE_KEY_PATH);
+/** The GitHub App private key, from the dashboard settings or the legacy PEM file. */
+function loadPrivateKey(): string {
+  const key = githubAppConfig().privateKey;
+  if (!key) {
+    throw new Error(
+      'GitHub App is not connected yet. Open Settings in the dashboard to connect it.',
+    );
   }
-  // Default: project root (4 levels up from services dir)
-  return join(__dirname, '..', '..', '..', '..', 'github-app.pem');
+  if (!key.includes('-----BEGIN') || !key.includes('PRIVATE KEY-----')) {
+    throw new Error('The stored GitHub App private key is not a valid PEM key.');
+  }
+  return key;
 }
 
-/**
- * Reads and validates the GitHub App private key.
- * Throws descriptive errors for common issues.
- */
-function loadPrivateKey(): string {
-  const keyPath = getPrivateKeyPath();
-
-  if (!existsSync(keyPath)) {
-    throw new Error(
-      `GitHub App private key not found at: ${keyPath}\n` +
-        `Please ensure the PEM file exists or set GITHUB_APP_PRIVATE_KEY_PATH env variable.`,
-    );
-  }
-
-  try {
-    const key = readFileSync(keyPath, 'utf-8').trim();
-
-    // Validate PEM format (supports both PKCS#1 and PKCS#8)
-    if (!key.includes('-----BEGIN') || !key.includes('PRIVATE KEY-----')) {
-      throw new Error(
-        `Invalid PEM format in: ${keyPath}\n` + `Expected file to contain a valid RSA private key.`,
-      );
-    }
-
-    return key;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Invalid PEM')) {
-      throw error;
-    }
-    throw new Error(
-      `Failed to read GitHub App private key from: ${keyPath}\n` +
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
-  }
+/** Forget cached App metadata (after the App is replaced in Settings). */
+export function resetGitHubAppCache() {
+  appInfoCache = null;
 }
 
 export const GitHubService = {
@@ -82,11 +52,11 @@ export const GitHubService = {
    * @throws Error if GITHUB_APP_ID is missing or private key is invalid
    */
   generateAppJWT(): string {
-    const appId = process.env.GITHUB_APP_ID;
+    const appId = githubAppConfig().appId;
 
     if (!appId) {
       throw new Error(
-        'Missing GITHUB_APP_ID environment variable.\n' + 'Please set this in your .env file.',
+        'GitHub App is not connected yet. Open Settings in the dashboard to connect it.',
       );
     }
 
@@ -124,10 +94,10 @@ export const GitHubService = {
    * so it never has to hard-code an App slug per environment.
    */
   async getAppInstallInfo(): Promise<GitHubAppInfo> {
-    const appId = process.env.GITHUB_APP_ID;
+    const { appId, slug: storedSlug } = githubAppConfig();
     if (!appId) {
       throw new Error(
-        'Missing GITHUB_APP_ID environment variable.\nPlease set this in your .env file.',
+        'GitHub App is not connected yet. Open Settings in the dashboard to connect it.',
       );
     }
 
@@ -137,7 +107,7 @@ export const GitHubService = {
       return { id: appId, slug: '', name: '', installUrl: configuredUrl };
     }
 
-    const configuredSlug = process.env.GITHUB_APP_SLUG?.trim();
+    const configuredSlug = storedSlug?.trim();
     if (configuredSlug) {
       return {
         id: appId,
@@ -191,13 +161,15 @@ export const GitHubService = {
    * Verifies the GitHub webhook signature.
    */
   verifyWebhookSignature(payload: string, signature: string): boolean {
-    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    const secret = githubAppConfig().webhookSecret;
     if (!secret) {
-      throw new Error('Missing GITHUB_WEBHOOK_SECRET');
+      throw new Error('GitHub webhook secret is not configured');
     }
 
     const expectedSignature = `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`;
-    return expectedSignature === signature;
+    const expected = Buffer.from(expectedSignature);
+    const actual = Buffer.from(signature || '');
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
   },
 
   /**

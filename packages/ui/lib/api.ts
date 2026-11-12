@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4010';
+import { API_URL } from '@/lib/api-url';
 
 import {
   AccessSettings,

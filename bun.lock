@@ -13,12 +13,17 @@
         "vitest": "^1.0.0",
       },
     },
+    "packages/config": {
+      "name": "@thakur-deploy/config",
+      "version": "0.0.0",
+    },
     "packages/control-api": {
       "name": "@thakur-deploy/control-api",
       "version": "0.0.0",
       "dependencies": {
         "@elysiajs/cors": "^1.4.0",
         "@sinclair/typebox": "^0.34.41",
+        "@thakur-deploy/config": "workspace:*",
         "better-auth": "^1.6.25",
         "bullmq": "^5.81.1",
         "drizzle-orm": "^0.45.1",
@@ -37,6 +42,7 @@
       "name": "@thakur-deploy/deploy-engine",
       "version": "0.0.0",
       "dependencies": {
+        "@thakur-deploy/config": "workspace:*",
         "bullmq": "^5.81.1",
         "elysia": "^1.4.29",
         "ioredis": "^5.9.1",
@@ -461,6 +467,8 @@
     "@tailwindcss/oxide-win32-x64-msvc": ["@tailwindcss/oxide-win32-x64-msvc@4.3.3", "", { "os": "win32", "cpu": "x64" }, "sha512-yJ0pwIVc/nYeGoV02WtsN8KYyLQv7kyI2wDnkezyJlGGjkd4QLwDGAwl47YpPJeuI0M0ObaXGSPjvWDPeTPggw=="],
 
     "@tailwindcss/postcss": ["@tailwindcss/postcss@4.3.3", "", { "dependencies": { "@alloc/quick-lru": "^5.2.0", "@tailwindcss/node": "4.3.3", "@tailwindcss/oxide": "4.3.3", "postcss": "^8.5.16", "tailwindcss": "4.3.3" } }, "sha512-JTSZZGQi1AyKirbLN3azmjVzef92tcX7h+iSqPdaeStyFpGpDlKvvpxeOE8njhbUanbRwr3z8DyzhICWnMtQeg=="],
+
+    "@thakur-deploy/config": ["@thakur-deploy/config@workspace:packages/config"],
 
     "@thakur-deploy/control-api": ["@thakur-deploy/control-api@workspace:packages/control-api"],
 

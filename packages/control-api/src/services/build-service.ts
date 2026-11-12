@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { db } from '../db';
 import { builds, buildLogs, deployments } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
@@ -160,7 +161,7 @@ export const BuildService = {
 
     // Tell the deploy engine to remove the build output dir + artifact tarball
     // before dropping the DB rows. Best-effort: DB deletion proceeds regardless.
-    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
+    const deployEngineUrl = config.deployEngineUrl;
     try {
       const res = await fetch(`${deployEngineUrl}/projects/${build.project_id}/builds/${id}`, {
         method: 'DELETE',

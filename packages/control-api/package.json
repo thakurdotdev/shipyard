@@ -12,6 +12,7 @@
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
     "@sinclair/typebox": "^0.34.41",
+    "@thakur-deploy/config": "workspace:*",
     "better-auth": "^1.6.25",
     "bullmq": "^5.81.1",
     "drizzle-orm": "^0.45.1",
