@@ -1,5 +1,6 @@
 // pm0 / PM2 process file for the ShipYard platform itself. Settings come from `.env` at the
-// repository root (see .env.example); only per-process values live here.
+// repository root (see .env.example); only per-process values live here. The dashboard has
+// no process: it is a static export (packages/ui/out) that Nginx serves.
 module.exports = {
   apps: [
     {
@@ -26,14 +27,6 @@ module.exports = {
         // creates it; by hand: sudo mkdir -p /var/lib/shipyard/apps && sudo chown $USER /var/lib/shipyard/apps
         BASE_DIR: '/var/lib/shipyard/apps',
       },
-    },
-    {
-      name: 'ui',
-      script: 'bun',
-      args: 'run start',
-      cwd: 'packages/ui',
-      max_memory_restart: '512M',
-      env: { NODE_ENV: 'production', PORT: 4013 },
     },
   ],
 };

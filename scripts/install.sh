@@ -230,6 +230,8 @@ resolve_dir() {
 
 set_paths() {
   ROOT_ENV="$INSTALL_DIR/.env"
+  # The dashboard is a static export that Nginx serves straight from here.
+  UI_OUT="$INSTALL_DIR/packages/ui/out"
   # Per-package files from installs before the single .env. Still read (and they still win
   # at runtime), never written.
   API_ENV="$INSTALL_DIR/packages/control-api/.env"
@@ -640,6 +642,11 @@ write_nginx_site() {
     info "disabled the stock default Nginx site"
   fi
 
+  [[ -f "$UI_OUT/index.html" ]] || die "dashboard build missing at $UI_OUT (the build step should have created it)"
+  if id www-data >/dev/null 2>&1 && ! sudo -n -u www-data test -r "$UI_OUT/index.html" 2>/dev/null; then
+    warn "Nginx (www-data) can't read $UI_OUT; make its parent folders world-executable, e.g. chmod o+x on each"
+  fi
+
   # Without a certificate yet, serve plain HTTP (with the ACME path) so certbot can verify.
   render_nginx "$name" "$have_cert" | as_root tee "$avail.new" >/dev/null
   install_nginx_conf "$avail" "$enabled"
@@ -697,16 +704,41 @@ render_nginx() { # render_nginx SERVER_NAME TLS(0|1)
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_read_timeout 300s;'
+        proxy_read_timeout 300s;
+        proxy_buffering off;'
+  # The dashboard is static files (packages/ui/out). Every project shares one exported page
+  # (/projects/_), so /projects/<id> and its data files map onto it.
   local locations="
     client_max_body_size 50m;
+    root $UI_OUT;
+    index index.html;
+    error_page 404 /404.html;
 
     location /api/ {
         proxy_pass http://127.0.0.1:4010;$proxy
     }
 
+    location /_next/static/ {
+        add_header Cache-Control \"public, max-age=31536000, immutable\";
+    }
+
+    location ~ ^/projects/[^/]+\\.txt\$ {
+        try_files \$uri /projects/_.txt;
+    }
+
+    location ~ ^/projects/[^/]+/([^/]+)\$ {
+        try_files \$uri /projects/_/\$1;
+    }
+
+    # No dots in the id, so the /projects/_.html fallback cannot match this block again.
+    location ~ ^/projects/[^/.]+\$ {
+        add_header Cache-Control \"no-cache\";
+        try_files \$uri.html /projects/_.html;
+    }
+
     location / {
-        proxy_pass http://127.0.0.1:4013;$proxy
+        add_header Cache-Control \"no-cache\";
+        try_files \$uri \$uri.html \$uri/index.html =404;
     }"
   cat <<EOF
 # Managed by the ShipYard installer. Edits are kept only if you remove this line.
@@ -748,7 +780,7 @@ start_services() {
   local running
   running="$(pm0 jlist 2>/dev/null || echo '[]')"
   local name
-  for name in control-api deploy-engine ui; do
+  for name in control-api deploy-engine; do
     if grep -q "\"name\":\"$name\"" <<<"${running// /}"; then
       pm0 restart "$name" >/dev/null
       ok "restarted $name"
@@ -757,6 +789,15 @@ start_services() {
       ok "started $name"
     fi
   done
+  # Older installs ran the dashboard as a Node process. Once the managed Nginx site serves
+  # the static files it is no longer needed.
+  if grep -q '"name":"ui"' <<<"${running// /}"; then
+    if dashboard_served_by_nginx; then
+      pm0 delete ui >/dev/null && ok "removed the old ui process (Nginx serves the dashboard now)"
+    else
+      pm0 restart ui >/dev/null && ok "restarted ui (your Nginx site still proxies to it)"
+    fi
+  fi
   pm0 save >/dev/null
   ok "saved the process list"
 
@@ -781,12 +822,38 @@ wait_http() { # wait_http URL SECONDS [any]
   return 1
 }
 
+# True when the installer-managed Nginx site serves the static dashboard.
+dashboard_served_by_nginx() {
+  local site=/etc/nginx/sites-available/shipyard
+  [[ -f "$site" ]] && grep -q "Managed by the ShipYard installer" "$site" && grep -q "root $UI_OUT;" "$site"
+}
+
+# The dashboard as a browser would get it: through Nginx (or the legacy ui process).
+dashboard_answers() {
+  local host code
+  host="$(cfg_get PUBLIC_URL)"
+  host="${host#*://}"
+  host="${host%%/*}"
+  if dashboard_served_by_nginx; then
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H "Host: ${host:-localhost}" http://127.0.0.1/login || true)"
+    [[ "$code" =~ ^(200|301|302|308)$ ]]
+  else
+    curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:4013/login
+  fi
+}
+
 health_check() {
   step "Health checks"
   local failed=0
   if wait_http "http://127.0.0.1:4010/api" 60; then ok "control-api answers on :4010"; else warn "control-api is not answering: pm0 logs control-api"; failed=1; fi
   if wait_http "http://127.0.0.1:4012/" 60 any; then ok "deploy-engine answers on :4012"; else warn "deploy-engine is not answering: pm0 logs deploy-engine"; failed=1; fi
-  if wait_http "http://127.0.0.1:4013/login" 90; then ok "dashboard answers on :4013"; else warn "dashboard is not answering: pm0 logs ui"; failed=1; fi
+  local i=0
+  until dashboard_answers; do
+    i=$((i + 1))
+    if ((i > 15)); then warn "dashboard is not answering through Nginx: sudo nginx -t; ls $UI_OUT"; failed=1; break; fi
+    sleep 2
+  done
+  ((i <= 15)) && ok "dashboard served"
   return "$failed"
 }
 
@@ -878,7 +945,16 @@ cmd_update() {
 
   if ((${#pkgs[@]})); then
     step "Restart"
-    for p in "${pkgs[@]}"; do pm0 restart "$p" >/dev/null && ok "restarted $p"; done
+    local running
+    running="$(pm0 jlist 2>/dev/null || echo '[]')"
+    for p in "${pkgs[@]}"; do
+      if [[ "$p" == ui ]]; then
+        # Static files: Nginx serves the new build immediately. Older setups proxy to a ui process.
+        if grep -q '"name":"ui"' <<<"${running// /}"; then pm0 restart ui >/dev/null && ok "restarted ui"; else ok "dashboard rebuilt (served by Nginx)"; fi
+      else
+        pm0 restart "$p" >/dev/null && ok "restarted $p"
+      fi
+    done
     pm0 save >/dev/null
     health_check || true
   fi
@@ -926,7 +1002,8 @@ cmd_doctor() {
   check "pm0 boot unit" test -f "/etc/systemd/system/pm0-$(id -un).service"
   check "control-api on :4010" curl -fsS --max-time 3 http://127.0.0.1:4010/api
   check "deploy-engine on :4012" curl -s -o /dev/null --max-time 3 http://127.0.0.1:4012/
-  check "dashboard on :4013" curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:4013/login
+  check "dashboard build present" test -f "$UI_OUT/index.html"
+  check "dashboard served" dashboard_answers
   local status
   status="$(curl -fsS --max-time 3 http://127.0.0.1:4010/setup/status 2>/dev/null || true)"
   check "GitHub App connected (Settings in the dashboard)" grep -q '"github_app_ready":true' <<<"$status"
@@ -964,4 +1041,7 @@ main() {
   summary
 }
 
-main "$@"
+# SHIPYARD_INSTALL_LIB=1 loads the functions without running anything (used by tests).
+if [[ "${SHIPYARD_INSTALL_LIB:-}" != 1 ]]; then
+  main "$@"
+fi

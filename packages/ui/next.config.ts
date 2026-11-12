@@ -1,16 +1,26 @@
 import type { NextConfig } from 'next';
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants';
 
-// In production Nginx sends /api to the Control API before requests reach Next.js.
-// This rewrite does the same for local development (`bun run dev`).
-const controlApi = (process.env.CONTROL_API_URL || 'http://127.0.0.1:4010').replace(/\/+$/, '');
+/**
+ * The dashboard is a fully client-side app, so production builds are a static export
+ * (`out/`) that Nginx serves directly: no Node process for the UI. Nginx also sends /api
+ * to the Control API; in development (`next dev`) the rewrite below does that instead.
+ */
+export default function config(phase: string): NextConfig {
+  const base: NextConfig = {
+    typescript: { ignoreBuildErrors: true },
+    images: { unoptimized: true },
+  };
 
-const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  async rewrites() {
-    return [{ source: '/api/:path*', destination: `${controlApi}/api/:path*` }];
-  },
-};
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    const controlApi = (process.env.CONTROL_API_URL || 'http://127.0.0.1:4010').replace(/\/+$/, '');
+    return {
+      ...base,
+      async rewrites() {
+        return [{ source: '/api/:path*', destination: `${controlApi}/api/:path*` }];
+      },
+    };
+  }
 
-export default nextConfig;
+  return { ...base, output: 'export' };
+}
