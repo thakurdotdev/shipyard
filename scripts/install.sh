@@ -501,7 +501,7 @@ configure_env() {
 
   local DOMAIN="$A_DOMAIN" BASE_DOMAIN="$A_BASE_DOMAIN" EMAIL="$A_EMAIL" SERVER_HOST="$A_SERVER_HOST"
   if [[ -z "$DOMAIN" && -n "$cur_domain" && "$cur_domain" != "-" ]]; then DOMAIN="$cur_domain"; fi
-  if [[ -z "$DOMAIN" && "$cur_domain" != "-" ]]; then
+  if [[ -z "$DOMAIN" && "$cur_domain" != "-" && "$CAN_PROMPT" == "1" ]]; then
     info "Dashboard address. Point its DNS A record at this server first."
     info "Leave empty to use plain HTTP on the server IP (fine for trying ShipYard out)."
     ask DOMAIN "Dashboard domain (e.g. deploy.example.com)" ""
