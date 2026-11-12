@@ -8,7 +8,7 @@ import { getStaticDirectory, staticSiteLocations } from '../static-site';
 /**
  * Dockerfile template types
  */
-type FrameworkType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
+type FrameworkType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'bun' | 'go';
 
 /**
  * Common entry file patterns for backend apps
@@ -170,7 +170,7 @@ EXPOSE ${internalPort}
 ${cmd}`;
 
     default:
-      // Backend frameworks (express, hono, elysia) - multi-stage
+      // Backend frameworks (express, hono, elysia, bun) - multi-stage
       return `FROM oven/bun:1-alpine AS builder
 WORKDIR /app
 COPY package.json ./

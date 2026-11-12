@@ -18,7 +18,7 @@ export const projects = pgTable(
     github_url: text('github_url').notNull(),
     root_directory: text('root_directory').default('./'),
     build_command: text('build_command').notNull(),
-    app_type: varchar('app_type', { length: 50 }).notNull(), // Frontend: 'nextjs' | 'vite' | Backend: 'express' | 'hono' | 'elysia'
+    app_type: varchar('app_type', { length: 50 }).notNull(), // Frontend: 'nextjs' | 'vite' | Backend: 'express' | 'hono' | 'elysia' | 'bun' | 'go'
     domain: varchar('domain', { length: 255 }).unique(),
     port: integer('port').unique(),
     github_repo_id: text('github_repo_id'),

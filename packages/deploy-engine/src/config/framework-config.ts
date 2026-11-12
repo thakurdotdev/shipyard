@@ -4,7 +4,7 @@ import { basename, join } from 'path';
 /**
  * Supported application framework types.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'bun' | 'go';
 
 export interface FrameworkConfig {
   id: AppType;
@@ -79,6 +79,15 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
     startCommand: () => ['bun', 'run', '--bun', 'start'],
   },
 
+  bun: {
+    id: 'bun',
+    displayName: 'Bun',
+    category: 'backend',
+    requiresInstall: true,
+    isStaticBuild: false,
+    startCommand: () => ['bun', 'run', '--bun', 'start'],
+  },
+
   go: {
     id: 'go',
     displayName: 'Go',
@@ -123,9 +132,10 @@ export function detectEntryFile(cwd: string): string | null {
 
       // Helper to extract entry from script
       const extractEntryFromScript = (script: string): string | null => {
-        // Match patterns like: bun/node/tsx/ts-node/nodemon [run] <file.ts|js>
+        // Match patterns like: bun/node/tsx/ts-node/nodemon [run] [--flags] <file.ts|js>
+        // Flags such as `--watch`, `--hot` or `--bun` may sit between the runner and the file.
         const match = script.match(
-          /(?:bun|node|tsx|ts-node|nodemon)\s+(?:run\s+)?(?:watch\s+)?(\S+\.(?:ts|js))/,
+          /(?:bun|node|tsx|ts-node|nodemon)\s+(?:(?:run|watch|--?[\w-]+(?:=\S+)?)\s+)*(\S+\.(?:ts|js|mjs|cjs))/,
         );
         if (match?.[1]) {
           return match[1].replace(/^\.\//, '');

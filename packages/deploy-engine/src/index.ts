@@ -100,6 +100,7 @@ const app = new Elysia()
           t.Literal('express'),
           t.Literal('hono'),
           t.Literal('elysia'),
+          t.Literal('bun'),
           t.Literal('go'),
         ]),
         subdomain: t.String(),

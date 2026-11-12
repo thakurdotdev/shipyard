@@ -290,6 +290,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
           path: string;
         }>;
 
+        const rootFiles = rootContents.map((f) => f.name);
+
         // Find all folders with package.json
         const folders: Array<{
           path: string;
@@ -318,7 +320,6 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
             },
           );
           const pkgJson = pkgRes.ok ? ((await pkgRes.json()) as any) : null;
-          const rootFiles = rootContents.map((f) => f.name);
           const detected = detectFramework(rootFiles, pkgJson);
 
           folders.push({
@@ -371,7 +372,7 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
             );
             const pkgJson = pkgRes.ok ? ((await pkgRes.json()) as any) : null;
             const dirFiles = dirContents.map((f) => f.name);
-            const detected = detectFramework(dirFiles, pkgJson);
+            const detected = detectFramework(dirFiles, pkgJson, rootFiles);
 
             folders.push({
               path: dir.path,
@@ -415,7 +416,7 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
                 );
                 const pkgJson = pkgRes.ok ? ((await pkgRes.json()) as any) : null;
                 const subFiles = subDirContents.map((f) => f.name);
-                const detected = detectFramework(subFiles, pkgJson);
+                const detected = detectFramework(subFiles, pkgJson, rootFiles);
 
                 folders.push({
                   path: `${dir.path}/${subDir.name}`,

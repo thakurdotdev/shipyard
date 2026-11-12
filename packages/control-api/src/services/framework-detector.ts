@@ -49,15 +49,63 @@ const FRAMEWORK_RULES: Array<{
   },
 ];
 
+/** Files that mark a project as using the Bun runtime / package manager. */
+const BUN_MARKER_FILES = ['bun.lock', 'bun.lockb', 'bunfig.toml'];
+/** Packages that only make sense in a Bun project. */
+const BUN_MARKER_DEPENDENCIES = ['@types/bun', 'bun-types'];
+
+export interface PackageJsonLike {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+}
+
+/**
+ * Detects a plain Bun server (Bun.serve, no web framework).
+ * Only consulted after every framework rule failed, so Bun-based Elysia, Hono,
+ * Vite or Next.js projects still resolve to their framework.
+ */
+function detectBun(
+  fileNames: string[],
+  packageJson: PackageJsonLike | null,
+  repoRootFiles: string[],
+): DetectedFramework | null {
+  if (!packageJson) return null;
+
+  const marker = BUN_MARKER_FILES.find((f) => fileNames.includes(f));
+  if (marker) return { framework: 'bun', confidence: 'high', reason: `Found ${marker}` };
+
+  const allDeps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+  const dep = BUN_MARKER_DEPENDENCIES.find((d) => d in allDeps);
+  if (dep) return { framework: 'bun', confidence: 'medium', reason: `Found dependency: ${dep}` };
+
+  for (const name of ['start', 'dev']) {
+    const script = packageJson.scripts?.[name];
+    if (script && /^\s*bun(x)?\s/.test(script)) {
+      return { framework: 'bun', confidence: 'medium', reason: `"${name}" script runs with bun` };
+    }
+  }
+
+  // Monorepo member: the lockfile lives at the repository root.
+  const rootMarker = BUN_MARKER_FILES.find((f) => repoRootFiles.includes(f));
+  if (rootMarker) {
+    return {
+      framework: 'bun',
+      confidence: 'low',
+      reason: `Found ${rootMarker} at repository root`,
+    };
+  }
+
+  return null;
+}
+
 /**
  * Detects the framework used in a project based on config files and dependencies
  */
 export function detectFramework(
   fileNames: string[],
-  packageJson: {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  } | null,
+  packageJson: PackageJsonLike | null,
+  repoRootFiles: string[] = [],
 ): DetectedFramework {
   const allDeps = {
     ...packageJson?.dependencies,
@@ -89,6 +137,9 @@ export function detectFramework(
     }
   }
 
+  const bun = detectBun(fileNames, packageJson, repoRootFiles);
+  if (bun) return bun;
+
   return {
     framework: null,
     confidence: 'low',
@@ -110,6 +161,7 @@ export function getFrameworkDisplayInfo(framework: AppType | null): {
     express: { name: 'Express', icon: 'express', color: '#000000' },
     hono: { name: 'Hono', icon: 'hono', color: '#E36002' },
     elysia: { name: 'Elysia', icon: 'elysia', color: '#7C3AED' },
+    bun: { name: 'Bun', icon: 'bun', color: '#FBF0DF' },
     go: { name: 'Go', icon: 'go', color: '#00ADD8' },
   };
 
