@@ -1,10 +1,16 @@
 import { spawn } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { rm } from 'fs/promises';
 import { join } from 'path';
 import { AppType, isBackendFramework } from '../../config/framework-config';
 import { getBuildExtractDir } from '../../config/paths';
 import { isWorkspaceRoot } from '../../utils/workspace';
+import {
+  GO_BUILD_MARKER,
+  GoBuildInfo,
+  isExecutableFile,
+  parseGoBuildCommand,
+} from '../../utils/go';
 import { GitService } from './git-service';
 import { WorkerGitHubService } from './github-service';
 import { LogStreamer } from './log-streamer';
@@ -303,15 +309,67 @@ export const Builder = {
       'info',
     );
 
+    if (existsSync(join(projectDir, 'go.mod'))) {
+      await LogStreamer.stream(job.build_id, job.project_id, 'Downloading Go modules...\n', 'info');
+      await this.runCommand('go mod download', projectDir, job.build_id, job.project_id, job.env_vars);
+    } else {
+      await LogStreamer.stream(
+        job.build_id,
+        job.project_id,
+        'No go.mod found in the app directory - building without module dependencies.\n',
+        'warning',
+      );
+    }
+
     const buildCommand = job.build_command?.trim() || 'go build -o app .';
+    // Filesystem mtimes can be coarse; allow a little slack when spotting fresh binaries.
+    const startedAt = Date.now() - 2000;
     await LogStreamer.stream(job.build_id, job.project_id, 'Building project...\n', 'info');
     await this.runCommand(buildCommand, projectDir, job.build_id, job.project_id, job.env_vars);
+
+    const parsed = parseGoBuildCommand(buildCommand);
+    const binary = this.resolveGoBinary(projectDir, parsed.output, startedAt);
+    if (!binary) {
+      const msg =
+        'Go build finished but no executable was found. Make sure the build compiles a `main` package ' +
+        'and name the output, e.g. `go build -o app ./cmd/server`.\n';
+      await LogStreamer.stream(job.build_id, job.project_id, msg, 'error');
+      throw new Error('Go build produced no executable');
+    }
+    const info: GoBuildInfo = { binary, package: parsed.package };
+    await Bun.write(join(projectDir, GO_BUILD_MARKER), JSON.stringify(info));
+
     await LogStreamer.stream(
       job.build_id,
       job.project_id,
-      'Build completed successfully!\n',
+      `Build completed successfully! Binary: ${binary}\n`,
       'success',
     );
+  },
+
+  /**
+   * Finds the executable a `go build` just produced, relative to the app directory.
+   * Uses the `-o` path when given, otherwise the freshest executable in the app or bin/ directory.
+   */
+  resolveGoBinary(projectDir: string, output: string | undefined, since: number): string | null {
+    const fresh = (dir: string) => {
+      const abs = join(projectDir, dir);
+      if (!existsSync(abs) || !statSync(abs).isDirectory()) return [];
+      return readdirSync(abs)
+        .map((name) => join(dir, name))
+        .filter((rel) => isExecutableFile(join(projectDir, rel)))
+        .map((rel) => ({ rel, mtime: statSync(join(projectDir, rel)).mtimeMs }))
+        .filter((f) => f.mtime >= since)
+        .sort((a, b) => b.mtime - a.mtime)
+        .map((f) => f.rel.replace(/^\.\//, ''));
+    };
+
+    if (output) {
+      const abs = join(projectDir, output);
+      if (existsSync(abs) && statSync(abs).isDirectory()) return fresh(output)[0] ?? null;
+      return isExecutableFile(abs) ? output.replace(/^\.\//, '') : null;
+    }
+    return fresh('.')[0] ?? fresh('bin')[0] ?? null;
   },
 
   async runCommand(

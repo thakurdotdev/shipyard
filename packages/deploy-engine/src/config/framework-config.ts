@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { basename, join } from 'path';
+import { isExecutableFile, readGoBuildInfo } from '../utils/go';
 
 /**
  * Supported application framework types.
@@ -226,10 +227,18 @@ const GO_BINARY_CANDIDATES = ['app', 'server', 'main'];
 /**
  * Resolves the start command for a compiled Go binary.
  *
- * The default build command is `go build -o app .`, so `app` is checked first.
+ * Prefers the binary recorded by the builder. Otherwise, since the default build
+ * command is `go build -o app .`, `app` is checked first.
  * Falls back to a binary named after the app directory, then to `go run .`.
  */
 export function getGoStartCommand(cwd: string): string[] {
+  // The builder records the binary it actually produced (any -o path, cmd/ layouts...).
+  const built = readGoBuildInfo(cwd);
+  if (built && isExecutableFile(join(cwd, built.binary))) {
+    console.log(`[getGoStartCommand] Using built binary: ${built.binary}`);
+    return [join(cwd, built.binary)];
+  }
+
   const candidates = [...GO_BINARY_CANDIDATES, 'bin/app', basename(cwd)];
 
   for (const name of candidates) {

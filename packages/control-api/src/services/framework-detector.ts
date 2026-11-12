@@ -214,3 +214,56 @@ export function suggestPreDeployCommand(
   }
   return null;
 }
+
+export interface GoProjectInfo {
+  /** Major.minor from go.mod's `go` directive. */
+  version: string | null;
+  /** Build command that compiles the right main package. */
+  buildCommand: string;
+  buildReason: string;
+  preDeploy: PreDeploySuggestion | null;
+}
+
+const MIGRATION_CMD_NAMES = ['migrate', 'migration', 'migrations', 'migrator', 'dbmigrate'];
+/** Preferred names for the server's main package under cmd/. */
+const SERVER_CMD_NAMES = ['server', 'api', 'app', 'web', 'http', 'service', 'main'];
+
+/**
+ * Works out how to build and migrate a Go module.
+ *
+ * @param fileNames entries in the module directory
+ * @param cmdDirs subdirectories of `cmd/` (empty when there is none)
+ * @param goMod contents of go.mod, if it could be read
+ */
+export function inspectGoProject(
+  fileNames: string[],
+  cmdDirs: string[],
+  goMod: string | null,
+): GoProjectInfo {
+  const version = goMod?.match(/^go\s+(\d+\.\d+)/m)?.[1] ?? null;
+  const migrateCmd = cmdDirs.find((d) => MIGRATION_CMD_NAMES.includes(d.toLowerCase()));
+  const preDeploy = migrateCmd
+    ? { command: `go run ./cmd/${migrateCmd}`, reason: `Found cmd/${migrateCmd}` }
+    : null;
+
+  if (fileNames.includes('main.go') || cmdDirs.length === 0) {
+    return {
+      version,
+      buildCommand: 'go build -o app .',
+      buildReason: 'main package at the module root',
+      preDeploy,
+    };
+  }
+
+  const servers = cmdDirs.filter((d) => d !== migrateCmd);
+  const target =
+    SERVER_CMD_NAMES.map((n) => servers.find((d) => d.toLowerCase() === n)).find(Boolean) ??
+    servers[0] ??
+    cmdDirs[0];
+  return {
+    version,
+    buildCommand: `go build -o app ./cmd/${target}`,
+    buildReason: `main package in cmd/${target}`,
+    preDeploy,
+  };
+}

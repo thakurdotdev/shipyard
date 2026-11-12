@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { detectFramework, suggestPreDeployCommand } from './framework-detector';
+import { detectFramework, inspectGoProject, suggestPreDeployCommand } from './framework-detector';
 
 describe('detectFramework - Bun', () => {
   it('detects a plain Bun server from its lockfile', () => {
@@ -64,5 +64,30 @@ describe('suggestPreDeployCommand', () => {
   it('suggests nothing for apps without a database toolchain', () => {
     expect(suggestPreDeployCommand(['index.ts'], { dependencies: { hono: '4' } })).toBeNull();
     expect(suggestPreDeployCommand([], null)).toBeNull();
+  });
+});
+
+describe('inspectGoProject', () => {
+  it('builds the module root when main.go lives there', () => {
+    const info = inspectGoProject(['go.mod', 'main.go'], [], 'module x\n\ngo 1.23.4\n');
+    expect(info.version).toBe('1.23');
+    expect(info.buildCommand).toBe('go build -o app .');
+    expect(info.preDeploy).toBeNull();
+  });
+
+  it('targets the server under cmd/ and suggests the migrate command', () => {
+    const info = inspectGoProject(
+      ['go.mod', 'cmd', 'internal'],
+      ['migrate', 'worker', 'api'],
+      null,
+    );
+    expect(info.buildCommand).toBe('go build -o app ./cmd/api');
+    expect(info.preDeploy?.command).toBe('go run ./cmd/migrate');
+  });
+
+  it('falls back to the first cmd/ entry', () => {
+    expect(inspectGoProject(['go.mod'], ['mytool'], null).buildCommand).toBe(
+      'go build -o app ./cmd/mytool',
+    );
   });
 });

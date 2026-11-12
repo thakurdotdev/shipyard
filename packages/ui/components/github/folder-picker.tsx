@@ -27,6 +27,8 @@ export interface Folder {
   hasPackageJson: boolean;
   detectionReason?: string;
   preDeploy?: { command: string; reason: string } | null;
+  buildCommand?: { command: string; reason: string } | null;
+  runtimeVersion?: string | null;
 }
 
 interface FolderPickerProps {
@@ -159,7 +161,9 @@ export function FolderPicker({
                       className="flex shrink-0 items-center gap-1.5 text-xs font-normal text-muted-foreground"
                       title={folder.detectionReason}
                     >
-                      <span className="hidden sm:inline">{folder.frameworkInfo.name}</span>
+                      <span className="hidden sm:inline">
+                        {folder.runtimeVersion ?? folder.frameworkInfo.name}
+                      </span>
                       <FrameworkIcon icon={folder.frameworkInfo.icon} size={18} />
                     </div>
                   </Label>

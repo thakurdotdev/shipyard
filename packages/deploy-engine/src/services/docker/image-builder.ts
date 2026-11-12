@@ -4,6 +4,7 @@ import { join } from 'path';
 import { execDocker, execDockerWithStream } from './exec';
 import { BuildResult, getImageName } from './types';
 import { getStaticDirectory, staticSiteLocations } from '../static-site';
+import { readGoBuildInfo, readGoVersion } from '../../utils/go';
 
 /**
  * Dockerfile template types
@@ -123,6 +124,7 @@ function getDockerfileContent(
   framework: FrameworkType,
   internalPort: number = 3000,
   entryFile?: string,
+  go?: { version: string | null; package: string },
 ): string {
   // Determine the CMD based on entry point
   const cmd = entryFile ? `CMD ["bun", "run", "${entryFile}"]` : `CMD ["bun", "run", "start"]`;
@@ -138,20 +140,27 @@ RUN nginx -t
 EXPOSE ${internalPort}
 CMD ["nginx", "-g", "daemon off;"]`;
 
-    case 'go':
-      // Go: compile a static binary, ship it on a minimal runtime image
-      return `FROM golang:1.23-alpine AS builder
+    case 'go': {
+      // Go: compile a static binary, ship it on a minimal runtime image.
+      // Match go.mod's Go version and build the same package the build step compiled.
+      const goVersion = go?.version ?? '1.23';
+      const pkg = go?.package ?? '.';
+      return `FROM golang:${goVersion}-alpine AS builder
 WORKDIR /app
-COPY . .
+ENV GOTOOLCHAIN=auto
+COPY go.mod go.sum* ./
 RUN go mod download
-RUN CGO_ENABLED=0 go build -o app .
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/app ${pkg}
 
 FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
-COPY --from=builder /app/app /app/app
+COPY --from=builder /out/app /app/app
 ENV PORT=${internalPort}
 EXPOSE ${internalPort}
 CMD ["/app/app"]`;
+    }
 
     case 'nextjs':
       // Next.js with multi-stage build
@@ -261,7 +270,17 @@ export async function buildImage(
       }
     }
 
-    const content = getDockerfileContent(framework, internalPort, entryFile);
+    const goOptions =
+      framework === 'go'
+        ? {
+            version: readGoVersion(sourceDir),
+            package: readGoBuildInfo(sourceDir)?.package ?? '.',
+          }
+        : undefined;
+    if (goOptions) {
+      onLog?.(`Go ${goOptions.version ?? '(default)'} - building package ${goOptions.package}`);
+    }
+    const content = getDockerfileContent(framework, internalPort, entryFile, goOptions);
     await writeFile(dockerfilePath, content);
     onLog?.(`Generated Dockerfile for ${framework}`);
     dockerfileGenerated = true;

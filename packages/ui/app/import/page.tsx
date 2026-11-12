@@ -114,6 +114,7 @@ export default function ImportPage() {
         github_installation_id: selectedInstallation.toString(),
         env_vars: config.envVars,
         auto_deploy: config.autoDeploy,
+        access: config.access,
       });
 
       // 2. Trigger Build
@@ -237,6 +238,8 @@ export default function ImportPage() {
             initialFramework={selectedFolder?.framework || undefined}
             detectionReason={selectedFolder?.detectionReason}
             preDeploySuggestion={selectedFolder?.preDeploy}
+            buildSuggestion={selectedFolder?.buildCommand}
+            runtimeVersion={selectedFolder?.runtimeVersion}
           />
         )}
       </div>

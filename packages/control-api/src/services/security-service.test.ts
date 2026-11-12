@@ -24,7 +24,11 @@ describe('SecurityService.validatePreDeployCommand', () => {
     );
   });
 
-  it('keeps build commands restricted to package managers', () => {
+  it('keeps build commands restricted to package managers and the Go toolchain', () => {
     expect(() => SecurityService.validateBuildCommand('npx prisma generate')).toThrow();
+    expect(SecurityService.validateBuildCommand('go build -o app .')).toBe(true);
+    expect(
+      SecurityService.validateBuildCommand('go generate ./... && go build -o app ./cmd/server'),
+    ).toBe(true);
   });
 });

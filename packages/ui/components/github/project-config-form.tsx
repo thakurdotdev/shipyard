@@ -13,6 +13,7 @@ import {
   Globe,
   Hammer,
   KeyRound,
+  Lock,
   Loader2,
   Package,
   Rocket,
@@ -35,6 +36,13 @@ import {
   PreDeployCommandInput,
   PreDeploySuggestion,
 } from '@/components/deploy/pre-deploy-command-input';
+import {
+  DEFAULT_PASSWORD_PROTECTION,
+  PasswordProtectionFields,
+  PasswordProtectionValue,
+  passwordProtectionError,
+  toAccessPayload,
+} from '@/components/deploy/password-protection-fields';
 import { GitRepository } from './repository-list';
 import { EnvVarEditor, EnvVar } from '../env-var-editor';
 import {
@@ -57,6 +65,10 @@ interface ProjectConfigFormProps {
   /** Why the framework was detected, e.g. "Found bun.lock". */
   detectionReason?: string;
   preDeploySuggestion?: PreDeploySuggestion | null;
+  /** Build command worked out from the repo layout (e.g. Go `cmd/` packages). */
+  buildSuggestion?: { command: string; reason: string } | null;
+  /** e.g. "Go 1.23" from go.mod. */
+  runtimeVersion?: string | null;
 }
 
 export interface ProjectConfig {
@@ -69,6 +81,7 @@ export interface ProjectConfig {
   port?: number;
   envVars: Record<string, string>;
   autoDeploy: boolean;
+  access?: { password: string; session_hours: number };
 }
 
 type CheckStatus = 'idle' | 'loading' | 'available' | 'unavailable' | 'error';
@@ -174,14 +187,24 @@ export function ProjectConfigForm({
   initialFramework,
   detectionReason,
   preDeploySuggestion,
+  buildSuggestion,
+  runtimeVersion,
 }: ProjectConfigFormProps) {
   const detectedAppType = (initialFramework as AppType | undefined) ?? null;
+  // The detected framework's build command comes from the repo layout when we know it.
+  const defaultBuildFor = (type: AppType) =>
+    type === detectedAppType && buildSuggestion
+      ? buildSuggestion.command
+      : getDefaultBuildCommand(type);
   const [name, setName] = useState(trimSlug(toSlug(repo.name)));
   const [rootDirectory, setRootDirectory] = useState(initialRootDirectory);
   const [domain, setDomain] = useState('');
   const [port, setPort] = useState('');
   const [appType, setAppType] = useState<AppType>(detectedAppType ?? 'nextjs');
-  const [buildCommand, setBuildCommand] = useState(getDefaultBuildCommand(appType));
+  const [buildCommand, setBuildCommand] = useState(() => defaultBuildFor(appType));
+  const [protection, setProtection] = useState<PasswordProtectionValue>(
+    DEFAULT_PASSWORD_PROTECTION,
+  );
   const [preDeployCommand, setPreDeployCommand] = useState('');
   const [autoDeploy, setAutoDeploy] = useState(true);
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
@@ -191,7 +214,9 @@ export function ProjectConfigForm({
 
   const isStatic = isStaticFramework(appType);
   const framework = FRAMEWORK_OPTIONS.find((f) => f.value === appType)!;
-  const defaultBuildCommand = getDefaultBuildCommand(appType);
+  const defaultBuildCommand = defaultBuildFor(appType);
+  const isGo = appType === 'go';
+  const protectionError = passwordProtectionError(protection);
   const effectivePreDeploy = isStatic ? '' : preDeployCommand.trim();
   const definedEnvVars = envVars.filter((v) => v.key.trim());
   const hasDatabaseEnv = definedEnvVars.some((v) =>
@@ -221,7 +246,7 @@ export function ProjectConfigForm({
   const handleAppTypeChange = (value: AppType) => {
     // Keep a hand-edited build command; swap only the untouched default.
     if (buildCommand.trim() === defaultBuildCommand) {
-      setBuildCommand(getDefaultBuildCommand(value));
+      setBuildCommand(defaultBuildFor(value));
     }
     setAppType(value);
     if (isStaticFramework(value)) setPort('');
@@ -235,8 +260,10 @@ export function ProjectConfigForm({
     if (subdomain && domainCheck.status === 'unavailable') return 'Choose another subdomain';
     if (!isStatic && port && !portInRange) return 'Fix the port';
     if (!isStatic && port && portCheck.status === 'unavailable') return 'Choose another port';
+    if (protectionError) return protectionError;
     return null;
   }, [
+    protectionError,
     name,
     buildCommand,
     subdomain,
@@ -268,6 +295,7 @@ export function ProjectConfigForm({
       port: !isStatic && port ? portNumber : undefined,
       envVars: Object.fromEntries(definedEnvVars.map((v) => [v.key.trim(), v.value])),
       autoDeploy,
+      access: toAccessPayload(protection),
     });
   };
 
@@ -287,7 +315,9 @@ export function ProjectConfigForm({
 
   const pipeline = [
     { icon: GitBranch, label: 'Clone', detail: `${repo.default_branch ?? 'main'} branch` },
-    ...(appType === 'go' ? [] : [{ icon: Package, label: 'Install', detail: 'bun install' }]),
+    isGo
+      ? { icon: Package, label: 'Modules', detail: 'go mod download' }
+      : { icon: Package, label: 'Install', detail: 'bun install' },
     { icon: Hammer, label: 'Build', detail: buildCommand.trim() || '—' },
     ...(effectivePreDeploy
       ? [{ icon: DatabaseZap, label: 'Pre-deploy', detail: effectivePreDeploy, highlight: true }]
@@ -295,7 +325,11 @@ export function ProjectConfigForm({
     {
       icon: Rocket,
       label: isStatic ? 'Serve' : 'Start',
-      detail: isStatic ? 'Static files via Nginx' : `${framework.label} on ${port || 'auto'} port`,
+      detail: isStatic
+        ? 'Static files via Nginx'
+        : isGo
+          ? `Compiled binary on port ${port || 'auto'}`
+          : `${framework.label} on port ${port || 'auto'}`,
     },
   ];
 
@@ -455,7 +489,8 @@ export function ProjectConfigForm({
             {detectionReason && detectedAppType && (
               <p className="mt-3 text-xs text-muted-foreground">
                 {appType === detectedAppType ? 'Detected' : `Detected ${detectedAppType}`} —{' '}
-                {detectionReason.charAt(0).toLowerCase() + detectionReason.slice(1)}.
+                {detectionReason.charAt(0).toLowerCase() + detectionReason.slice(1)}
+                {runtimeVersion && appType === detectedAppType ? ` · ${runtimeVersion}` : ''}.
               </p>
             )}
             <div className="mt-4 space-y-2">
@@ -508,9 +543,13 @@ export function ProjectConfigForm({
                   <p className="text-xs text-destructive">{buildError}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    {framework.category === 'Backend' && appType !== 'go'
-                      ? 'Skipped automatically when your package.json has no build script.'
-                      : 'Runs after dependencies are installed.'}
+                    {isGo
+                      ? appType === detectedAppType && buildSuggestion
+                        ? `Compiled with the Go toolchain (${buildSuggestion.reason}); the binary is started directly.`
+                        : 'Compiled with the Go toolchain; the resulting binary is started directly.'
+                      : framework.category === 'Backend'
+                        ? 'Skipped automatically when your package.json has no build script.'
+                        : 'Runs after dependencies are installed.'}
                   </p>
                 )}
               </div>
@@ -571,6 +610,20 @@ export function ProjectConfigForm({
               <EnvVarEditor vars={envVars} onChange={setEnvVars} />
             </CollapsibleContent>
           </Collapsible>
+
+          {/* Access */}
+          <Section
+            icon={Lock}
+            title="Access"
+            description="Keep the site private from its very first deploy."
+            aside={protection.enabled ? <Badge variant="brand">Protected</Badge> : undefined}
+          >
+            <PasswordProtectionFields
+              value={protection}
+              onChange={setProtection}
+              showErrors={submitted}
+            />
+          </Section>
 
           {/* Advanced */}
           <Collapsible
@@ -634,7 +687,7 @@ export function ProjectConfigForm({
                     : portError ||
                       (portCheck.status === 'available'
                         ? `Port ${port} is free`
-                        : 'Leave blank to pick a free port automatically.')}
+                        : 'Leave blank to pick a free port automatically. Your app must listen on the PORT environment variable.')}
                 </p>
               </div>
 
@@ -667,12 +720,20 @@ export function ProjectConfigForm({
                     {trimSlug(name) || 'Untitled project'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {framework.label} · {framework.category.toLowerCase()}
+                    {framework.label}
+                    {runtimeVersion && appType === detectedAppType
+                      ? ` ${runtimeVersion.replace(/^\D+/, '')}`
+                      : ''}{' '}
+                    · {framework.category.toLowerCase()}
                   </p>
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-1.5 truncate rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-xs text-foreground/90">
-                <Globe className="size-3.5 shrink-0 text-muted-foreground" />
+                {protection.enabled ? (
+                  <Lock className="size-3.5 shrink-0 text-brand-800 dark:text-brand-300" />
+                ) : (
+                  <Globe className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
                 <span className="truncate">https://{previewHost}</span>
               </div>
             </div>
@@ -713,6 +774,12 @@ export function ProjectConfigForm({
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Env variables</span>
                 <span className="font-medium text-foreground">{definedEnvVars.length}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Password protection</span>
+                <span className="font-medium text-foreground">
+                  {protection.enabled ? 'On' : 'Off'}
+                </span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Deploy on push</span>

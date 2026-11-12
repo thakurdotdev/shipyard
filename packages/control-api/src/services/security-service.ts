@@ -1,4 +1,4 @@
-const BUILD_COMMAND_PREFIXES = ['npm', 'yarn', 'pnpm', 'bun', 'echo', 'ls'];
+const BUILD_COMMAND_PREFIXES = ['npm', 'yarn', 'pnpm', 'bun', 'go', 'echo', 'ls'];
 /** Pre-deploy commands run migration CLIs, so package runners and Go are allowed too. */
 const PRE_DEPLOY_COMMAND_PREFIXES = ['npm', 'npx', 'yarn', 'pnpm', 'bun', 'node', 'go', 'echo'];
 
