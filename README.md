@@ -81,6 +81,38 @@ The Nginx worker must have read/traverse access to the deployed `dist` directory
 and its parent directories (the default `/var/lib/shipyard/apps` location is intended
 for this). An unreadable output fails the activation health check.
 
+## Install on a server
+
+On a fresh Debian or Ubuntu server, as a regular user with sudo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thakurdotdev/shipyard/main/scripts/install.sh | bash
+```
+
+The installer sets up everything ShipYard needs, asking only for what it can't work out:
+
+- Packages: Nginx, certbot, PostgreSQL, Redis, Bun, Node.js and pm0.
+- Code: clones the repo to `/opt/shipyard`.
+- Database: creates its role and database.
+- Configuration: writes the three `.env` files, generating secrets and deriving URLs from your
+  dashboard domain.
+- Build and run: builds for production, runs migrations, configures Nginx and a Let's Encrypt
+  certificate for the dashboard, and starts everything under pm0.
+- Reboots: pm0 brings the platform and deployed apps back after a reboot.
+
+It asks for the dashboard domain, the base domain for apps, and your GitHub App details. Leave
+the domain empty to try ShipYard over plain HTTP on the server's IP. GitHub sign-in won't work
+until the dashboard has HTTPS.
+
+Running it again is safe. Every step checks before it acts, existing `.env` values are kept,
+and `ENCRYPTION_KEY` is never regenerated (that would make stored project env vars unreadable).
+
+```bash
+/opt/shipyard/scripts/install.sh update   # pull, rebuild what changed, migrate, restart only that
+/opt/shipyard/scripts/install.sh doctor   # read-only health report
+/opt/shipyard/scripts/install.sh --help   # all options; --yes plus flags or env vars for unattended installs
+```
+
 ## Getting Started
 
 To start the development environment with all services:
