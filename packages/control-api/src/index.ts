@@ -112,6 +112,11 @@ const PORT = Number(process.env.PORT) || 4010;
 // 3. Listen directly with native Bun server
 app.listen(PORT, () => {
   console.log(`Control API running on port ${PORT} 🚀`);
+  if (config.isProduction) {
+    // Installers released before the shared config check the build for this exact text,
+    // so it must stay in the bundle for `install.sh update` on older servers to succeed.
+    console.log('[Config] Production mode: domains, Nginx and HTTPS on (IS_PLATFORM_PROD = true)');
+  }
   if (!isGitHubLoginConfigured() && config.setupToken) {
     console.log(
       `[Setup] No GitHub App yet. Finish setup at ${config.publicUrl}/setup?token=${config.setupToken}`,

@@ -6,7 +6,7 @@ ShipYard is a self-hosted PaaS (Platform as a Service) solution built for modern
 
 The project is structured as a monorepo with the following services:
 
-- **UI (`packages/ui`)**: A Next.js-based dashboard for managing projects, viewing build logs, and controlling deployments.
+- **UI (`packages/ui`)**: A Next.js dashboard, exported as static files, for managing projects, viewing build logs, and controlling deployments.
 - **Control API (`packages/control-api`)**: The central management API that orchestrates builds, deployments, and system state. It owns the database and the realtime WebSocket log stream.
 - **Deploy Engine (`packages/deploy-engine`)**: The single worker service. It consumes build jobs from the queue, clones and builds each project **in place**, then activates it via the process manager (pm0) and configures the reverse proxy (Nginx). Since builds land directly in the deployment directory, dependencies are installed once and reused at activation.
 
@@ -19,7 +19,7 @@ The project is structured as a monorepo with the following services:
 - **Webhook Triggered Deployments**: Deploy your projects automatically when changes are pushed to your repository.
 - **Uptime Monitoring**: Schedule public HTTP checks for each project and send account email alerts when an app goes down or recovers.
 
-Uptime email alerts use the Resend API. Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the Control API environment. Monitoring can be set to check every 1, 5, 10, 15, or 30 minutes. Custom endpoints must resolve to public IP addresses; leaving the endpoint blank uses the project's generated domain once an active deployment exists.
+Uptime email alerts use the Resend API; add the API key and sender in **Settings**. Monitoring can be set to check every 1, 5, 10, 15, or 30 minutes. Custom endpoints must resolve to public IP addresses; leaving the endpoint blank uses the project's generated domain once an active deployment exists.
 
 ### Password-protected sites
 
@@ -36,14 +36,14 @@ so no redeploy is needed, and later deploys keep the setting.
 
 - The password is stored as an Argon2id hash in `project_access` (never in `projects`, so the
   project APIs cannot return it). Session cookies are signed with a key derived from
-  `BETTER_AUTH_SECRET` and the password hash, so changing the password signs everyone out.
+  the platform `SECRET` and the password hash, so changing the password signs everyone out.
 - Failed logins are throttled per project and client address (5 per 10 minutes).
 - It covers the whole site, including any API routes or webhooks the app exposes.
 - If the Control API is unreachable, protected sites fail closed (HTTP 500), never open.
 - Uptime checks of the project's own domain carry a signed bypass header so they keep working.
 - The dashboard's embedded preview is replaced by an "Open live site" link while protected.
 - Enforced by Nginx, so only in production. In development the apps are served directly.
-- Deploy Engine reads `CONTROL_API_URL` (a plain `http(s)://host:port`) to reach the gate.
+- Deploy Engine reaches the gate at `CONTROL_API_URL` (default `http://127.0.0.1:4010`).
 - Apps with their own port must not be reachable from outside the server except through Nginx.
 
 ## Tech Stack
@@ -89,23 +89,24 @@ On a fresh Debian or Ubuntu server, as a regular user with sudo:
 curl -fsSL https://raw.githubusercontent.com/thakurdotdev/shipyard/main/scripts/install.sh | bash
 ```
 
-The installer sets up everything ShipYard needs, asking only for what it can't work out:
+The installer sets up everything ShipYard needs and asks only for the dashboard domain:
 
 - Packages: Nginx, certbot, PostgreSQL, Redis, Bun, Node.js and pm0.
 - Code: clones the repo to `/opt/shipyard`.
 - Database: creates its role and database.
-- Configuration: writes the three `.env` files, generating secrets and deriving URLs from your
-  dashboard domain.
-- Build and run: builds for production, runs migrations, configures Nginx and a Let's Encrypt
-  certificate for the dashboard, and starts everything under pm0.
+- Configuration: writes one `.env` with four values (below).
+- Build and run: builds for production, runs migrations, serves the dashboard's static files
+  and the API through Nginx (with a Let's Encrypt certificate), and starts the Control API and
+  Deploy Engine under pm0.
 - Reboots: pm0 brings the platform and deployed apps back after a reboot.
 
-It asks for the dashboard domain, the base domain for apps, and your GitHub App details. Leave
-the domain empty to try ShipYard over plain HTTP on the server's IP. GitHub sign-in won't work
-until the dashboard has HTTPS.
+It ends by printing a one-time setup link. Open it to create the GitHub App in one click
+(GitHub opens with everything filled in), then sign in with GitHub: the first account becomes
+the owner, and later sign-ups stay closed unless the owner allows them in Settings. Leave the
+domain empty to try ShipYard over plain HTTP on the server's IP.
 
-Running it again is safe. Every step checks before it acts, existing `.env` values are kept,
-and `ENCRYPTION_KEY` is never regenerated (that would make stored project env vars unreadable).
+Running it again is safe. Every step checks before it acts, existing values are kept, and
+`SECRET` is never regenerated (keys derived from it encrypt stored project env vars).
 
 ```bash
 /opt/shipyard/scripts/install.sh update   # pull, rebuild what changed, migrate, restart only that
@@ -113,12 +114,36 @@ and `ENCRYPTION_KEY` is never regenerated (that would make stored project env va
 /opt/shipyard/scripts/install.sh --help   # all options; --yes plus flags or env vars for unattended installs
 ```
 
+## Configuration
+
+Everything reads one `.env` at the repository root:
+
+```bash
+PUBLIC_URL=https://deploy.example.com   # dashboard; apps go under *.example.com
+SECRET=<openssl rand -hex 32>           # sign-in, encryption and internal keys derive from it
+DATABASE_URL=postgres://...
+REDIS_URL=redis://127.0.0.1:6379/0
+```
+
+The rest is derived or set in the dashboard. **Settings** holds the GitHub App, Cloudflare
+(optional: creates a DNS record per app; without it, add a `*.example.com` wildcard record) and
+Resend for uptime emails. Values saved there are encrypted in the database and override `.env`.
+Optional overrides such as `BASE_DOMAIN` and `SERVER_HOST` are listed in `.env.example`.
+
+Installs from before this layout keep working: per-package `.env` files and the old variable
+names (`CLIENT_URL`, `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `GITHUB_*`, ...) are still read,
+and `install.sh update` adds the root `.env` next to them.
+
 ## Getting Started
 
-To start the development environment with all services:
+For development, copy `.env.example` to `.env` (set `SECRET` and `DATABASE_URL`), run
+`bun run migrate`, then start every service:
 
 ```bash
 bun run dev
 ```
 
-This will concurrently start the Control API, Deploy Engine (which also runs the build worker), and UI.
+This starts the Control API, Deploy Engine (which also runs the build worker), and the
+dashboard on http://localhost:4013, which forwards `/api` to the Control API. Production builds
+of the dashboard are a static export (`packages/ui/out`) served by Nginx; `bun run start` in
+`packages/ui` serves the same files on :4013 for setups that proxy to it.
