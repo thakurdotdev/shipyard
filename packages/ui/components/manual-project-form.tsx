@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EnvVarEditor, EnvVar } from './env-var-editor';
+import { PreDeployCommandInput } from './deploy/pre-deploy-command-input';
 import {
   AppType,
   FRAMEWORK_OPTIONS,
@@ -34,6 +35,7 @@ export function ManualProjectForm() {
     name: '',
     github_url: '',
     build_command: getDefaultBuildCommand('nextjs'),
+    pre_deploy_command: '',
     app_type: 'nextjs' as AppType,
     root_directory: '',
     domain: '',
@@ -157,6 +159,7 @@ export function ManualProjectForm() {
 
       const project = await api.createProject({
         ...formData,
+        pre_deploy_command: isStatic ? null : formData.pre_deploy_command.trim() || null,
         port: !isStatic && formData.port ? parseInt(formData.port, 10) : undefined,
         domain: formData.domain ? `${formData.domain}.thakur.dev` : '',
         env_vars: envVarsRecord,
@@ -249,6 +252,18 @@ export function ManualProjectForm() {
                 value={formData.build_command}
                 onChange={(e) => setFormData({ ...formData, build_command: e.target.value })}
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pre-deploy-command">
+                Pre-deploy Command{' '}
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <PreDeployCommandInput
+                value={isStatic ? '' : formData.pre_deploy_command}
+                onChange={(value) => setFormData({ ...formData, pre_deploy_command: value })}
+                disabled={isStatic}
               />
             </div>
 

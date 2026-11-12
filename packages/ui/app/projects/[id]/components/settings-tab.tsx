@@ -31,6 +31,7 @@ import {
 import { Project } from '@/lib/types';
 import { AccessProtectionCard } from './access-protection-card';
 import { FRAMEWORK_OPTIONS, AppType, isStaticFramework } from '@/lib/framework-config';
+import { PreDeployCommandInput } from '@/components/deploy/pre-deploy-command-input';
 
 interface SettingsTabProps {
   project: Project;
@@ -59,6 +60,7 @@ export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
 
   // Build settings state
   const [buildCommand, setBuildCommand] = useState(project.build_command);
+  const [preDeployCommand, setPreDeployCommand] = useState(project.pre_deploy_command ?? '');
   const [appType, setAppType] = useState<AppType>(project.app_type);
   const isStatic = isStaticFramework(appType);
   const [rootDirectory, setRootDirectory] = useState(project.root_directory || './');
@@ -68,12 +70,14 @@ export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
   // Check if build settings have changed
   const [savedBuildSettings, setSavedBuildSettings] = useState({
     buildCommand: project.build_command,
+    preDeployCommand: project.pre_deploy_command ?? '',
     appType: project.app_type,
     rootDirectory: project.root_directory || './',
     port: project.port ? String(project.port) : '',
   });
   const buildSettingsChanged =
     buildCommand !== savedBuildSettings.buildCommand ||
+    preDeployCommand.trim() !== savedBuildSettings.preDeployCommand.trim() ||
     appType !== savedBuildSettings.appType ||
     rootDirectory !== savedBuildSettings.rootDirectory ||
     (!isStatic && port !== savedBuildSettings.port);
@@ -97,11 +101,18 @@ export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
 
       await api.updateProject(project.id, {
         build_command: buildCommand,
+        pre_deploy_command: preDeployCommand.trim() || null,
         app_type: appType,
         root_directory: rootDirectory,
         port: parsedPort,
       });
-      setSavedBuildSettings({ buildCommand, appType, rootDirectory, port });
+      setSavedBuildSettings({
+        buildCommand,
+        preDeployCommand: preDeployCommand.trim(),
+        appType,
+        rootDirectory,
+        port,
+      });
       toast.success('Build settings saved', {
         description: 'Changes will apply to your next build.',
       });
@@ -280,6 +291,17 @@ export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
                     : 'Assigned port on server (1024-65535)'}
                 </p>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pre-deploy-command">
+                Pre-deploy command{' '}
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <PreDeployCommandInput
+                value={isStatic ? '' : preDeployCommand}
+                onChange={setPreDeployCommand}
+                disabled={isStatic}
+              />
             </div>
             <div className="flex justify-end pt-2">
               <Button

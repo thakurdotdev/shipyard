@@ -6,6 +6,8 @@ export interface Project {
   github_url: string;
   root_directory: string | null;
   build_command: string;
+  /** Runs before each release goes live, e.g. database migrations. */
+  pre_deploy_command?: string | null;
   app_type: AppType;
   domain: string | null;
   port?: number | null;
