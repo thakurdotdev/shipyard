@@ -53,9 +53,14 @@ export default function NewProject() {
           <div className="mb-5 flex size-10 items-center justify-center rounded-lg border border-border bg-surface-muted text-foreground">
             <Github className="size-5" />
           </div>
-          <h2 className="text-base font-semibold tracking-tight">Connect GitHub</h2>
+          <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            Connect GitHub
+            <span className="rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-medium text-brand-800 dark:text-brand-300">
+              Recommended
+            </span>
+          </h2>
           <p className="mt-1.5 min-h-10 text-sm leading-6 text-muted-foreground">
-            Select a repository and deploy new commits automatically.
+            Detects your framework, build command and migrations, and redeploys on every push.
           </p>
           <span className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-800 dark:text-brand-300">
             Continue with GitHub{' '}

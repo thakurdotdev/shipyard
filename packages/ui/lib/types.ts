@@ -157,3 +157,24 @@ export interface InfraService {
   };
   connection_url?: string;
 }
+
+export interface MigrationSuggestion {
+  command: string;
+  reason: string;
+  detail?: string;
+}
+
+/** A deployable folder found by the repository scan. */
+export interface RepoFolder {
+  path: string;
+  name: string;
+  framework: string | null;
+  frameworkInfo: { name: string; icon: string; color: string };
+  hasPackageJson: boolean;
+  detectionReason?: string;
+  preDeploy?: { command: string; reason: string } | null;
+  preDeployOptions?: MigrationSuggestion[];
+  migrationNotes?: string[];
+  buildCommand?: { command: string; reason: string } | null;
+  runtimeVersion?: string | null;
+}

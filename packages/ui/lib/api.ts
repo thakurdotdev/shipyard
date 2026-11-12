@@ -7,6 +7,7 @@ import {
   Deployment,
   EnvVar,
   LogEntry,
+  RepoFolder,
   UptimeSettings,
 } from '@/lib/types';
 
@@ -120,7 +121,7 @@ export const api = {
     return res.json();
   },
   deleteEnvVar: async (projectId: string, key: string) => {
-    const res = await fetch(`${API_URL}/projects/${projectId}/env/${key}`, {
+    const res = await fetch(`${API_URL}/projects/${projectId}/env/${encodeURIComponent(key)}`, {
       method: 'DELETE',
       credentials: 'include',
     });
@@ -326,6 +327,17 @@ export const api = {
     return res.json();
   },
 
+  async getRepoFolders(installationId: number, fullName: string) {
+    const res = await fetch(
+      `${API_URL}/github/installations/${installationId}/repositories/${fullName}/folders`,
+      { credentials: 'include' },
+    );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Failed to read the repository' }));
+      throw new Error(error.error || error.message || 'Failed to read the repository');
+    }
+    return res.json() as Promise<{ folders: RepoFolder[] }>;
+  },
   async getGithubRepositories(installationId: number) {
     const res = await fetch(`${API_URL}/github/installations/${installationId}/repositories`, {
       credentials: 'include',

@@ -1,36 +1,70 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { RepoFolder } from '@/lib/types';
 import { InstallationSelector, GitInstallation } from '@/components/github/installation-selector';
 import { RepositoryList, GitRepository } from '@/components/github/repository-list';
 import { ProjectConfigForm, ProjectConfig } from '@/components/github/project-config-form';
-import { FolderPicker, Folder } from '@/components/github/folder-picker';
-import { GitBranch, User, Settings2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { DirectoryStep } from '@/components/github/directory-step';
+import { SetupStepper } from '@/components/github/setup-stepper';
 
-type SelectedFolder = Folder;
+type Step = 'account' | 'repo' | 'directory' | 'config';
+
+export type DeployPhase = 'idle' | 'creating' | 'building';
 
 export default function ImportPage() {
   const router = useRouter();
 
-  // State
-  const [step, setStep] = useState<'installations' | 'repos' | 'config'>('installations');
-  const [loading, setLoading] = useState(true);
-  const [showFolderPicker, setShowFolderPicker] = useState(false);
-
-  // Data
+  const [step, setStep] = useState<Step>('account');
   const [installations, setInstallations] = useState<GitInstallation[]>([]);
+  const [installationsLoading, setInstallationsLoading] = useState(true);
   const [selectedInstallation, setSelectedInstallation] = useState<number | null>(null);
   const [repositories, setRepositories] = useState<GitRepository[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<GitRepository | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
-  // Resolved from the API: the install page of THIS server's GitHub App.
+  const [folders, setFolders] = useState<RepoFolder[] | null>(null);
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [foldersError, setFoldersError] = useState<string | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<RepoFolder | null>(null);
+  /** True when the directory step was skipped because the repo has a single app. */
+  const [autoPickedFolder, setAutoPickedFolder] = useState(false);
+  const [deployPhase, setDeployPhase] = useState<DeployPhase>('idle');
   const [githubApp, setGithubApp] = useState<{ installUrl: string } | null>(null);
+  const folderRequest = useRef(0);
 
-  // Initial Fetch & URL Handling
+  const goTo = (next: Step) => {
+    setStep(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const loadRepositories = useCallback(async (id: number) => {
+    setReposLoading(true);
+    try {
+      const data = await api.getGithubRepositories(id);
+      setRepositories(data.repositories);
+    } catch {
+      toast.error('Failed to load repositories');
+    } finally {
+      setReposLoading(false);
+    }
+  }, []);
+
+  const selectInstallation = useCallback(
+    (id: number) => {
+      if (id !== selectedInstallation) {
+        setRepositories([]);
+        setSelectedRepo(null);
+      }
+      setSelectedInstallation(id);
+      goTo('repo');
+      void loadRepositories(id);
+    },
+    [selectedInstallation, loadRepositories],
+  );
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -38,67 +72,70 @@ export default function ImportPage() {
         setInstallations(data.installations);
         setGithubApp(app);
 
-        // Check URL for installation_id (Redirect from GitHub App Install)
+        // Back from installing the GitHub App, or only one account: go straight to repos.
         const params = new URLSearchParams(window.location.search);
-        const installationIdParam = params.get('installation_id');
-
-        if (installationIdParam) {
-          const installedId = parseInt(installationIdParam);
-          const exists = data.installations.find((i: GitInstallation) => i.id === installedId);
-
-          if (exists) {
-            handleInstallationSelect(installedId);
-            toast.success('GitHub App connected successfully!');
-
-            // Clean URL
-            const newUrl = new URL(window.location.href);
-            newUrl.searchParams.delete('installation_id');
-            newUrl.searchParams.delete('setup_action');
-            router.replace(newUrl.pathname);
-          }
+        const installedId = Number(params.get('installation_id'));
+        const fromInstall = data.installations.find((i: GitInstallation) => i.id === installedId);
+        if (fromInstall) {
+          toast.success('GitHub App connected');
+          router.replace(window.location.pathname);
+          selectInstallation(fromInstall.id);
+        } else if (data.installations.length === 1) {
+          selectInstallation(data.installations[0].id);
         }
       } catch (e) {
         console.error(e);
-        toast.error('Failed to load GitHub installations');
+        toast.error('Failed to load GitHub accounts');
       } finally {
-        setLoading(false);
+        setInstallationsLoading(false);
       }
     };
-
-    init();
+    void init();
+    // Runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleInstallationSelect = async (id: number) => {
-    setSelectedInstallation(id);
-    setLoading(true);
+  const scanRepo = async (repo: GitRepository, installationId: number) => {
+    const request = ++folderRequest.current;
+    setFolders(null);
+    setFoldersError(null);
+    setFoldersLoading(true);
     try {
-      const data = await api.getGithubRepositories(id);
-      setRepositories(data.repositories);
-      setStep('repos');
-    } catch (e) {
-      toast.error('Failed to load repositories');
+      const data = await api.getRepoFolders(installationId, repo.full_name);
+      if (request !== folderRequest.current) return;
+      setFolders(data.folders);
+      // A single app needs no choice: go straight to configuration.
+      if (data.folders.length === 1) {
+        setSelectedFolder(data.folders[0]);
+        setAutoPickedFolder(true);
+        goTo('config');
+      }
+    } catch (e: any) {
+      if (request !== folderRequest.current) return;
+      setFoldersError(e.message || 'Could not read the repository');
     } finally {
-      setLoading(false);
+      if (request === folderRequest.current) setFoldersLoading(false);
     }
   };
 
-  const handleRepoSelect = (repo: GitRepository) => {
+  const selectRepo = (repo: GitRepository) => {
     setSelectedRepo(repo);
-    setShowFolderPicker(true); // Show folder picker modal
+    setSelectedFolder(null);
+    setAutoPickedFolder(false);
+    goTo('directory');
+    if (selectedInstallation) void scanRepo(repo, selectedInstallation);
   };
 
-  const handleFolderSelect = (folder: SelectedFolder) => {
+  const selectFolder = (folder: RepoFolder) => {
     setSelectedFolder(folder);
-    setShowFolderPicker(false);
-    setStep('config');
+    setAutoPickedFolder(false);
+    goTo('config');
   };
 
   const handleDeploy = async (config: ProjectConfig) => {
     if (!selectedRepo || !selectedInstallation) return;
-    setLoading(true);
-
+    setDeployPhase('creating');
     try {
-      // 1. Create Project
       const project = await api.createProject({
         name: config.name,
         github_url: `https://github.com/${selectedRepo.full_name}`,
@@ -117,19 +154,25 @@ export default function ImportPage() {
         access: config.access,
       });
 
-      // 2. Trigger Build
-      await api.triggerBuild(project.id);
-
-      toast.success('Project created and deployment started!');
+      setDeployPhase('building');
+      try {
+        await api.triggerBuild(project.id);
+        toast.success('Project created — first deploy started');
+      } catch (e: any) {
+        // The project exists; let the user retry the build from its page.
+        toast.warning('Project created, but the first build could not start', {
+          description: e.message || 'Start it from the project page.',
+        });
+      }
       router.push(`/projects/${project.id}`);
     } catch (e: any) {
       console.error(e);
-      toast.error(e.message || 'Deployment failed');
-      setLoading(false);
+      toast.error('Could not create the project', { description: e.message });
+      setDeployPhase('idle');
     }
   };
 
-  const handleInstallApp = () => {
+  const openInstall = () => {
     if (!githubApp?.installUrl) {
       toast.error('GitHub App install page is not available right now.');
       return;
@@ -137,124 +180,93 @@ export default function ImportPage() {
     window.open(githubApp.installUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const account = installations.find((i) => i.id === selectedInstallation)?.account.login;
+  const steps = [
+    { id: 'account', label: 'Account', value: account },
+    { id: 'repo', label: 'Repository', value: selectedRepo?.name },
+    {
+      id: 'directory',
+      label: 'App',
+      value: selectedFolder
+        ? selectedFolder.path === './'
+          ? 'root'
+          : selectedFolder.path
+        : undefined,
+    },
+    { id: 'config', label: 'Configure' },
+  ];
+
+  const handleStepSelect = (id: string) => {
+    if (deployPhase !== 'idle') return;
+    // The directory step was skipped; going "back" to it means back to the repo list.
+    if (id === 'directory' && autoPickedFolder) return goTo('repo');
+    goTo(id as Step);
+  };
+
   return (
-    <div className="page-width relative min-h-[calc(100svh-4rem)] max-w-5xl pb-16 pt-8 sm:pt-10">
-      <header className="mb-7 border-b border-border pb-6">
-        <h1 className="page-heading">Import a repository</h1>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-          Choose an installation, select a repository, then review the deployment settings.
-        </p>
+    <div className="page-width relative min-h-[calc(100svh-4rem)] max-w-5xl pb-28 pt-6 sm:pt-10 lg:pb-16">
+      <header className="mb-6 space-y-5 border-b border-border pb-6">
+        <div>
+          <h1 className="page-heading">Deploy from GitHub</h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+            Pick a repository and we&apos;ll detect the framework, build command and migrations for
+            you. Every push redeploys automatically.
+          </p>
+        </div>
+        <SetupStepper steps={steps} current={step} onSelect={handleStepSelect} />
       </header>
 
-      <div className="relative mb-7 flex items-center justify-between gap-1.5 text-xs font-medium sm:mb-8 sm:justify-start sm:gap-4 sm:text-sm">
-        <div
-          aria-current={step === 'installations' ? 'step' : undefined}
-          className={cn(
-            'flex items-center gap-1.5 sm:gap-2',
-            step === 'installations' ? 'text-foreground' : 'text-muted-foreground',
-          )}
-        >
-          <div
-            className={cn(
-              'flex size-8 items-center justify-center rounded-full border',
-              step === 'installations'
-                ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
-                : 'border-border bg-surface-muted',
-            )}
-          >
-            <User className="size-4" />
-          </div>
-          <span className="max-[359px]:sr-only">Account</span>
-        </div>
-        <div className="h-px min-w-3 flex-1 bg-border sm:max-w-14" />
-        <div
-          aria-current={step === 'repos' ? 'step' : undefined}
-          className={cn(
-            'flex items-center gap-1.5 sm:gap-2',
-            step === 'repos' ? 'text-foreground' : 'text-muted-foreground',
-          )}
-        >
-          <div
-            className={cn(
-              'flex size-8 items-center justify-center rounded-full border',
-              step === 'repos'
-                ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
-                : 'border-border bg-surface-muted',
-            )}
-          >
-            <GitBranch className="size-4" />
-          </div>
-          <span className="max-[359px]:sr-only">Repository</span>
-        </div>
-        <div className="h-px min-w-3 flex-1 bg-border sm:max-w-14" />
-        <div
-          aria-current={step === 'config' ? 'step' : undefined}
-          className={cn(
-            'flex items-center gap-1.5 sm:gap-2',
-            step === 'config' ? 'text-foreground' : 'text-muted-foreground',
-          )}
-        >
-          <div
-            className={cn(
-              'flex size-8 items-center justify-center rounded-full border',
-              step === 'config'
-                ? 'border-brand-500/40 bg-brand-500/10 text-brand-800 dark:text-brand-300'
-                : 'border-border bg-surface-muted',
-            )}
-          >
-            <Settings2 className="size-4" />
-          </div>
-          <span className="max-[359px]:sr-only">Configure</span>
-        </div>
-      </div>
+      {step === 'account' && (
+        <InstallationSelector
+          installations={installations}
+          selectedId={selectedInstallation}
+          loading={installationsLoading}
+          onSelect={selectInstallation}
+          onInstall={openInstall}
+        />
+      )}
 
-      <div className="relative">
-        {step === 'installations' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <InstallationSelector
-              installations={installations}
-              selectedId={selectedInstallation}
-              onSelect={handleInstallationSelect}
-              onInstall={handleInstallApp}
-            />
-          </div>
-        )}
+      {step === 'repo' && (
+        <RepositoryList
+          repositories={repositories}
+          loading={reposLoading}
+          onSelect={selectRepo}
+          onRefresh={
+            selectedInstallation ? () => loadRepositories(selectedInstallation) : undefined
+          }
+          onManageAccess={openInstall}
+        />
+      )}
 
-        {step === 'repos' && (
-          <RepositoryList
-            repositories={repositories}
-            loading={loading}
-            onSelect={handleRepoSelect}
-          />
-        )}
+      {step === 'directory' && selectedRepo && (
+        <DirectoryStep
+          repoName={selectedRepo.full_name}
+          folders={folders}
+          loading={foldersLoading}
+          error={foldersError}
+          onRetry={() => selectedInstallation && scanRepo(selectedRepo, selectedInstallation)}
+          onSelect={selectFolder}
+        />
+      )}
 
-        {step === 'config' && selectedRepo && (
-          <ProjectConfigForm
-            repo={selectedRepo}
-            loading={loading}
-            onBack={() => setStep('repos')}
-            onSubmit={handleDeploy}
-            initialRootDirectory={selectedFolder?.path || './'}
-            initialFramework={selectedFolder?.framework || undefined}
-            detectionReason={selectedFolder?.detectionReason}
-            preDeploySuggestion={selectedFolder?.preDeploy}
-            preDeployOptions={selectedFolder?.preDeployOptions}
-            migrationNotes={selectedFolder?.migrationNotes}
-            buildSuggestion={selectedFolder?.buildCommand}
-            runtimeVersion={selectedFolder?.runtimeVersion}
-          />
-        )}
-      </div>
-
-      {/* Folder Picker Modal */}
-      {selectedRepo && selectedInstallation && (
-        <FolderPicker
-          isOpen={showFolderPicker}
-          onClose={() => setShowFolderPicker(false)}
-          onSelect={handleFolderSelect}
-          installationId={selectedInstallation.toString()}
-          owner={selectedRepo.full_name.split('/')[0]}
-          repo={selectedRepo.full_name.split('/')[1]}
+      {step === 'config' && selectedRepo && (
+        <ProjectConfigForm
+          // Remount when the app changes so detected defaults apply again.
+          key={`${selectedRepo.id}:${selectedFolder?.path ?? './'}`}
+          repo={selectedRepo}
+          loading={deployPhase !== 'idle'}
+          deployPhase={deployPhase}
+          onBack={() => goTo(autoPickedFolder ? 'repo' : 'directory')}
+          backLabel={autoPickedFolder ? 'Change repo' : 'Change app'}
+          onSubmit={handleDeploy}
+          initialRootDirectory={selectedFolder?.path || './'}
+          initialFramework={selectedFolder?.framework || undefined}
+          detectionReason={selectedFolder?.detectionReason}
+          preDeploySuggestion={selectedFolder?.preDeploy}
+          preDeployOptions={selectedFolder?.preDeployOptions}
+          migrationNotes={selectedFolder?.migrationNotes}
+          buildSuggestion={selectedFolder?.buildCommand}
+          runtimeVersion={selectedFolder?.runtimeVersion}
         />
       )}
     </div>
