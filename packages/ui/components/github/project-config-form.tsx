@@ -65,6 +65,10 @@ interface ProjectConfigFormProps {
   /** Why the framework was detected, e.g. "Found bun.lock". */
   detectionReason?: string;
   preDeploySuggestion?: PreDeploySuggestion | null;
+  /** All migration commands detected in the folder, best first. */
+  preDeployOptions?: PreDeploySuggestion[];
+  /** Caveats from migration detection. */
+  migrationNotes?: string[];
   /** Build command worked out from the repo layout (e.g. Go `cmd/` packages). */
   buildSuggestion?: { command: string; reason: string } | null;
   /** e.g. "Go 1.23" from go.mod. */
@@ -187,6 +191,8 @@ export function ProjectConfigForm({
   initialFramework,
   detectionReason,
   preDeploySuggestion,
+  preDeployOptions,
+  migrationNotes,
   buildSuggestion,
   runtimeVersion,
 }: ProjectConfigFormProps) {
@@ -563,6 +569,8 @@ export function ProjectConfigForm({
                   value={isStatic ? '' : preDeployCommand}
                   onChange={setPreDeployCommand}
                   suggestion={preDeploySuggestion}
+                  suggestions={preDeployOptions}
+                  notes={migrationNotes}
                   disabled={isStatic}
                 />
               </div>

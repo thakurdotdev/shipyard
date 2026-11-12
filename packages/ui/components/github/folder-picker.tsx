@@ -27,6 +27,8 @@ export interface Folder {
   hasPackageJson: boolean;
   detectionReason?: string;
   preDeploy?: { command: string; reason: string } | null;
+  preDeployOptions?: { command: string; reason: string; detail?: string }[];
+  migrationNotes?: string[];
   buildCommand?: { command: string; reason: string } | null;
   runtimeVersion?: string | null;
 }

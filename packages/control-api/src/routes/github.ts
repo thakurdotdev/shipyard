@@ -1,3 +1,4 @@
+import type { MigrationSuggestion } from '../services/migration-detector';
 import { Elysia, t } from 'elysia';
 import { auth } from '../lib/auth';
 import { db } from '../db';
@@ -267,12 +268,9 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
     async ({ params, set }) => {
       try {
         const { id: installationId, owner, repo } = params;
-        const {
-          detectFramework,
-          getFrameworkDisplayInfo,
-          suggestPreDeployCommand,
-          inspectGoProject,
-        } = await import('../services/framework-detector');
+        const { detectFramework, getFrameworkDisplayInfo, inspectGoProject } =
+          await import('../services/framework-detector');
+        const { detectMigrations, scopePaths } = await import('../services/migration-detector');
         const token = await GitHubService.getInstallationToken(installationId);
 
         type Entry = { name: string; type: string; path: string };
@@ -295,6 +293,27 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
           return res.ok ? res.text() : null;
         };
 
+        // Every file path in the repo, in one request. Used to spot migration folders and
+        // runner files without listing each directory. Truncated for huge repos, which only
+        // means fewer migration hints.
+        const treePromise = fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`,
+          {
+            headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+          },
+        )
+          .then(async (res) =>
+            res.ok
+              ? (
+                  ((await res.json()) as { tree?: Array<{ path: string; type: string }> }).tree ??
+                  []
+                )
+                  .filter((e) => e.type === 'blob')
+                  .map((e) => e.path)
+              : [],
+          )
+          .catch(() => [] as string[]);
+
         // Get root contents
         const rootContents = await listDir('');
         if (!rootContents) {
@@ -302,6 +321,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
           return { error: 'Failed to fetch repository contents' };
         }
         const rootFiles = rootContents.map((f) => f.name);
+        const repoPaths = await treePromise;
+        const pathsIn = (folder: string) => scopePaths(repoPaths, folder);
 
         type FolderInfo = {
           path: string;
@@ -311,6 +332,10 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
           hasPackageJson: boolean;
           detectionReason: string;
           preDeploy: { command: string; reason: string } | null;
+          /** Every detected migration command, best first. */
+          preDeployOptions: MigrationSuggestion[];
+          /** Caveats found while looking, e.g. an unsafe `db:push` script that was skipped. */
+          migrationNotes: string[];
           buildCommand: { command: string; reason: string } | null;
           runtimeVersion: string | null;
         };
@@ -340,22 +365,33 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
             }
           }
           const detected = detectFramework(names, pkgJson, path === './' ? [] : rootFiles);
-          let preDeploy = suggestPreDeployCommand(names, pkgJson);
+          let goMod: string | null = null;
+          let cmdDirs: string[] = [];
           let buildCommand: FolderInfo['buildCommand'] = null;
           let runtimeVersion: string | null = null;
 
           if (detected.framework === 'go') {
             const hasCmd = entries.some((f) => f.name === 'cmd' && f.type === 'dir');
-            const [goMod, cmdEntries] = await Promise.all([
+            let cmdEntries: Entry[] | null;
+            [goMod, cmdEntries] = await Promise.all([
               readFile(`${prefix}go.mod`),
               hasCmd ? listDir(`${prefix}cmd`) : Promise.resolve(null),
             ]);
-            const cmdDirs = (cmdEntries ?? []).filter((f) => f.type === 'dir').map((f) => f.name);
+            cmdDirs = (cmdEntries ?? []).filter((f) => f.type === 'dir').map((f) => f.name);
             const go = inspectGoProject(names, cmdDirs, goMod);
             buildCommand = { command: go.buildCommand, reason: go.buildReason };
-            preDeploy = go.preDeploy;
             runtimeVersion = go.version ? `Go ${go.version}` : null;
           }
+
+          // Without the tree (API error), fall back to the folder's own listing.
+          const folderPaths = pathsIn(path);
+          const migrations = detectMigrations({
+            packageJson: pkgJson,
+            paths: folderPaths.length
+              ? folderPaths
+              : [...names, ...cmdDirs.map((d) => `cmd/${d}/main.go`)],
+            goMod,
+          });
 
           return {
             path,
@@ -364,7 +400,14 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
             frameworkInfo: getFrameworkDisplayInfo(detected.framework),
             hasPackageJson: true,
             detectionReason: detected.reason,
-            preDeploy,
+            preDeploy: migrations.suggestions[0]
+              ? {
+                  command: migrations.suggestions[0].command,
+                  reason: migrations.suggestions[0].reason,
+                }
+              : null,
+            preDeployOptions: migrations.suggestions,
+            migrationNotes: migrations.notes,
             buildCommand,
             runtimeVersion,
           };
