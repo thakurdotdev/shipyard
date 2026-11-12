@@ -7,16 +7,11 @@ import { api } from '@/lib/api';
 import { InstallationSelector, GitInstallation } from '@/components/github/installation-selector';
 import { RepositoryList, GitRepository } from '@/components/github/repository-list';
 import { ProjectConfigForm, ProjectConfig } from '@/components/github/project-config-form';
-import { FolderPicker } from '@/components/github/folder-picker';
+import { FolderPicker, Folder } from '@/components/github/folder-picker';
 import { GitBranch, User, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface SelectedFolder {
-  path: string;
-  name: string;
-  framework: string | null;
-  frameworkInfo: { name: string; icon: string; color: string };
-}
+type SelectedFolder = Folder;
 
 export default function ImportPage() {
   const router = useRouter();
@@ -108,6 +103,7 @@ export default function ImportPage() {
         name: config.name,
         github_url: `https://github.com/${selectedRepo.full_name}`,
         build_command: config.buildCommand,
+        pre_deploy_command: config.preDeployCommand,
         app_type: config.appType,
         root_directory: config.rootDirectory,
         domain: config.domain ? `${config.domain}.thakur.dev` : '',
@@ -118,6 +114,7 @@ export default function ImportPage() {
         github_installation_id: selectedInstallation.toString(),
         env_vars: config.envVars,
         auto_deploy: config.autoDeploy,
+        access: config.access,
       });
 
       // 2. Trigger Build
@@ -239,6 +236,10 @@ export default function ImportPage() {
             onSubmit={handleDeploy}
             initialRootDirectory={selectedFolder?.path || './'}
             initialFramework={selectedFolder?.framework || undefined}
+            detectionReason={selectedFolder?.detectionReason}
+            preDeploySuggestion={selectedFolder?.preDeploy}
+            buildSuggestion={selectedFolder?.buildCommand}
+            runtimeVersion={selectedFolder?.runtimeVersion}
           />
         )}
       </div>

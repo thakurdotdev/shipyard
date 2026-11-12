@@ -12,10 +12,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Loader2, ChevronRight, FolderOpen } from 'lucide-react';
+import { Loader2, ChevronRight, FolderOpen, DatabaseZap } from 'lucide-react';
 import { FrameworkIcon } from '@/components/ui/framework-icons';
 
-interface Folder {
+export interface Folder {
   path: string;
   name: string;
   framework: string | null;
@@ -25,6 +25,10 @@ interface Folder {
     color: string;
   };
   hasPackageJson: boolean;
+  detectionReason?: string;
+  preDeploy?: { command: string; reason: string } | null;
+  buildCommand?: { command: string; reason: string } | null;
+  runtimeVersion?: string | null;
 }
 
 interface FolderPickerProps {
@@ -137,13 +141,29 @@ export function FolderPicker({
                     htmlFor={folder.path}
                     className="flex-1 flex items-center justify-between cursor-pointer"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       {folder.path !== './' && (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
-                      <span className="font-medium">{folder.name}</span>
+                      <div className="min-w-0">
+                        <span className="block truncate font-medium">{folder.name}</span>
+                        <span className="block truncate text-xs font-normal text-muted-foreground">
+                          {folder.path === './' ? 'Repository root' : folder.path}
+                          {folder.preDeploy && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-brand-800 dark:text-brand-300">
+                              <DatabaseZap className="size-3" /> migrations
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div
+                      className="flex shrink-0 items-center gap-1.5 text-xs font-normal text-muted-foreground"
+                      title={folder.detectionReason}
+                    >
+                      <span className="hidden sm:inline">
+                        {folder.runtimeVersion ?? folder.frameworkInfo.name}
+                      </span>
                       <FrameworkIcon icon={folder.frameworkInfo.icon} size={18} />
                     </div>
                   </Label>

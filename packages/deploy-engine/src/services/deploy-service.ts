@@ -17,6 +17,7 @@ import { ARTIFACTS_DIR, BASE_DIR, getBuildExtractDir, getProjectDir } from '../c
 import { getStaticDirectory } from './static-site';
 import { isPortAvailable } from '../utils/port';
 import { requestNginxOrigin } from './nginx-health';
+import { runPreDeployCommand } from './pre-deploy';
 
 const IS_PLATFORM_PROD =
   process.env.PLATFORM_ENV === 'production' || process.env.NODE_ENV === 'production';
@@ -77,6 +78,7 @@ export const DeployService = {
     rootDirectory?: string,
     projectName?: string,
     gated?: boolean,
+    preDeployCommand?: string | null,
   ) {
     const paths = this.getPaths(projectId, buildId);
     const directStatic = appType === 'vite' && IS_PLATFORM_PROD;
@@ -148,6 +150,22 @@ export const DeployService = {
         buildId,
         `Monorepo setup: Application located at "${rootDirectory}" with access to root repository`,
       );
+    }
+
+    // Runs before anything touches the live deployment, so a failed migration
+    // leaves the previous version serving traffic.
+    if (preDeployCommand?.trim()) {
+      try {
+        await runPreDeployCommand({
+          command: preDeployCommand,
+          cwd: effectiveAppDir,
+          envVars,
+          buildId,
+        });
+      } catch (e: any) {
+        await LogService.error(buildId, e.message);
+        throw e;
+      }
     }
 
     let domainConfigured = false;

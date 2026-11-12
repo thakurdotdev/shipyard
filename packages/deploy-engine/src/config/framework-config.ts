@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from 'fs';
 import { basename, join } from 'path';
+import { isExecutableFile, readGoBuildInfo } from '../utils/go';
 
 /**
  * Supported application framework types.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'bun' | 'go';
 
 export interface FrameworkConfig {
   id: AppType;
@@ -79,6 +80,15 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
     startCommand: () => ['bun', 'run', '--bun', 'start'],
   },
 
+  bun: {
+    id: 'bun',
+    displayName: 'Bun',
+    category: 'backend',
+    requiresInstall: true,
+    isStaticBuild: false,
+    startCommand: () => ['bun', 'run', '--bun', 'start'],
+  },
+
   go: {
     id: 'go',
     displayName: 'Go',
@@ -123,9 +133,10 @@ export function detectEntryFile(cwd: string): string | null {
 
       // Helper to extract entry from script
       const extractEntryFromScript = (script: string): string | null => {
-        // Match patterns like: bun/node/tsx/ts-node/nodemon [run] <file.ts|js>
+        // Match patterns like: bun/node/tsx/ts-node/nodemon [run] [--flags] <file.ts|js>
+        // Flags such as `--watch`, `--hot` or `--bun` may sit between the runner and the file.
         const match = script.match(
-          /(?:bun|node|tsx|ts-node|nodemon)\s+(?:run\s+)?(?:watch\s+)?(\S+\.(?:ts|js))/,
+          /(?:bun|node|tsx|ts-node|nodemon)\s+(?:(?:run|watch|--?[\w-]+(?:=\S+)?)\s+)*(\S+\.(?:ts|js|mjs|cjs))/,
         );
         if (match?.[1]) {
           return match[1].replace(/^\.\//, '');
@@ -216,10 +227,18 @@ const GO_BINARY_CANDIDATES = ['app', 'server', 'main'];
 /**
  * Resolves the start command for a compiled Go binary.
  *
- * The default build command is `go build -o app .`, so `app` is checked first.
+ * Prefers the binary recorded by the builder. Otherwise, since the default build
+ * command is `go build -o app .`, `app` is checked first.
  * Falls back to a binary named after the app directory, then to `go run .`.
  */
 export function getGoStartCommand(cwd: string): string[] {
+  // The builder records the binary it actually produced (any -o path, cmd/ layouts...).
+  const built = readGoBuildInfo(cwd);
+  if (built && isExecutableFile(join(cwd, built.binary))) {
+    console.log(`[getGoStartCommand] Using built binary: ${built.binary}`);
+    return [join(cwd, built.binary)];
+  }
+
   const candidates = [...GO_BINARY_CANDIDATES, 'bin/app', basename(cwd)];
 
   for (const name of candidates) {

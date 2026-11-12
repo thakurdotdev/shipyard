@@ -1,7 +1,7 @@
 /**
  * Supported application framework types.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'bun' | 'go';
 
 export function isStaticFramework(type: string): boolean {
   return type === 'vite';
@@ -30,6 +30,12 @@ export const FRAMEWORK_OPTIONS: FrameworkOption[] = [
     label: 'Vite / React',
     category: 'Frontend',
     defaultBuildCommand: 'npm run build',
+  },
+  {
+    value: 'bun',
+    label: 'Bun',
+    category: 'Backend',
+    defaultBuildCommand: 'bun run build',
   },
   {
     value: 'elysia',

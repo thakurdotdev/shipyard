@@ -267,70 +267,113 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
     async ({ params, set }) => {
       try {
         const { id: installationId, owner, repo } = params;
-        const { detectFramework, getFrameworkDisplayInfo } =
-          await import('../services/framework-detector');
+        const {
+          detectFramework,
+          getFrameworkDisplayInfo,
+          suggestPreDeployCommand,
+          inspectGoProject,
+        } = await import('../services/framework-detector');
         const token = await GitHubService.getInstallationToken(installationId);
 
-        // Get root contents
-        const rootRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
-          headers: {
-            Authorization: `token ${token}`,
-            Accept: 'application/vnd.github.v3+json',
-          },
-        });
+        type Entry = { name: string; type: string; path: string };
+        const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents`;
+        const listDir = async (path: string): Promise<Entry[] | null> => {
+          const res = await fetch(path ? `${apiBase}/${path}` : apiBase, {
+            headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+          });
+          if (!res.ok) return null;
+          const data = await res.json();
+          return Array.isArray(data) ? (data as Entry[]) : null;
+        };
+        const readFile = async (path: string): Promise<string | null> => {
+          const res = await fetch(`${apiBase}/${path}`, {
+            headers: {
+              Authorization: `token ${token}`,
+              Accept: 'application/vnd.github.v3.raw+json',
+            },
+          });
+          return res.ok ? res.text() : null;
+        };
 
-        if (!rootRes.ok) {
+        // Get root contents
+        const rootContents = await listDir('');
+        if (!rootContents) {
           set.status = 502;
           return { error: 'Failed to fetch repository contents' };
         }
+        const rootFiles = rootContents.map((f) => f.name);
 
-        const rootContents = (await rootRes.json()) as Array<{
-          name: string;
-          type: string;
-          path: string;
-        }>;
-
-        // Find all folders with package.json
-        const folders: Array<{
+        type FolderInfo = {
           path: string;
           name: string;
           framework: string | null;
           frameworkInfo: { name: string; icon: string; color: string };
           hasPackageJson: boolean;
-        }> = [];
+          detectionReason: string;
+          preDeploy: { command: string; reason: string } | null;
+          buildCommand: { command: string; reason: string } | null;
+          runtimeVersion: string | null;
+        };
+        const folders: FolderInfo[] = [];
 
-        // A folder is deployable when it contains a supported manifest:
-        // Node (package.json) or Go (go.mod).
-        const deployableManifest = (names: string[]) =>
-          names.includes('package.json') || names.includes('go.mod');
+        /**
+         * Describes a deployable folder: a Node app (package.json) or a Go module (go.mod).
+         * Returns null when the folder holds neither.
+         */
+        const describe = async (
+          path: string,
+          name: string,
+          entries: Entry[],
+        ): Promise<FolderInfo | null> => {
+          const names = entries.map((f) => f.name);
+          const hasPackageJson = names.includes('package.json');
+          const hasGoMod = names.includes('go.mod');
+          if (!hasPackageJson && !hasGoMod) return null;
 
-        // Check root for package.json
-        const rootHasPackageJson = deployableManifest(rootContents.map((f) => f.name));
+          const prefix = path === './' ? '' : `${path}/`;
+          let pkgJson: any = null;
+          if (hasPackageJson) {
+            try {
+              pkgJson = JSON.parse((await readFile(`${prefix}package.json`)) ?? 'null');
+            } catch {
+              pkgJson = null;
+            }
+          }
+          const detected = detectFramework(names, pkgJson, path === './' ? [] : rootFiles);
+          let preDeploy = suggestPreDeployCommand(names, pkgJson);
+          let buildCommand: FolderInfo['buildCommand'] = null;
+          let runtimeVersion: string | null = null;
 
-        if (rootHasPackageJson) {
-          const pkgRes = await fetch(
-            `https://api.github.com/repos/${owner}/${repo}/contents/package.json`,
-            {
-              headers: {
-                Authorization: `token ${token}`,
-                Accept: 'application/vnd.github.v3.raw+json',
-              },
-            },
-          );
-          const pkgJson = pkgRes.ok ? ((await pkgRes.json()) as any) : null;
-          const rootFiles = rootContents.map((f) => f.name);
-          const detected = detectFramework(rootFiles, pkgJson);
+          if (detected.framework === 'go') {
+            const hasCmd = entries.some((f) => f.name === 'cmd' && f.type === 'dir');
+            const [goMod, cmdEntries] = await Promise.all([
+              readFile(`${prefix}go.mod`),
+              hasCmd ? listDir(`${prefix}cmd`) : Promise.resolve(null),
+            ]);
+            const cmdDirs = (cmdEntries ?? []).filter((f) => f.type === 'dir').map((f) => f.name);
+            const go = inspectGoProject(names, cmdDirs, goMod);
+            buildCommand = { command: go.buildCommand, reason: go.buildReason };
+            preDeploy = go.preDeploy;
+            runtimeVersion = go.version ? `Go ${go.version}` : null;
+          }
 
-          folders.push({
-            path: './',
-            name: repo,
+          return {
+            path,
+            name,
             framework: detected.framework,
             frameworkInfo: getFrameworkDisplayInfo(detected.framework),
             hasPackageJson: true,
-          });
-        }
+            detectionReason: detected.reason,
+            preDeploy,
+            buildCommand,
+            runtimeVersion,
+          };
+        };
 
-        // Check common monorepo directories
+        const root = await describe('./', repo, rootContents);
+        if (root) folders.push(root);
+
+        // Check top-level directories, and one level deeper inside common monorepo folders
         const monorepoPatterns = ['packages', 'apps', 'services', 'projects'];
         const dirsToCheck = rootContents.filter(
           (f) =>
@@ -340,92 +383,23 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
         );
 
         for (const dir of dirsToCheck) {
-          // Check if this dir has package.json
-          const dirRes = await fetch(
-            `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}`,
-            {
-              headers: {
-                Authorization: `token ${token}`,
-                Accept: 'application/vnd.github.v3+json',
-              },
-            },
-          );
+          const dirContents = await listDir(dir.path);
+          if (!dirContents) continue;
 
-          if (!dirRes.ok) continue;
+          const folder = await describe(dir.path, dir.name, dirContents);
+          if (folder) folders.push(folder);
 
-          const dirContents = (await dirRes.json()) as Array<{
-            name: string;
-            type: string;
-          }>;
-          const hasPackageJson = deployableManifest(dirContents.map((f) => f.name));
-
-          if (hasPackageJson) {
-            const pkgRes = await fetch(
-              `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}/package.json`,
-              {
-                headers: {
-                  Authorization: `token ${token}`,
-                  Accept: 'application/vnd.github.v3.raw+json',
-                },
-              },
-            );
-            const pkgJson = pkgRes.ok ? ((await pkgRes.json()) as any) : null;
-            const dirFiles = dirContents.map((f) => f.name);
-            const detected = detectFramework(dirFiles, pkgJson);
-
-            folders.push({
-              path: dir.path,
-              name: dir.name,
-              framework: detected.framework,
-              frameworkInfo: getFrameworkDisplayInfo(detected.framework),
-              hasPackageJson: true,
-            });
-          }
-
-          // Check subdirectories for monorepo patterns
           if (monorepoPatterns.includes(dir.name)) {
             const subDirs = dirContents.filter((f) => f.type === 'dir');
-            for (const subDir of subDirs) {
-              const subDirRes = await fetch(
-                `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}/${subDir.name}`,
-                {
-                  headers: {
-                    Authorization: `token ${token}`,
-                    Accept: 'application/vnd.github.v3+json',
-                  },
-                },
-              );
-
-              if (!subDirRes.ok) continue;
-
-              const subDirContents = (await subDirRes.json()) as Array<{
-                name: string;
-              }>;
-              const subHasPackageJson = deployableManifest(subDirContents.map((f) => f.name));
-
-              if (subHasPackageJson) {
-                const pkgRes = await fetch(
-                  `https://api.github.com/repos/${owner}/${repo}/contents/${dir.path}/${subDir.name}/package.json`,
-                  {
-                    headers: {
-                      Authorization: `token ${token}`,
-                      Accept: 'application/vnd.github.v3.raw+json',
-                    },
-                  },
-                );
-                const pkgJson = pkgRes.ok ? ((await pkgRes.json()) as any) : null;
-                const subFiles = subDirContents.map((f) => f.name);
-                const detected = detectFramework(subFiles, pkgJson);
-
-                folders.push({
-                  path: `${dir.path}/${subDir.name}`,
-                  name: subDir.name,
-                  framework: detected.framework,
-                  frameworkInfo: getFrameworkDisplayInfo(detected.framework),
-                  hasPackageJson: true,
-                });
-              }
-            }
+            const described = await Promise.all(
+              subDirs.map(async (subDir) => {
+                const subContents = await listDir(`${dir.path}/${subDir.name}`);
+                return subContents
+                  ? describe(`${dir.path}/${subDir.name}`, subDir.name, subContents)
+                  : null;
+              }),
+            );
+            for (const sub of described) if (sub) folders.push(sub);
           }
         }
 

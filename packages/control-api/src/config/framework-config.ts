@@ -1,7 +1,7 @@
 /**
  * Supported application framework types for the platform.
  */
-export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'go';
+export type AppType = 'nextjs' | 'vite' | 'express' | 'hono' | 'elysia' | 'bun' | 'go';
 
 export function isStaticFramework(type: string): boolean {
   return type === 'vite';
@@ -45,6 +45,12 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
   elysia: {
     id: 'elysia',
     displayName: 'Elysia',
+    category: 'backend',
+    defaultBuildCommand: 'bun run build',
+  },
+  bun: {
+    id: 'bun',
+    displayName: 'Bun',
     category: 'backend',
     defaultBuildCommand: 'bun run build',
   },

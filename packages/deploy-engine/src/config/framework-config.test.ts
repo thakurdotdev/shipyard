@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { basename, join } from 'path';
 import {
@@ -50,5 +50,30 @@ describe('Go framework config', () => {
     const dir = makeDir();
     writeFileSync(join(dir, 'app'), '');
     expect(getBackendStartCommand(dir, 'go')).toEqual([join(dir, 'app')]);
+  });
+});
+
+describe('Bun framework config', () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+    dirs.length = 0;
+  });
+
+  it('registers bun as a backend that needs its dependencies', () => {
+    expect(isBackendFramework('bun')).toBe(true);
+    expect(FRAMEWORKS.bun.requiresInstall).toBe(true);
+  });
+
+  it('finds the entry file behind runtime flags such as --watch and --hot', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shipyard-bun-'));
+    dirs.push(dir);
+    mkdirSync(join(dir, 'server'));
+    writeFileSync(join(dir, 'server', 'main.ts'), '');
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ scripts: { dev: 'bun --watch --hot server/main.ts' } }),
+    );
+    expect(getBackendStartCommand(dir, 'bun')).toEqual(['bun', 'run', 'server/main.ts']);
   });
 });

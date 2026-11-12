@@ -229,6 +229,7 @@ export const DeploymentService = {
           envVars: envVarsObject,
           projectName: project.name,
           gated: await GateService.isEnabled(projectId),
+          preDeployCommand: project.pre_deploy_command,
         }),
       });
 

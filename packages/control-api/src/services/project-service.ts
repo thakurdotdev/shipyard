@@ -1,8 +1,9 @@
 import { db } from '../db';
-import { builds, deployments, projects, uptimeMonitors } from '../db/schema';
+import { builds, deployments, projectAccess, projects, uptimeMonitors } from '../db/schema';
 import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { AppType, isStaticFramework } from '../config/framework-config';
 import { normalizeWatchPatternsInput } from './deploy-change-detection';
+import { GateService } from './gate-service';
 
 const IS_PLATFORM_PROD =
   process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
@@ -171,6 +172,7 @@ export const ProjectService = {
     github_url: string;
     root_directory?: string;
     build_command: string;
+    pre_deploy_command?: string | null;
     app_type: AppType;
     domain?: string;
     port?: number;
@@ -181,7 +183,13 @@ export const ProjectService = {
     github_installation_id?: string;
     auto_deploy?: boolean;
     auto_deploy_paths?: string | null;
+    /** Turns password protection on from the first deploy. */
+    access?: { password: string; session_hours?: number };
   }) {
+    // Validate and hash up front: a bad password must not leave a half-created project.
+    const accessRow = data.access
+      ? await GateService.initialAccessRow(data.access.password, data.access.session_hours)
+      : null;
     let nextPort: number | null;
     // Validate before allocating resources so bad input fails fast.
     const autoDeployPaths = normalizeWatchPatternsInput(data.auto_deploy_paths);
@@ -256,6 +264,7 @@ export const ProjectService = {
           name: data.name,
           github_url: data.github_url,
           build_command: data.build_command,
+          pre_deploy_command: data.pre_deploy_command?.trim() || null,
           app_type: data.app_type,
           root_directory: data.root_directory,
           domain: domain,
@@ -273,6 +282,9 @@ export const ProjectService = {
       const projectId = result[0].id;
 
       await tx.insert(uptimeMonitors).values({ project_id: projectId });
+      if (accessRow) {
+        await tx.insert(projectAccess).values({ project_id: projectId, ...accessRow });
+      }
 
       // Save env vars if provided
       if (data.env_vars) {
@@ -301,6 +313,9 @@ export const ProjectService = {
     });
     if (!existing) return null;
     const updateData = { ...data };
+    if (updateData.pre_deploy_command !== undefined) {
+      updateData.pre_deploy_command = updateData.pre_deploy_command?.trim() || null;
+    }
     if (updateData.auto_deploy_paths !== undefined) {
       updateData.auto_deploy_paths = normalizeWatchPatternsInput(updateData.auto_deploy_paths);
     }

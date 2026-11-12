@@ -218,6 +218,34 @@ export function GoIcon({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function BunIcon({ size = 20, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} {...props}>
+      <ellipse
+        cx="16"
+        cy="18"
+        rx="13"
+        ry="10.5"
+        fill="#FBF0DF"
+        stroke="#2B1A0F"
+        strokeWidth="1.4"
+      />
+      <path d="M5 16c2-5 6.5-8 11-8s9 3 11 8" fill="none" stroke="#F6DECE" strokeWidth="2" />
+      <ellipse cx="11.5" cy="18" rx="1.6" ry="2" fill="#2B1A0F" />
+      <ellipse cx="20.5" cy="18" rx="1.6" ry="2" fill="#2B1A0F" />
+      <path
+        d="M14 21.5c1.2 1.2 2.8 1.2 4 0"
+        fill="none"
+        stroke="#2B1A0F"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+      <ellipse cx="8.5" cy="21" rx="1.8" ry="1" fill="#F9B5C4" />
+      <ellipse cx="23.5" cy="21" rx="1.8" ry="1" fill="#F9B5C4" />
+    </svg>
+  );
+}
+
 // Map icon name to component
 export function FrameworkIcon({
   icon,
@@ -234,6 +262,7 @@ export function FrameworkIcon({
     express: ExpressIcon,
     hono: HonoIcon,
     elysia: ElysiaIcon,
+    bun: BunIcon,
     go: GoIcon,
     folder: FolderIcon,
   };
