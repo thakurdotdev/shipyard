@@ -57,6 +57,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     async ({ body, request, set }) => {
       try {
         SecurityService.validateBuildCommand(body.build_command);
+        SecurityService.validatePreDeployCommand(body.pre_deploy_command);
         const ownerId = await ProjectAccessService.userIdFromRequest(request);
         if (!ownerId) {
           set.status = 401;
@@ -78,6 +79,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         name: t.String({ minLength: 1, error: 'Project name is required' }),
         github_url: t.String({ minLength: 1, error: 'GitHub URL is required' }),
         build_command: t.String({ minLength: 1, error: 'Build command is required' }),
+        pre_deploy_command: t.Optional(t.Union([t.String({ maxLength: 2000 }), t.Null()])),
         app_type: appTypeSchema,
         root_directory: t.Optional(t.String()),
         domain: t.Optional(t.String()),
@@ -137,6 +139,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         if (body.build_command) {
           SecurityService.validateBuildCommand(body.build_command);
         }
+        SecurityService.validatePreDeployCommand(body.pre_deploy_command);
         const updateData = {
           ...body,
           app_type: body.app_type ? (body.app_type as AppType) : undefined,
@@ -152,6 +155,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         name: t.Optional(t.String()),
         github_url: t.Optional(t.String()),
         build_command: t.Optional(t.String()),
+        pre_deploy_command: t.Optional(t.Union([t.String({ maxLength: 2000 }), t.Null()])),
         app_type: t.Optional(appTypeSchema),
         root_directory: t.Optional(t.String()),
         domain: t.Optional(t.String()),

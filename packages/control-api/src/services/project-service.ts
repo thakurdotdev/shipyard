@@ -171,6 +171,7 @@ export const ProjectService = {
     github_url: string;
     root_directory?: string;
     build_command: string;
+    pre_deploy_command?: string | null;
     app_type: AppType;
     domain?: string;
     port?: number;
@@ -256,6 +257,7 @@ export const ProjectService = {
           name: data.name,
           github_url: data.github_url,
           build_command: data.build_command,
+          pre_deploy_command: data.pre_deploy_command?.trim() || null,
           app_type: data.app_type,
           root_directory: data.root_directory,
           domain: domain,
@@ -301,6 +303,9 @@ export const ProjectService = {
     });
     if (!existing) return null;
     const updateData = { ...data };
+    if (updateData.pre_deploy_command !== undefined) {
+      updateData.pre_deploy_command = updateData.pre_deploy_command?.trim() || null;
+    }
     if (updateData.auto_deploy_paths !== undefined) {
       updateData.auto_deploy_paths = normalizeWatchPatternsInput(updateData.auto_deploy_paths);
     }

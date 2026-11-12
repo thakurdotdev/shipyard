@@ -171,3 +171,46 @@ export function getFrameworkDisplayInfo(framework: AppType | null): {
 
   return frameworkInfo[framework];
 }
+
+export interface PreDeploySuggestion {
+  command: string;
+  reason: string;
+}
+
+/** package.json scripts that conventionally apply pending migrations, by priority. */
+const MIGRATION_SCRIPTS = [
+  'db:migrate:deploy',
+  'migrate:deploy',
+  'db:migrate',
+  'migrate',
+  'migration:run',
+  'migrations:run',
+];
+
+/**
+ * Suggests a pre-deploy command that applies database migrations.
+ * Only ever used to pre-fill the form; Shipyard never runs a detected command
+ * unless the user saves it on the project.
+ */
+export function suggestPreDeployCommand(
+  fileNames: string[],
+  packageJson: PackageJsonLike | null,
+): PreDeploySuggestion | null {
+  const script = MIGRATION_SCRIPTS.find((name) => packageJson?.scripts?.[name]);
+  if (script) {
+    return { command: `bun run ${script}`, reason: `Found "${script}" script in package.json` };
+  }
+
+  const deps = { ...packageJson?.dependencies, ...packageJson?.devDependencies };
+  const hasDrizzleConfig = fileNames.some((f) => /^drizzle\.config\.(ts|js|mjs|cjs|json)$/.test(f));
+  if (hasDrizzleConfig || 'drizzle-kit' in deps) {
+    return { command: 'bunx drizzle-kit migrate', reason: 'Drizzle ORM detected' };
+  }
+  if ('prisma' in deps || '@prisma/client' in deps || fileNames.includes('prisma')) {
+    return { command: 'bunx prisma migrate deploy', reason: 'Prisma detected' };
+  }
+  if ('knex' in deps && fileNames.some((f) => /^knexfile\.(ts|js|mjs|cjs)$/.test(f))) {
+    return { command: 'bunx knex migrate:latest', reason: 'Knex detected' };
+  }
+  return null;
+}

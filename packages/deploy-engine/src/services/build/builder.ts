@@ -398,6 +398,10 @@ export const Builder = {
       if (/^pnpm\s+install\b/.test(part) || /^pnpm\s+i\b/.test(part)) {
         return part.replace(/^pnpm\s+(install|i)\b/, 'bun install');
       }
+      // npx <bin> -> bunx <bin>
+      if (/^npx\s+/.test(part)) {
+        return part.replace(/^npx\s+/, 'bunx ');
+      }
       // pnpm run <script> -> bun run <script>
       if (/^pnpm\s+run\b/.test(part)) {
         return part.replace(/^pnpm\s+run\b/, 'bun run');

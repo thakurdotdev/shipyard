@@ -1,5 +1,9 @@
+const BUILD_COMMAND_PREFIXES = ['npm', 'yarn', 'pnpm', 'bun', 'echo', 'ls'];
+/** Pre-deploy commands run migration CLIs, so package runners and Go are allowed too. */
+const PRE_DEPLOY_COMMAND_PREFIXES = ['npm', 'npx', 'yarn', 'pnpm', 'bun', 'node', 'go', 'echo'];
+
 export const SecurityService = {
-  validateBuildCommand(command: string) {
+  validateBuildCommand(command: string, allowedPrefixes: string[] = BUILD_COMMAND_PREFIXES) {
     const dangerousPatterns = [
       'rm -rf',
       'sudo',
@@ -15,8 +19,6 @@ export const SecurityService = {
       '/bin/sh',
       '/bin/bash',
     ];
-
-    const allowedPrefixes = ['npm', 'yarn', 'pnpm', 'bun', 'echo', 'ls'];
 
     // 1. Check for dangerous patterns (excluding && which we handle specially)
     for (const pattern of dangerousPatterns) {
@@ -41,5 +43,12 @@ export const SecurityService = {
     }
 
     return true;
+  },
+
+  /** Empty/whitespace means "no pre-deploy command" and is always valid. */
+  validatePreDeployCommand(command: string | null | undefined) {
+    if (!command?.trim()) return true;
+    if (command.length > 2000) throw new Error('Pre-deploy command is too long');
+    return this.validateBuildCommand(command, PRE_DEPLOY_COMMAND_PREFIXES);
   },
 };

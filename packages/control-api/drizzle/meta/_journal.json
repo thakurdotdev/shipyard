@@ -43,6 +43,13 @@
       "when": 1794240059822,
       "tag": "0005_project_access",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794499976672,
+      "tag": "0006_pre_deploy_command",
+      "breakpoints": true
     }
   ]
 }

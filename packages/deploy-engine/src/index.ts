@@ -57,6 +57,7 @@ const app = new Elysia()
         envVars?: Record<string, string>;
         projectName?: string;
         gated?: boolean;
+        preDeployCommand?: string | null;
       };
     }) => {
       const {
@@ -69,6 +70,7 @@ const app = new Elysia()
         envVars,
         projectName,
         gated,
+        preDeployCommand,
       } = body;
 
       try {
@@ -82,6 +84,7 @@ const app = new Elysia()
           rootDirectory,
           projectName,
           gated,
+          preDeployCommand,
         );
         return { success: true };
       } catch (e: unknown) {
@@ -108,6 +111,7 @@ const app = new Elysia()
         envVars: t.Optional(t.Record(t.String(), t.String())),
         projectName: t.Optional(t.String()),
         gated: t.Optional(t.Boolean()),
+        preDeployCommand: t.Optional(t.Nullable(t.String({ maxLength: 2000 }))),
       }),
     },
   )

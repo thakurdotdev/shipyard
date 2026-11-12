@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { detectFramework } from './framework-detector';
+import { detectFramework, suggestPreDeployCommand } from './framework-detector';
 
 describe('detectFramework - Bun', () => {
   it('detects a plain Bun server from its lockfile', () => {
@@ -37,5 +37,32 @@ describe('detectFramework - Bun', () => {
 
   it('does not report Bun without a package.json', () => {
     expect(detectFramework(['bun.lock'], null).framework).toBeNull();
+  });
+});
+
+describe('suggestPreDeployCommand', () => {
+  it('prefers an explicit migration script', () => {
+    expect(
+      suggestPreDeployCommand(['drizzle.config.ts'], {
+        scripts: { migrate: 'bun run src/db/migrate.ts', 'db:push': 'drizzle-kit push' },
+      })?.command,
+    ).toBe('bun run migrate');
+  });
+
+  it('falls back to the ORM CLI', () => {
+    expect(suggestPreDeployCommand(['drizzle.config.ts'], {})?.command).toBe(
+      'bunx drizzle-kit migrate',
+    );
+    expect(suggestPreDeployCommand([], { dependencies: { '@prisma/client': '6' } })?.command).toBe(
+      'bunx prisma migrate deploy',
+    );
+    expect(suggestPreDeployCommand(['knexfile.ts'], { dependencies: { knex: '3' } })?.command).toBe(
+      'bunx knex migrate:latest',
+    );
+  });
+
+  it('suggests nothing for apps without a database toolchain', () => {
+    expect(suggestPreDeployCommand(['index.ts'], { dependencies: { hono: '4' } })).toBeNull();
+    expect(suggestPreDeployCommand([], null)).toBeNull();
   });
 });

@@ -267,7 +267,7 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
     async ({ params, set }) => {
       try {
         const { id: installationId, owner, repo } = params;
-        const { detectFramework, getFrameworkDisplayInfo } =
+        const { detectFramework, getFrameworkDisplayInfo, suggestPreDeployCommand } =
           await import('../services/framework-detector');
         const token = await GitHubService.getInstallationToken(installationId);
 
@@ -299,6 +299,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
           framework: string | null;
           frameworkInfo: { name: string; icon: string; color: string };
           hasPackageJson: boolean;
+          detectionReason: string;
+          preDeploy: { command: string; reason: string } | null;
         }> = [];
 
         // A folder is deployable when it contains a supported manifest:
@@ -328,6 +330,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
             framework: detected.framework,
             frameworkInfo: getFrameworkDisplayInfo(detected.framework),
             hasPackageJson: true,
+            detectionReason: detected.reason,
+            preDeploy: suggestPreDeployCommand(rootFiles, pkgJson),
           });
         }
 
@@ -380,6 +384,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
               framework: detected.framework,
               frameworkInfo: getFrameworkDisplayInfo(detected.framework),
               hasPackageJson: true,
+              detectionReason: detected.reason,
+              preDeploy: suggestPreDeployCommand(dirFiles, pkgJson),
             });
           }
 
@@ -424,6 +430,8 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
                   framework: detected.framework,
                   frameworkInfo: getFrameworkDisplayInfo(detected.framework),
                   hasPackageJson: true,
+                  detectionReason: detected.reason,
+                  preDeploy: suggestPreDeployCommand(subFiles, pkgJson),
                 });
               }
             }
