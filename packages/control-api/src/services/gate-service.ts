@@ -130,11 +130,8 @@ export const GateService = {
     return { 'X-Shipyard-Gate-Monitor': monitorToken(projectId, row.password_hash) };
   },
 
-  async updateSettings(projectId: string, update: AccessUpdate): Promise<AccessSettings> {
-    const existing = await db.query.projectAccess.findFirst({
-      where: eq(projectAccess.project_id, projectId),
-    });
-
+  /** Throws a GateError when a password or session length is out of bounds. */
+  validate(update: AccessUpdate) {
     const password = update.password;
     if (password !== undefined) {
       if (password.length < MIN_PASSWORD_LENGTH) {
@@ -154,7 +151,28 @@ export const GateService = {
         `Session length must be between ${MIN_SESSION_HOURS} hour and ${MAX_SESSION_HOURS / 24} days`,
       );
     }
+  },
 
+  /**
+   * Row for a project created with protection already on. Validates first, so the
+   * caller can run this before creating anything.
+   */
+  async initialAccessRow(password: string, sessionHours?: number) {
+    this.validate({ password, session_hours: sessionHours });
+    return {
+      enabled: true,
+      password_hash: await Bun.password.hash(password, { algorithm: 'argon2id' }),
+      session_hours: sessionHours ?? DEFAULT_SESSION_HOURS,
+    };
+  },
+
+  async updateSettings(projectId: string, update: AccessUpdate): Promise<AccessSettings> {
+    this.validate(update);
+    const existing = await db.query.projectAccess.findFirst({
+      where: eq(projectAccess.project_id, projectId),
+    });
+
+    const password = update.password;
     const passwordHash = password
       ? await Bun.password.hash(password, { algorithm: 'argon2id' })
       : (existing?.password_hash ?? null);

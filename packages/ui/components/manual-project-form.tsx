@@ -21,6 +21,13 @@ import { toast } from 'sonner';
 import { EnvVarEditor, EnvVar } from './env-var-editor';
 import { PreDeployCommandInput } from './deploy/pre-deploy-command-input';
 import {
+  DEFAULT_PASSWORD_PROTECTION,
+  PasswordProtectionFields,
+  PasswordProtectionValue,
+  passwordProtectionError,
+  toAccessPayload,
+} from './deploy/password-protection-fields';
+import {
   AppType,
   FRAMEWORK_OPTIONS,
   getDefaultBuildCommand,
@@ -56,6 +63,10 @@ export function ManualProjectForm() {
   };
 
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
+  const [protection, setProtection] = useState<PasswordProtectionValue>(
+    DEFAULT_PASSWORD_PROTECTION,
+  );
+  const [submitted, setSubmitted] = useState(false);
 
   const [subdomainStatus, setSubdomainStatus] = useState<
     'idle' | 'loading' | 'available' | 'unavailable'
@@ -129,6 +140,13 @@ export function ManualProjectForm() {
       setLoading(false);
       return;
     }
+    setSubmitted(true);
+    const protectionError = passwordProtectionError(protection);
+    if (protectionError) {
+      toast.error(protectionError);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (formData?.domain?.trim()) {
@@ -163,6 +181,7 @@ export function ManualProjectForm() {
         port: !isStatic && formData.port ? parseInt(formData.port, 10) : undefined,
         domain: formData.domain ? `${formData.domain}.thakur.dev` : '',
         env_vars: envVarsRecord,
+        access: toAccessPayload(protection),
       });
       router.push(`/projects/${project.id}`);
     } catch (error: any) {
@@ -365,16 +384,35 @@ export function ManualProjectForm() {
           </CardContent>
         </Card>
 
-        {/* Environment Variables */}
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Environment Variables</CardTitle>
-            <CardDescription>Configure environment variables for your deployment.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <EnvVarEditor vars={envVars} onChange={setEnvVars} />
-          </CardContent>
-        </Card>
+        <div className="space-y-8">
+          {/* Environment Variables */}
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle>Environment Variables</CardTitle>
+              <CardDescription>
+                Configure environment variables for your deployment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EnvVarEditor vars={envVars} onChange={setEnvVars} />
+            </CardContent>
+          </Card>
+
+          {/* Access */}
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle>Access</CardTitle>
+              <CardDescription>Keep the site private from its very first deploy.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PasswordProtectionFields
+                value={protection}
+                onChange={setProtection}
+                showErrors={submitted}
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="flex gap-4 justify-end pt-4 border-t">

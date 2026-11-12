@@ -97,6 +97,14 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         github_installation_id: t.Optional(t.String()),
         auto_deploy: t.Optional(t.Boolean()),
         auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
+        access: t.Optional(
+          t.Object({
+            password: t.String({ maxLength: 1024 }),
+            session_hours: t.Optional(
+              t.Integer({ minimum: MIN_SESSION_HOURS, maximum: MAX_SESSION_HOURS }),
+            ),
+          }),
+        ),
       }),
     },
   )

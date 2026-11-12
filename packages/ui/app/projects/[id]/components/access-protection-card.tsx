@@ -17,23 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-
-const MIN_PASSWORD_LENGTH = 8;
-
-const sessionLengths = [
-  { value: '1', label: '1 hour' },
-  { value: '8', label: '8 hours' },
-  { value: '24', label: '1 day' },
-  { value: '168', label: '7 days' },
-  { value: '720', label: '30 days' },
-  { value: '2160', label: '90 days' },
-];
-
-function generatePassword(): string {
-  const alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.getRandomValues(new Uint32Array(20));
-  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
-}
+import { generatePassword, MIN_PASSWORD_LENGTH, SESSION_LENGTHS } from '@/lib/access';
 
 interface AccessProtectionCardProps {
   projectId: string;
@@ -221,7 +205,7 @@ export function AccessProtectionCard({ projectId, onProtectionChange }: AccessPr
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {sessionLengths.map((item) => (
+                    {SESSION_LENGTHS.map((item) => (
                       <SelectItem key={item.value} value={item.value}>
                         {item.label}
                       </SelectItem>
