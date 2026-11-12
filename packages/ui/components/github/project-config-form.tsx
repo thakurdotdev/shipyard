@@ -44,7 +44,7 @@ import {
   toAccessPayload,
 } from '@/components/deploy/password-protection-fields';
 import { GitRepository } from './repository-list';
-import { EnvVarEditor, EnvVar } from '../env-var-editor';
+import { EnvEditor, EnvRow, envRowsError, envRowsToEntries } from '@/components/env/env-editor';
 import {
   AppType,
   FRAMEWORK_OPTIONS,
@@ -58,7 +58,10 @@ const BASE_DOMAIN = 'thakur.dev';
 interface ProjectConfigFormProps {
   repo: GitRepository;
   loading: boolean;
+  /** Progress after Deploy is pressed, for the button label. */
+  deployPhase?: 'idle' | 'creating' | 'building';
   onBack: () => void;
+  backLabel?: string;
   onSubmit: (config: ProjectConfig) => void;
   initialRootDirectory?: string;
   initialFramework?: string;
@@ -185,7 +188,9 @@ function Section({
 export function ProjectConfigForm({
   repo,
   loading,
+  deployPhase = 'idle',
   onBack,
+  backLabel = 'Change repo',
   onSubmit,
   initialRootDirectory = './',
   initialFramework,
@@ -213,7 +218,7 @@ export function ProjectConfigForm({
   );
   const [preDeployCommand, setPreDeployCommand] = useState('');
   const [autoDeploy, setAutoDeploy] = useState(true);
-  const [envVars, setEnvVars] = useState<EnvVar[]>([]);
+  const [envRows, setEnvRows] = useState<EnvRow[]>([]);
   const [envOpen, setEnvOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -224,7 +229,8 @@ export function ProjectConfigForm({
   const isGo = appType === 'go';
   const protectionError = passwordProtectionError(protection);
   const effectivePreDeploy = isStatic ? '' : preDeployCommand.trim();
-  const definedEnvVars = envVars.filter((v) => v.key.trim());
+  const definedEnvVars = envRowsToEntries(envRows);
+  const envError = envRowsError(envRows);
   const hasDatabaseEnv = definedEnvVars.some((v) =>
     /DATABASE|DB_|POSTGRES|MYSQL|MONGO/i.test(v.key),
   );
@@ -258,6 +264,13 @@ export function ProjectConfigForm({
     if (isStaticFramework(value)) setPort('');
   };
 
+  const deployLabel =
+    deployPhase === 'creating'
+      ? 'Creating project…'
+      : deployPhase === 'building'
+        ? 'Starting build…'
+        : 'Deploy';
+
   const previewHost = `${subdomain || `${trimSlug(name) || 'my-app'}-xxxx`}.${BASE_DOMAIN}`;
 
   const blockingIssue = useMemo(() => {
@@ -266,9 +279,11 @@ export function ProjectConfigForm({
     if (subdomain && domainCheck.status === 'unavailable') return 'Choose another subdomain';
     if (!isStatic && port && !portInRange) return 'Fix the port';
     if (!isStatic && port && portCheck.status === 'unavailable') return 'Choose another port';
+    if (envError) return `Environment: ${envError}`;
     if (protectionError) return protectionError;
     return null;
   }, [
+    envError,
     protectionError,
     name,
     buildCommand,
@@ -299,7 +314,7 @@ export function ProjectConfigForm({
       rootDirectory,
       domain: subdomain,
       port: !isStatic && port ? portNumber : undefined,
-      envVars: Object.fromEntries(definedEnvVars.map((v) => [v.key.trim(), v.value])),
+      envVars: Object.fromEntries(definedEnvVars.map((v) => [v.key, v.value])),
       autoDeploy,
       access: toAccessPayload(protection),
     });
@@ -363,7 +378,7 @@ export function ProjectConfigForm({
           className="text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="mr-1.5 size-4" />
-          Change repo
+          {backLabel}
         </Button>
       </div>
 
@@ -593,7 +608,7 @@ export function ProjectConfigForm({
                     Environment variables
                   </span>
                   <span className="block text-xs text-muted-foreground">
-                    Paste a .env file into any field to import it.
+                    Paste, drop or import a .env file — or type them in.
                   </span>
                 </span>
               </span>
@@ -615,7 +630,11 @@ export function ProjectConfigForm({
                   <code className="font-mono">DATABASE_URL</code>.
                 </div>
               )}
-              <EnvVarEditor vars={envVars} onChange={setEnvVars} />
+              <EnvEditor
+                rows={envRows}
+                onChange={setEnvRows}
+                emptyHint="Add one, paste a whole .env file, or drop a .env file here. Values are encrypted and available at build and run time."
+              />
             </CollapsibleContent>
           </Collapsible>
 
@@ -795,14 +814,14 @@ export function ProjectConfigForm({
               </div>
             </div>
 
-            <div className="border-t border-border p-4">
+            <div className="hidden border-t border-border p-4 lg:block">
               <Button className="h-11 w-full text-base" onClick={handleSubmit} disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 size-5 animate-spin" />
                 ) : (
                   <Rocket className="mr-2 size-4" />
                 )}
-                {loading ? 'Deploying…' : 'Deploy'}
+                {deployLabel}
               </Button>
               <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
                 {submitted && blockingIssue ? (
@@ -826,6 +845,29 @@ export function ProjectConfigForm({
             </div>
           </div>
         </aside>
+      </div>
+
+      {/* Phones and tablets: keep Deploy in reach while scrolling the form. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-5xl items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">
+              {trimSlug(name) || 'Untitled project'}
+            </p>
+            <p
+              className={cn(
+                'truncate text-xs',
+                submitted && blockingIssue ? 'text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {submitted && blockingIssue ? blockingIssue : `${framework.label} · ${previewHost}`}
+            </p>
+          </div>
+          <Button className="h-11 shrink-0 px-5" onClick={handleSubmit} disabled={loading}>
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
+            {deployLabel}
+          </Button>
+        </div>
       </div>
     </div>
   );

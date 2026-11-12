@@ -18,7 +18,7 @@ import { Check, Loader2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { EnvVarEditor, EnvVar } from './env-var-editor';
+import { EnvEditor, EnvRow, envRowsError, envRowsToRecord } from './env/env-editor';
 import { PreDeployCommandInput } from './deploy/pre-deploy-command-input';
 import {
   DEFAULT_PASSWORD_PROTECTION,
@@ -62,7 +62,7 @@ export function ManualProjectForm() {
     setPortError('');
   };
 
-  const [envVars, setEnvVars] = useState<EnvVar[]>([]);
+  const [envRows, setEnvRows] = useState<EnvRow[]>([]);
   const [protection, setProtection] = useState<PasswordProtectionValue>(
     DEFAULT_PASSWORD_PROTECTION,
   );
@@ -141,6 +141,12 @@ export function ManualProjectForm() {
       return;
     }
     setSubmitted(true);
+    const envError = envRowsError(envRows);
+    if (envError) {
+      toast.error(`Environment variables: ${envError}`);
+      setLoading(false);
+      return;
+    }
     const protectionError = passwordProtectionError(protection);
     if (protectionError) {
       toast.error(protectionError);
@@ -167,13 +173,7 @@ export function ManualProjectForm() {
         }
       }
 
-      const envVarsRecord = envVars.reduce(
-        (acc, curr) => {
-          if (curr.key) acc[curr.key] = curr.value;
-          return acc;
-        },
-        {} as Record<string, string>,
-      );
+      const envVarsRecord = envRowsToRecord(envRows);
 
       const project = await api.createProject({
         ...formData,
@@ -394,7 +394,7 @@ export function ManualProjectForm() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <EnvVarEditor vars={envVars} onChange={setEnvVars} />
+              <EnvEditor rows={envRows} onChange={setEnvRows} />
             </CardContent>
           </Card>
 
