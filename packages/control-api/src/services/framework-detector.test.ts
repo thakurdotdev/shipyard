@@ -49,13 +49,19 @@ describe('suggestPreDeployCommand', () => {
     ).toBe('bun run migrate');
   });
 
-  it('falls back to the ORM CLI', () => {
-    expect(suggestPreDeployCommand(['drizzle.config.ts'], {})?.command).toBe(
-      'bunx drizzle-kit migrate',
-    );
-    expect(suggestPreDeployCommand([], { dependencies: { '@prisma/client': '6' } })?.command).toBe(
-      'bunx prisma migrate deploy',
-    );
+  it('falls back to the ORM CLI when migrations exist', () => {
+    expect(
+      suggestPreDeployCommand(['drizzle.config.ts'], {}, [
+        'drizzle.config.ts',
+        'drizzle/meta/_journal.json',
+      ])?.command,
+    ).toBe('bunx drizzle-kit migrate');
+    expect(
+      suggestPreDeployCommand([], { dependencies: { '@prisma/client': '6' } }, [
+        'prisma/schema.prisma',
+        'prisma/migrations/20240101_init/migration.sql',
+      ])?.command,
+    ).toBe('bunx prisma migrate deploy');
     expect(suggestPreDeployCommand(['knexfile.ts'], { dependencies: { knex: '3' } })?.command).toBe(
       'bunx knex migrate:latest',
     );

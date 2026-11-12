@@ -1,3 +1,4 @@
+import { detectMigrations } from './migration-detector';
 import { AppType } from '../config/framework-config';
 
 /**
@@ -177,42 +178,17 @@ export interface PreDeploySuggestion {
   reason: string;
 }
 
-/** package.json scripts that conventionally apply pending migrations, by priority. */
-const MIGRATION_SCRIPTS = [
-  'db:migrate:deploy',
-  'migrate:deploy',
-  'db:migrate',
-  'migrate',
-  'migration:run',
-  'migrations:run',
-];
-
 /**
- * Suggests a pre-deploy command that applies database migrations.
- * Only ever used to pre-fill the form; Shipyard never runs a detected command
- * unless the user saves it on the project.
+ * Best pre-deploy (migration) command for a folder, or null.
+ * See migration-detector for the full ranked list and notes.
  */
 export function suggestPreDeployCommand(
   fileNames: string[],
   packageJson: PackageJsonLike | null,
+  paths: string[] = fileNames,
 ): PreDeploySuggestion | null {
-  const script = MIGRATION_SCRIPTS.find((name) => packageJson?.scripts?.[name]);
-  if (script) {
-    return { command: `bun run ${script}`, reason: `Found "${script}" script in package.json` };
-  }
-
-  const deps = { ...packageJson?.dependencies, ...packageJson?.devDependencies };
-  const hasDrizzleConfig = fileNames.some((f) => /^drizzle\.config\.(ts|js|mjs|cjs|json)$/.test(f));
-  if (hasDrizzleConfig || 'drizzle-kit' in deps) {
-    return { command: 'bunx drizzle-kit migrate', reason: 'Drizzle ORM detected' };
-  }
-  if ('prisma' in deps || '@prisma/client' in deps || fileNames.includes('prisma')) {
-    return { command: 'bunx prisma migrate deploy', reason: 'Prisma detected' };
-  }
-  if ('knex' in deps && fileNames.some((f) => /^knexfile\.(ts|js|mjs|cjs)$/.test(f))) {
-    return { command: 'bunx knex migrate:latest', reason: 'Knex detected' };
-  }
-  return null;
+  const best = detectMigrations({ packageJson, paths }).suggestions[0];
+  return best ? { command: best.command, reason: best.reason } : null;
 }
 
 export interface GoProjectInfo {

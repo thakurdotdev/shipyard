@@ -238,6 +238,8 @@ export default function ImportPage() {
             initialFramework={selectedFolder?.framework || undefined}
             detectionReason={selectedFolder?.detectionReason}
             preDeploySuggestion={selectedFolder?.preDeploy}
+            preDeployOptions={selectedFolder?.preDeployOptions}
+            migrationNotes={selectedFolder?.migrationNotes}
             buildSuggestion={selectedFolder?.buildCommand}
             runtimeVersion={selectedFolder?.runtimeVersion}
           />
