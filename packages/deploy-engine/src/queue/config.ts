@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 /**
  * Queue configuration for the in-engine build worker.
  * Must match control-api's QUEUE_CONFIG.name (packages/control-api/src/queue/config.ts).
@@ -15,7 +16,7 @@ export const QUEUE_CONFIG = {
  * Parse Redis URL for connection options
  */
 export function getRedisConnection() {
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  const redisUrl = config.redisUrl;
 
   try {
     const url = new URL(redisUrl);

@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { deployments, projects } from '../db/schema';
@@ -9,8 +10,7 @@ import { EventStreamService } from './event-stream-service';
 import { isStaticFramework } from '../config/framework-config';
 import { GateService } from './gate-service';
 
-const IS_PLATFORM_PROD =
-  process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
+const IS_PLATFORM_PROD = config.isProduction;
 
 export const DeploymentService = {
   async activateBuild(projectId: string, buildId: string) {
@@ -207,7 +207,7 @@ export const DeploymentService = {
     await LogService.persist(buildId, startingMsg, 'deploy');
     EventStreamService.broadcast(buildId, startingMsg, 'deploy');
 
-    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
+    const deployEngineUrl = config.deployEngineUrl;
     try {
       const subdomain =
         project.domain?.split('.')[0] ||
@@ -331,7 +331,7 @@ export const DeploymentService = {
     }
 
     // Call Deploy Engine
-    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
+    const deployEngineUrl = config.deployEngineUrl;
 
     const res = await fetch(`${deployEngineUrl}/stop`, {
       method: 'POST',

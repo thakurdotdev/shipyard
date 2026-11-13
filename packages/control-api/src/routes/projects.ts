@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { Elysia, t } from 'elysia';
 import { ProjectService } from '../services/project-service';
 import { ProjectAccessService } from '../services/project-access-service';
@@ -20,7 +21,7 @@ const appTypeSchema = t.Union(
   ],
   { error: 'Invalid app type' },
 );
-const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
+const BASE_DOMAIN = config.baseDomain;
 
 export const projectsRoutes = new Elysia({ prefix: '/projects' })
   .get('/', async ({ request }) => {
@@ -262,7 +263,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     }
 
     try {
-      const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4012';
+      const deployEngineUrl = config.deployEngineUrl;
       const response = await fetch(`${deployEngineUrl}/nginx/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

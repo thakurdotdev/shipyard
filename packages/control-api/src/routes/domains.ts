@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { Elysia, t } from 'elysia';
 import { CloudflareService } from '../services/cloudflare-service';
 import { DomainService } from '../services/domain-service';
@@ -15,7 +16,7 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
     async ({ query }) => {
       const { subdomain } = query;
       try {
-        const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
+        const BASE_DOMAIN = config.baseDomain;
         const fullDomain = `${subdomain}.${BASE_DOMAIN}`;
 
         // 1. Check DB first

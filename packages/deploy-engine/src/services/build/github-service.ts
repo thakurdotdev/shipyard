@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import jwt from 'jsonwebtoken';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
@@ -65,6 +66,22 @@ function loadPrivateKey(): string {
   }
 }
 
+async function requestTokenFromControlApi(installationId: string): Promise<string> {
+  const res = await fetch(`${config.controlApiUrl}/internal/github/installation-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-shipyard-internal': config.internalToken!,
+    },
+    body: JSON.stringify({ installation_id: installationId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+  if (!res.ok || !data.token) {
+    throw new Error(data.error || `Control API could not issue a GitHub token (HTTP ${res.status})`);
+  }
+  return data.token;
+}
+
 export const WorkerGitHubService = {
   /**
    * Generates a JWT for authenticating as the GitHub App.
@@ -105,6 +122,13 @@ export const WorkerGitHubService = {
   async getInstallationToken(installationId: string): Promise<string> {
     if (!installationId) {
       throw new Error('Installation ID is required');
+    }
+
+    // The App's key normally lives in the Control API's database: ask it for a token.
+    // Installs that still keep GITHUB_APP_ID + a PEM file next to the engine sign locally.
+    const hasLocalKey = Boolean(process.env.GITHUB_APP_ID) && existsSync(getPrivateKeyPath());
+    if (config.internalToken && !hasLocalKey) {
+      return requestTokenFromControlApi(installationId);
     }
 
     const appJwt = this.generateAppJWT();

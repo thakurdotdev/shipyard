@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 /**
  * Queue configuration for build jobs
  */
@@ -6,7 +7,7 @@ export const QUEUE_CONFIG = {
 
   // Redis connection options (parsed from REDIS_URL)
   connection: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: config.redisUrl,
   },
 
   // Default job options

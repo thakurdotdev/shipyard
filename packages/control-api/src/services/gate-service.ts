@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { projectAccess, projects } from '../db/schema';
@@ -10,10 +11,9 @@ import {
   monitorToken,
 } from './gate-session';
 
-const IS_PLATFORM_PROD =
-  process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
-const DEPLOY_ENGINE_URL = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4012';
-const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
+const IS_PLATFORM_PROD = config.isProduction;
+const DEPLOY_ENGINE_URL = config.deployEngineUrl;
+const BASE_DOMAIN = config.baseDomain;
 
 export interface GateRecord {
   projectId: string;

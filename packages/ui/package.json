@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev -p 4013",
     "build": "next build",
-    "start": "next start -p 4013",
-    "lint": "bun lint"
+    "lint": "bun lint",
+    "start": "bun serve.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

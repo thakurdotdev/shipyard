@@ -1,7 +1,15 @@
-const CF_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-const CF_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
-const BASE_DOMAIN = process.env.BASE_DOMAIN || 'thakur.dev';
-const SERVER_HOST = process.env.SERVER_HOST || '127.0.0.1';
+import { config, getServerHost } from '@thakur-deploy/config';
+import { SettingsService } from './settings-service';
+
+const BASE_DOMAIN = config.baseDomain;
+
+/** Read on every call so a token saved in Settings applies without a restart. */
+function credentials() {
+  return {
+    token: SettingsService.get('cloudflare_api_token'),
+    zoneId: SettingsService.get('cloudflare_zone_id'),
+  };
+}
 
 interface CloudflareDnsRecord {
   id: string;
@@ -19,15 +27,16 @@ async function cfFetch<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<{ success: boolean; result: T; errors?: any[] }> {
-  if (!CF_API_TOKEN || !CF_ZONE_ID) {
-    throw new Error('Cloudflare credentials missing (CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID)');
+  const { token, zoneId } = credentials();
+  if (!token || !zoneId) {
+    throw new Error('Cloudflare is not connected. Add the API token and zone ID in Settings.');
   }
 
-  const url = `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}${path}`;
+  const url = `https://api.cloudflare.com/client/v4/zones/${zoneId}${path}`;
   const res = await fetch(url, {
     ...options,
     headers: {
-      Authorization: `Bearer ${CF_API_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...(options.headers || {}),
     },
@@ -44,6 +53,12 @@ async function cfFetch<T = any>(
 }
 
 export const CloudflareService = {
+  /** Whether DNS records can be managed automatically. */
+  isConfigured(): boolean {
+    const { token, zoneId } = credentials();
+    return Boolean(token && zoneId);
+  },
+
   /**
    * Checks if a subdomain is available.
    * Returns true if available (no DNS record found), false otherwise.
@@ -64,7 +79,7 @@ export const CloudflareService = {
     const RESERVED = ['www', 'api', 'admin', 'mail', 'ftp', 'localhost'];
     if (RESERVED.includes(s)) return false;
 
-    if (!CF_API_TOKEN || !CF_ZONE_ID) {
+    if (!this.isConfigured()) {
       console.warn(
         'Cloudflare credentials missing. Skipping actual API check (Assuming available).',
       );
@@ -92,8 +107,9 @@ export const CloudflareService = {
    */
   async createARecord(
     subdomain: string,
-    serverIp: string = SERVER_HOST,
+    serverIp?: string,
   ): Promise<{ recordId: string; fullDomain: string }> {
+    serverIp ??= await getServerHost();
     const s = subdomain.toLowerCase().trim();
     const fullDomain = `${s}.${BASE_DOMAIN}`;
 

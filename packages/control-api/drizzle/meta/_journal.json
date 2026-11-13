@@ -50,6 +50,13 @@
       "when": 1794499976672,
       "tag": "0006_pre_deploy_command",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794513934058,
+      "tag": "0007_platform_settings",
+      "breakpoints": true
     }
   ]
 }

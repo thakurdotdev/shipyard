@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { Queue, QueueEvents, Job } from 'bullmq';
 import { QUEUE_CONFIG } from './config';
 import { EventStreamService } from '../services/event-stream-service';
@@ -30,7 +31,7 @@ export interface QueueStats {
 
 // Parse Redis URL for connection
 function getRedisConnection() {
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  const redisUrl = config.redisUrl;
 
   try {
     const url = new URL(redisUrl);

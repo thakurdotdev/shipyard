@@ -1,3 +1,4 @@
+import { childProcessEnv } from '@thakur-deploy/config';
 import { spawn } from 'child_process';
 
 /**
@@ -14,7 +15,9 @@ export async function execPm0(
     const proc = spawn('pm0', args, {
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: options?.env ? { ...process.env, ...options.env } : undefined,
+      // If this call has to start the pm0 daemon, deployed apps inherit its environment,
+      // so the platform's own secrets are left out.
+      env: { ...childProcessEnv(), ...options?.env },
     });
 
     let stdout = '';

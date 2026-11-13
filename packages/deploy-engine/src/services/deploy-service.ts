@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { existsSync, mkdirSync } from 'fs';
 import { rm, unlink, symlink, rename } from 'fs/promises';
 import { basename, join } from 'path';
@@ -19,8 +20,7 @@ import { isPortAvailable } from '../utils/port';
 import { requestNginxOrigin } from './nginx-health';
 import { runPreDeployCommand } from './pre-deploy';
 
-const IS_PLATFORM_PROD =
-  process.env.PLATFORM_ENV === 'production' || process.env.NODE_ENV === 'production';
+const IS_PLATFORM_PROD = config.isProduction;
 
 /**
  * Feature flag for Docker deployments.

@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 /**
@@ -15,9 +16,7 @@ export const MAX_SESSION_HOURS = 24 * 90;
 export const DEFAULT_SESSION_HOURS = 24 * 7;
 
 function secret(): string {
-  const value = process.env.BETTER_AUTH_SECRET;
-  if (!value) throw new Error('BETTER_AUTH_SECRET is required for password-protected sites');
-  return value;
+  return config.authSecret;
 }
 
 /**

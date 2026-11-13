@@ -1,3 +1,5 @@
+import { SettingsService } from './settings-service';
+import { config } from '@thakur-deploy/config';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { and, asc, avg, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
@@ -22,7 +24,7 @@ const HISTORY_MAX_CHECKS = 3_000;
 type CheckJobData = { monitorId: string };
 
 function redisConnection() {
-  const url = new URL(process.env.REDIS_URL || 'redis://localhost:6379');
+  const url = new URL(config.redisUrl);
   return {
     host: url.hostname,
     port: Number(url.port) || 6379,
@@ -417,12 +419,10 @@ export const UptimeService = {
   },
 
   async deliverPendingAlerts() {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESEND_FROM_EMAIL;
+    const apiKey = SettingsService.get('resend_api_key');
+    const from = SettingsService.get('resend_from_email');
     if (!apiKey || !from) {
-      console.warn(
-        '[Uptime] RESEND_API_KEY or RESEND_FROM_EMAIL not configured — skipping alert delivery',
-      );
+      console.warn('[Uptime] Email alerts are not set up in Settings — skipping alert delivery');
       return;
     }
 
@@ -436,7 +436,7 @@ export const UptimeService = {
       .orderBy(asc(uptimeAlerts.occurred_at))
       .limit(20);
 
-    const dashboardUrl = process.env.CLIENT_URL || 'https://deploy.thakur.dev';
+    const dashboardUrl = config.publicUrl;
 
     for (const { alert, monitor, project, account } of pending) {
       if (alert.delivered_at) continue;

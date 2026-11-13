@@ -1,19 +1,11 @@
 import { db } from '../db';
 import { environmentVariables } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-
-const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!;
+import { decrypt, encrypt } from '../lib/crypto';
 
 export const EnvService = {
   encrypt(text: string) {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    const authTag = cipher.getAuthTag().toString('hex');
-    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+    return encrypt(text);
   },
 
   decrypt(text: string) {
@@ -22,13 +14,7 @@ export const EnvService = {
     if (!ivHex || !authTagHex || encryptedHex === undefined) return text;
 
     try {
-      const iv = Buffer.from(ivHex, 'hex');
-      const authTag = Buffer.from(authTagHex, 'hex');
-      const decipher = createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-      decipher.setAuthTag(authTag);
-      let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-      return decrypted;
+      return decrypt(text);
     } catch (e) {
       console.error('Decryption failed', e);
       return text; // Return original if decryption fails

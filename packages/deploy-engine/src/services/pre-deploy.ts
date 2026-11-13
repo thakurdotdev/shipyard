@@ -1,3 +1,4 @@
+import { childProcessEnv } from '@thakur-deploy/config';
 import { spawn } from 'child_process';
 import { delimiter, join } from 'path';
 import { Builder } from './build/builder';
@@ -40,7 +41,7 @@ export async function runPreDeployCommand({
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
-      ...process.env,
+      ...childProcessEnv(),
       ...envVars,
       NODE_ENV: 'production',
       PLATFORM_ENV: 'production',

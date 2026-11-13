@@ -1,3 +1,4 @@
+import { config } from '@thakur-deploy/config';
 import { db } from '../db';
 import { builds, deployments, projectAccess, projects, uptimeMonitors } from '../db/schema';
 import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';
@@ -5,8 +6,7 @@ import { AppType, isStaticFramework } from '../config/framework-config';
 import { normalizeWatchPatternsInput } from './deploy-change-detection';
 import { GateService } from './gate-service';
 
-const IS_PLATFORM_PROD =
-  process.env.NODE_ENV === 'production' || process.env.PLATFORM_ENV === 'production';
+const IS_PLATFORM_PROD = config.isProduction;
 
 export const ProjectService = {
   async getAll(ownerId: string) {
@@ -93,7 +93,7 @@ export const ProjectService = {
     }
 
     // 2. Check if in use on the host system via Deploy Engine
-    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4012';
+    const deployEngineUrl = config.deployEngineUrl;
     try {
       const res = await fetch(`${deployEngineUrl}/ports/check`, {
         method: 'POST',
@@ -122,7 +122,7 @@ export const ProjectService = {
   },
 
   async allocateNextPort(): Promise<number> {
-    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4012';
+    const deployEngineUrl = config.deployEngineUrl;
     let candidatePort: number | null = null;
 
     try {
@@ -214,7 +214,7 @@ export const ProjectService = {
     // Determine domain (Auto-generate in Production if missing)
     let domain = data.domain?.trim() || null;
     if (IS_PLATFORM_PROD && !domain) {
-      const baseDomain = process.env.BASE_DOMAIN || 'thakur.dev';
+      const baseDomain = config.baseDomain;
       const slug = data.name
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, '-')
@@ -366,7 +366,7 @@ export const ProjectService = {
 
     // 2. Call Deploy Engine to cleanup
     // WE ALWAYS CALL THIS, even if port is missing, to clean up artifacts/dirs
-    const deployEngineUrl = process.env.DEPLOY_ENGINE_URL || 'http://localhost:4002';
+    const deployEngineUrl = config.deployEngineUrl;
     try {
       const subdomain =
         project.domain?.split('.')[0] ||
