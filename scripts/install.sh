@@ -896,7 +896,12 @@ ensure_root_env() {
   touch "$ROOT_ENV"
   chmod 600 "$ROOT_ENV"
   [[ -n "$origin" ]] && env_put "$ROOT_ENV" PUBLIC_URL "${origin%/}" fill
-  env_put "$ROOT_ENV" SECRET "$(rand_hex 32)" fill
+  # Reuse the existing sign-in secret so every key keeps one source.
+  local secret
+  secret="$(cfg_get SECRET)"
+  [[ -n "$secret" ]] || secret="$(cfg_get BETTER_AUTH_SECRET)"
+  [[ -n "$secret" ]] || secret="$(rand_hex 32)"
+  env_put "$ROOT_ENV" SECRET "$secret" fill
   local k v
   for k in DATABASE_URL REDIS_URL; do
     v="$(cfg_get "$k")"
@@ -917,6 +922,7 @@ cmd_update() {
   git -C "$INSTALL_DIR" pull --ff-only --quiet
   after="$(git -C "$INSTALL_DIR" rev-parse HEAD)"
   if [[ "$before" == "$after" ]]; then
+    ensure_root_env
     ok "already up to date at ${after:0:7}; nothing to do"
     return
   fi
