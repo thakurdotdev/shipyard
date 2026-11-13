@@ -693,6 +693,17 @@ install_nginx_conf() {
   as_root systemctl reload nginx
 }
 
+# "http2 on;" needs Nginx 1.25.1+; older ones (Ubuntu 24.04 ships 1.24) take it on listen.
+nginx_listen_443() {
+  local version
+  version="$(nginx -v 2>&1 | sed -n 's|.*nginx/\([0-9.]*\).*|\1|p')"
+  if [[ -n "$version" && "$(printf '%s\n1.25.1\n' "$version" | sort -V | head -n1)" == "1.25.1" ]]; then
+    printf 'listen 443 ssl;\n    http2 on;'
+  else
+    printf 'listen 443 ssl http2;'
+  fi
+}
+
 render_nginx() { # render_nginx SERVER_NAME TLS(0|1)
   local name="$1" tls="$2" listen80="listen 80;"
   [[ "$name" == "_" ]] && listen80="listen 80 default_server;"
@@ -759,8 +770,7 @@ EOF
 }
 
 server {
-    listen 443 ssl;
-    http2 on;
+    $(nginx_listen_443)
     server_name $name;
 
     ssl_certificate /etc/letsencrypt/live/$name/fullchain.pem;
