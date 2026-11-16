@@ -9,11 +9,25 @@ import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
 import { isStaticFramework } from '../config/framework-config';
 import { GateService } from './gate-service';
+import { GitHubDeploymentStatus } from './github-deployment-status';
 
 const IS_PLATFORM_PROD = config.isProduction;
 
 export const DeploymentService = {
+  /** Puts a build live (auto-deploy, redeploy or rollback) and reports it on GitHub. */
   async activateBuild(projectId: string, buildId: string) {
+    void GitHubDeploymentStatus.report(buildId, 'deploying');
+    try {
+      const result = await this.runActivation(projectId, buildId);
+      void GitHubDeploymentStatus.report(buildId, 'success');
+      return result;
+    } catch (error) {
+      void GitHubDeploymentStatus.report(buildId, 'failure', 'Deployment failed');
+      throw error;
+    }
+  },
+
+  async runActivation(projectId: string, buildId: string) {
     const project = await db.query.projects.findFirst({
       where: eq(projects.id, projectId),
     });
@@ -355,6 +369,7 @@ export const DeploymentService = {
       .update(deployments)
       .set({ status: 'inactive', status_message: 'Deployment stopped' })
       .where(eq(deployments.id, activeDeployment.id));
+    void GitHubDeploymentStatus.report(activeDeployment.build_id, 'inactive');
 
     return true;
   },

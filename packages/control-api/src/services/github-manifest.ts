@@ -36,7 +36,13 @@ export function buildManifest(publicUrl: string, authUrl: string) {
     setup_url: `${publicUrl}/import`,
     setup_on_update: true,
     public: false,
-    default_permissions: { contents: 'read', metadata: 'read' },
+    // deployments + statuses: show each deploy on the commit, its PRs and the repo's Environments.
+    default_permissions: {
+      contents: 'read',
+      metadata: 'read',
+      deployments: 'write',
+      statuses: 'write',
+    },
   };
   // GitHub refuses webhook URLs it can't reach; local installs simply go without push deploys.
   if (!isLocalHost(host)) {

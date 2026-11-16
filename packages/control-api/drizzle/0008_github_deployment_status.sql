@@ -1,0 +1,1 @@
+ALTER TABLE "builds" ADD COLUMN "github_deployment_id" text;

@@ -27,6 +27,14 @@ export interface GitHubAppInfo {
 let appInfoCache: { appId: string; fetchedAt: number; info: GitHubAppInfo } | null = null;
 const APP_INFO_TTL_MS = 60 * 60 * 1000;
 
+/** GET /app permissions, cached briefly so Settings reflects changes made on GitHub soon. */
+let permissionsCache: { appId: string; fetchedAt: number; value: Record<string, string> } | null =
+  null;
+const PERMISSIONS_TTL_MS = 2 * 60 * 1000;
+
+/** App permissions ShipYard needs to show deployments on GitHub. */
+export const DEPLOYMENT_STATUS_PERMISSIONS = ['deployments', 'statuses'] as const;
+
 /** The GitHub App private key, from the dashboard settings or the legacy PEM file. */
 function loadPrivateKey(): string {
   const key = githubAppConfig().privateKey;
@@ -44,6 +52,7 @@ function loadPrivateKey(): string {
 /** Forget cached App metadata (after the App is replaced in Settings). */
 export function resetGitHubAppCache() {
   appInfoCache = null;
+  permissionsCache = null;
 }
 
 export const GitHubService = {
@@ -155,6 +164,42 @@ export const GitHubService = {
     };
     appInfoCache = { appId, fetchedAt: Date.now(), info };
     return info;
+  },
+
+  /**
+   * Whether the App may post deployments and commit statuses: 'ready', 'missing'
+   * (the App lacks the permissions) or 'unknown' (not connected / GitHub unreachable).
+   */
+  async getDeploymentStatusSupport(): Promise<{
+    state: 'ready' | 'missing' | 'unknown';
+    missing: string[];
+  }> {
+    const { appId } = githubAppConfig();
+    if (!appId) return { state: 'unknown', missing: [] };
+    try {
+      let permissions = permissionsCache?.appId === appId ? permissionsCache : null;
+      if (!permissions || Date.now() - permissions.fetchedAt > PERMISSIONS_TTL_MS) {
+        const res = await fetch('https://api.github.com/app', {
+          headers: {
+            Authorization: `Bearer ${this.generateAppJWT()}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'shipyard-control-api',
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return { state: 'unknown', missing: [] };
+        const data = (await res.json()) as { permissions?: Record<string, string> };
+        permissions = { appId, fetchedAt: Date.now(), value: data.permissions ?? {} };
+        permissionsCache = permissions;
+      }
+      const missing = DEPLOYMENT_STATUS_PERMISSIONS.filter(
+        (name) => permissions!.value[name] !== 'write',
+      );
+      return { state: missing.length ? 'missing' : 'ready', missing };
+    } catch {
+      return { state: 'unknown', missing: [] };
+    }
   },
 
   /**

@@ -1,6 +1,6 @@
 import { config, getServerHost } from '@thakur-deploy/config';
 import { Elysia, t } from 'elysia';
-import { resetGitHubAppCache } from '../services/github-service';
+import { GitHubService, resetGitHubAppCache } from '../services/github-service';
 import {
   isGitHubAppConfigured,
   isGitHubLoginConfigured,
@@ -54,6 +54,9 @@ async function fullView() {
     github: {
       login_ready: isGitHubLoginConfigured(),
       app_ready: isGitHubAppConfigured(),
+      deployment_status: isGitHubAppConfigured()
+        ? await GitHubService.getDeploymentStatusSupport()
+        : { state: 'unknown' as const, missing: [] },
     },
   };
 }

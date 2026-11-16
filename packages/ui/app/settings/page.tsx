@@ -280,7 +280,7 @@ function SettingsContent() {
 
       <Section
         title="GitHub App"
-        description="Used to sign in, read repositories and receive push events."
+        description="Used to sign in, read repositories, receive push events and show deployments on GitHub."
         action={
           <Badge variant={data.github.app_ready ? 'secondary' : 'destructive'}>
             {data.github.app_ready ? 'Connected' : 'Not connected'}
@@ -303,6 +303,28 @@ function SettingsContent() {
                 App settings on GitHub <ExternalLink className="size-3.5" />
               </a>
             </Button>
+          </div>
+        )}
+        {data.github.deployment_status?.state === 'missing' && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
+            <p className="font-medium">Deployments aren&apos;t shown on GitHub yet</p>
+            <p className="mt-1 text-xs leading-5">
+              To show each deploy on commits, pull requests and the repository&apos;s Environments
+              (as Vercel does), give the App <strong>Deployments</strong> and{' '}
+              <strong>Commit statuses</strong> &ldquo;Read and write&rdquo; permissions, then accept
+              the update on each installation (GitHub emails the owner a review link).
+            </p>
+            {slug && (
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <a
+                  href={`https://github.com/settings/apps/${slug}/permissions`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Edit App permissions <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+            )}
           </div>
         )}
         <div className="rounded-lg border border-border p-4">

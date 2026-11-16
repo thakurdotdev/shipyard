@@ -130,6 +130,8 @@ export const builds = pgTable(
     commit_message: text('commit_message'), // Git commit message
     logs: text('logs'),
     artifact_id: varchar('artifact_id', { length: 255 }),
+    /** GitHub Deployment created for this build's commit (shown on the repo and its PRs). */
+    github_deployment_id: text('github_deployment_id'),
     created_at: timestamp('created_at').defaultNow().notNull(),
     completed_at: timestamp('completed_at'),
   },
