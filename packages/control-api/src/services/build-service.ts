@@ -9,6 +9,7 @@ import { ProjectService } from './project-service';
 import { EnvService } from './env-service';
 import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
+import { GitHubDeploymentStatus } from './github-deployment-status';
 
 export const BuildService = {
   async create(data: {
@@ -17,20 +18,36 @@ export const BuildService = {
     commit_sha?: string;
     commit_message?: string | null;
   }) {
+    const project =
+      data.status === 'pending' ? await ProjectService.getById(data.project_id) : null;
+
+    // Dashboard deploys don't carry a commit; record the branch head so the build shows
+    // its commit and can be reported on GitHub.
+    let commitSha = data.commit_sha;
+    let commitMessage = data.commit_message;
+    if (!commitSha && project) {
+      const head = await GitHubDeploymentStatus.resolveBranchHead(project);
+      if (head) {
+        commitSha = head.sha;
+        commitMessage ??= head.message;
+      }
+    }
+
     const result = await db
       .insert(builds)
       .values({
         project_id: data.project_id,
         status: data.status,
-        commit_sha: data.commit_sha,
-        commit_message: data.commit_message,
+        commit_sha: commitSha,
+        commit_message: commitMessage,
       })
       .returning();
     const build = result[0];
 
     if (data.status === 'pending') {
-      const project = await ProjectService.getById(data.project_id);
       if (project) {
+        void GitHubDeploymentStatus.report(build.id, 'queued');
+
         const envVarsList = await EnvService.getAll(project.id);
         const envVars = envVarsList.reduce(
           (acc, curr) => ({ ...acc, [curr.key]: curr.value }),
@@ -91,6 +108,7 @@ export const BuildService = {
               completed_at: new Date(),
             })
             .where(eq(builds.id, build.id));
+          void GitHubDeploymentStatus.report(build.id, 'failure', 'Build could not be queued');
 
           console.error(`[BuildService] Build ${build.id} marked as failed due to queue error`);
         }
@@ -202,6 +220,12 @@ export const BuildService = {
       })
       .where(eq(builds.id, id))
       .returning();
+
+    if (updated && status === 'building') {
+      void GitHubDeploymentStatus.report(id, 'building');
+    } else if (updated && status === 'failed') {
+      void GitHubDeploymentStatus.report(id, 'failure', 'Build failed');
+    }
 
     // Auto-activate on successful builds
     if (status === 'success' && updated) {

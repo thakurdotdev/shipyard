@@ -27,7 +27,12 @@ describe('manifest', () => {
       active: true,
     });
     expect(m.default_events).toEqual(['push']);
-    expect(m.default_permissions).toEqual({ contents: 'read', metadata: 'read' });
+    expect(m.default_permissions).toEqual({
+      contents: 'read',
+      metadata: 'read',
+      deployments: 'write',
+      statuses: 'write',
+    });
     expect(m.public).toBe(false);
   });
 

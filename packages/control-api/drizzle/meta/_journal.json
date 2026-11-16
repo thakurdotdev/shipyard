@@ -57,6 +57,13 @@
       "when": 1794513934058,
       "tag": "0007_platform_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794859343104,
+      "tag": "0008_github_deployment_status",
+      "breakpoints": true
     }
   ]
 }

@@ -33,7 +33,12 @@ export interface SettingView {
 export interface PlatformSettings {
   settings: Record<SettingKey, SettingView>;
   server: { public_url: string; base_domain: string; server_ip: string; production: boolean };
-  github: { login_ready: boolean; app_ready: boolean };
+  github: {
+    login_ready: boolean;
+    app_ready: boolean;
+    /** Whether the App may show deployments on GitHub (needs deployments + statuses write). */
+    deployment_status: { state: 'ready' | 'missing' | 'unknown'; missing: string[] };
+  };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
