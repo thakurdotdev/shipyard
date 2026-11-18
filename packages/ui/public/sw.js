@@ -5,10 +5,13 @@
  * Never cached: /api (live data), sign-in, and any redirect or error (e.g. a Cloudflare
  * Access login), so a sign-in wall can never be served from the cache.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `shipyard-static-${VERSION}`;
 const PAGE_CACHE = `shipyard-pages-${VERSION}`;
 const OFFLINE_URL = '/offline.html';
+/** Which open windows are the installed app (kept across service worker restarts). */
+const META_CACHE = 'shipyard-meta';
+const MODES_KEY = '/__shipyard/client-modes';
 const PRECACHE = [
   OFFLINE_URL,
   '/manifest.json',
@@ -30,7 +33,12 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       for (const key of await caches.keys()) {
-        if (key.startsWith('shipyard-') && key !== STATIC_CACHE && key !== PAGE_CACHE) {
+        if (
+          key.startsWith('shipyard-') &&
+          key !== STATIC_CACHE &&
+          key !== PAGE_CACHE &&
+          key !== META_CACHE
+        ) {
           await caches.delete(key);
         }
       }
@@ -39,8 +47,39 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+async function readModes() {
+  try {
+    const cached = await (await caches.open(META_CACHE)).match(MODES_KEY);
+    if (cached) return await cached.json();
+  } catch {}
+  return { installed: false, clients: {} };
+}
+
+async function writeModes(modes) {
+  const cache = await caches.open(META_CACHE);
+  await cache.put(
+    MODES_KEY,
+    new Response(JSON.stringify(modes), { headers: { 'Content-Type': 'application/json' } }),
+  );
+}
+
+/** A window says whether it runs as the installed app (display-mode standalone). */
+async function rememberClientMode(clientId, standalone) {
+  const modes = await readModes();
+  const open = new Set(
+    (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).map((c) => c.id),
+  );
+  for (const id of Object.keys(modes.clients)) if (!open.has(id)) delete modes.clients[id];
+  modes.clients[clientId] = standalone;
+  if (standalone) modes.installed = true;
+  await writeModes(modes);
+}
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data && event.data.type === 'CLIENT_MODE' && event.source && event.source.id) {
+    event.waitUntil(rememberClientMode(event.source.id, Boolean(event.data.standalone)));
+  }
 });
 
 function cacheable(response) {
@@ -138,22 +177,37 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+/**
+ * Opens a notification's page in the installed app when there is one:
+ *  1. an open app window: focus it and go to the page;
+ *  2. the app is installed but not open: open a new window, which the system hands to
+ *     the app (Android opens in-scope links in the installed app);
+ *  3. no app: reuse an open ShipYard browser tab, else open one.
+ * A browser tab is never preferred over the app.
+ */
+async function openFromNotification(target) {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const ours = windows.filter((c) => new URL(c.url).origin === self.location.origin);
+  const modes = await readModes();
+  const reuse = async (client) => {
+    try {
+      await client.focus();
+      const navigated = await client.navigate(target);
+      if (navigated) return navigated;
+    } catch {}
+    return self.clients.openWindow(target);
+  };
+  const app = ours.find((c) => modes.clients[c.id] === true);
+  if (app) return reuse(app);
+  if (!modes.installed && ours.length) return reuse(ours[0]);
+  return self.clients.openWindow(target);
+}
+self.__openFromNotification = openFromNotification;
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
-  event.waitUntil(
-    (async () => {
-      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const client of windows) {
-        if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
-          await client.focus();
-          if ('navigate' in client) return client.navigate(target).catch(() => {});
-          return;
-        }
-      }
-      return self.clients.openWindow(target);
-    })(),
-  );
+  event.waitUntil(openFromNotification(target));
 });
 
 // The browser rotated the subscription: tell the app to register the new one next open.
