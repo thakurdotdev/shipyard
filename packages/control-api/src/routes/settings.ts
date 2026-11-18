@@ -4,6 +4,7 @@ import { GitHubService, resetGitHubAppCache } from '../services/github-service';
 import {
   isGitHubAppConfigured,
   isGitHubLoginConfigured,
+  isInternalSetting,
   isSettingKey,
   SETTING_DEFINITIONS,
   SETTING_KEYS,
@@ -30,6 +31,7 @@ function hintFor(key: SettingKey, value: string): string {
 export function settingsView(): Record<SettingKey, SettingView> {
   const out = {} as Record<SettingKey, SettingView>;
   for (const key of SETTING_KEYS) {
+    if (isInternalSetting(key)) continue;
     const value = SettingsService.get(key);
     const secret = SETTING_DEFINITIONS[key].secret;
     out[key] = {
@@ -67,7 +69,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' }).get('', fullVi
   async ({ body, set }) => {
     const updates: Partial<Record<SettingKey, string | null>> = {};
     for (const [key, value] of Object.entries(body)) {
-      if (!isSettingKey(key)) {
+      if (!isSettingKey(key) || isInternalSetting(key)) {
         set.status = 400;
         return { error: `Unknown setting: ${key}` };
       }

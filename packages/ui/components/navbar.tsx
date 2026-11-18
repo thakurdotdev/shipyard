@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
-import { Activity, FolderKanban, LogOut, Plus, Settings } from 'lucide-react';
+import { Activity, Bell, FolderKanban, LogOut, Plus, Settings } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -36,7 +36,7 @@ export function Navbar() {
   return (
     <nav
       aria-label="Main navigation"
-      className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+      className="sticky top-0 z-40 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
     >
       <div className="page-width flex h-16 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-7">
@@ -45,13 +45,12 @@ export function Navbar() {
             className="flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Image src="/logo.png" alt="" width={28} height={28} className="rounded-md" />
-            <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">
-              Shipyard
-            </span>
+            <span className="text-[15px] font-semibold tracking-tight">Shipyard</span>
           </Link>
 
+          {/* Phones use the bottom tab bar instead (MobileTabBar). */}
           {session && (
-            <div className="flex items-center gap-1">
+            <div className="hidden items-center gap-1 sm:flex">
               <Link
                 href="/"
                 aria-label="Projects"
@@ -69,6 +68,15 @@ export function Navbar() {
               >
                 <Activity className="size-4" />
                 <span className="hidden sm:inline">Processes</span>
+              </Link>
+              <Link
+                href="/notifications"
+                aria-label="Notifications"
+                className={navLinkClass(pathname === '/notifications')}
+                aria-current={pathname === '/notifications' ? 'page' : undefined}
+              >
+                <Bell className="size-4" />
+                <span className="hidden lg:inline">Notifications</span>
               </Link>
               <Link
                 href="/settings"
@@ -140,5 +148,50 @@ export function Navbar() {
         </div>
       </div>
     </nav>
+  );
+}
+
+/** Bottom tab bar on phones: thumb-reachable, clear of the home indicator. */
+export function MobileTabBar() {
+  const pathname = usePathname();
+  const { data: session } = authClient.useSession();
+  if (!session || pathname === '/login' || pathname === '/setup') return null;
+  const tabs = [
+    {
+      href: '/',
+      label: 'Projects',
+      icon: FolderKanban,
+      active: pathname === '/' || pathname.startsWith('/projects'),
+    },
+    { href: '/processes', label: 'Processes', icon: Activity, active: pathname === '/processes' },
+    { href: '/notifications', label: 'Alerts', icon: Bell, active: pathname === '/notifications' },
+    { href: '/settings', label: 'Settings', icon: Settings, active: pathname === '/settings' },
+  ];
+  return (
+    <>
+      {/* Keeps the end of every page above the bar. */}
+      <div aria-hidden className="h-[calc(4rem+env(safe-area-inset-bottom))] sm:hidden" />
+      <nav
+        aria-label="Main navigation"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:hidden"
+      >
+        <div className="grid h-16 grid-cols-4">
+          {tabs.map(({ href, label, icon: Icon, active }) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'flex flex-col items-center justify-center gap-1 text-[11px] font-medium outline-none transition-colors focus-visible:bg-accent',
+                active ? 'text-foreground' : 'text-muted-foreground active:text-foreground',
+              )}
+            >
+              <Icon className={cn('size-5', active && 'stroke-[2.25]')} />
+              {label}
+            </Link>
+          ))}
+        </div>
+      </nav>
+    </>
   );
 }

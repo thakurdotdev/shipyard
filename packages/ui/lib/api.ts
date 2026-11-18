@@ -4,6 +4,8 @@ import {
   AccessSettings,
   DomainCheck,
   DomainSwitch,
+  NotificationPreferences,
+  NotificationSettings,
   Project,
   Build,
   Deployment,
@@ -426,6 +428,54 @@ export const api = {
       throw new Error(error.error || error.message || 'Failed to fetch logs');
     }
     return res.json();
+  },
+
+  // Notifications
+  async getNotificationSettings(): Promise<NotificationSettings> {
+    const res = await fetch(`${API_URL}/notifications`, { credentials: 'include' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not load notification settings');
+    return data;
+  },
+
+  async updateNotificationPreferences(
+    preferences: Partial<NotificationPreferences>,
+  ): Promise<NotificationPreferences> {
+    const res = await fetch(`${API_URL}/notifications/preferences`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(preferences),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not save notification settings');
+    return data;
+  },
+
+  async removeNotificationDevice(id: string): Promise<void> {
+    const res = await fetch(`${API_URL}/notifications/subscriptions`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok && res.status !== 404) throw new Error('Could not remove the device');
+  },
+
+  async sendTestNotification(id?: string): Promise<{ sent: number; failed: number }> {
+    const res = await fetch(`${API_URL}/notifications/test`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(id ? { id } : {}),
+    });
+    const data = await res.json().catch(() => ({ sent: 0, failed: 0 }));
+    if (!res.ok && data.sent === 0) {
+      throw new Error(
+        data.failed ? 'The push service rejected the notification' : 'No device to send to',
+      );
+    }
+    return data;
   },
 
   // Custom domains

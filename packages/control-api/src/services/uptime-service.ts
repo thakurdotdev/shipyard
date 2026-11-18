@@ -1,4 +1,5 @@
 import { SettingsService } from './settings-service';
+import { NotificationService } from './notification-service';
 import { config } from '@thakur-deploy/config';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
@@ -416,6 +417,29 @@ export const UptimeService = {
         transition: finalTransition,
       });
     }
+    if (finalTransition) {
+      // Push right away; the email goes through the retrying alert queue.
+      const project = await db.query.projects.findFirst({
+        where: eq(projects.id, monitor.project_id),
+        columns: { name: true, domain: true },
+      });
+      if (project) {
+        const endpoint =
+          monitor.endpoint_url || (project.domain ? `https://${project.domain}` : project.name);
+        const down = finalTransition === 'down';
+        void NotificationService.notify(
+          {
+            event: down ? 'uptime_down' : 'uptime_recovered',
+            projectId: monitor.project_id,
+            title: down ? `🔴 ${project.name} is down` : `🟢 ${project.name} is back up`,
+            body: endpoint,
+            url: `/projects/${monitor.project_id}?tab=uptime`,
+            tag: `uptime-${monitor.project_id}`,
+          },
+          ['push'],
+        );
+      }
+    }
   },
 
   async deliverPendingAlerts() {
@@ -440,6 +464,18 @@ export const UptimeService = {
 
     for (const { alert, monitor, project, account } of pending) {
       if (alert.delivered_at) continue;
+      const event = alert.status === 'down' ? 'uptime_down' : 'uptime_recovered';
+      if (!(await NotificationService.wantsEmail(account.id, event, project.id))) {
+        // Turned off (or project muted) in notification settings: nothing to send.
+        await db
+          .update(uptimeAlerts)
+          .set({
+            delivered_at: new Date(),
+            last_error: 'Email turned off in notification settings',
+          })
+          .where(eq(uptimeAlerts.id, alert.id));
+        continue;
+      }
       const endpoint =
         monitor.endpoint_url || (project.domain ? `https://${project.domain}` : 'your endpoint');
       const down = alert.status === 'down';

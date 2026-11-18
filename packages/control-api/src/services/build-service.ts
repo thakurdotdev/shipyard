@@ -10,6 +10,7 @@ import { EnvService } from './env-service';
 import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
 import { GitHubDeploymentStatus } from './github-deployment-status';
+import { DeployNotifications } from './deploy-notifications';
 
 export const BuildService = {
   async create(data: {
@@ -109,6 +110,7 @@ export const BuildService = {
             })
             .where(eq(builds.id, build.id));
           void GitHubDeploymentStatus.report(build.id, 'failure', 'Build could not be queued');
+          DeployNotifications.buildFailed(build.id);
 
           console.error(`[BuildService] Build ${build.id} marked as failed due to queue error`);
         }
@@ -223,8 +225,10 @@ export const BuildService = {
 
     if (updated && status === 'building') {
       void GitHubDeploymentStatus.report(id, 'building');
+      DeployNotifications.started(id);
     } else if (updated && status === 'failed') {
       void GitHubDeploymentStatus.report(id, 'failure', 'Build failed');
+      DeployNotifications.buildFailed(id);
     }
 
     // Auto-activate on successful builds
