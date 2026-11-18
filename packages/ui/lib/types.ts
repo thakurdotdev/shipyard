@@ -21,6 +21,8 @@ export interface Project {
   keep_builds?: number | null;
   /** 'static' when the live deployment is files served by Nginx (Vite, Next.js export). */
   serving_mode?: 'static' | 'process' | null;
+  /** Custom domain only: www.<domain> redirects to the domain. */
+  www_redirect?: boolean;
   created_at: string;
   updated_at: string;
   latest_build?: Pick<Build, 'id' | 'status' | 'created_at' | 'completed_at'> | null;
@@ -179,4 +181,34 @@ export interface RepoFolder {
   migrationNotes?: string[];
   buildCommand?: { command: string; reason: string } | null;
   runtimeVersion?: string | null;
+}
+
+export interface DomainHostCheck {
+  name: string;
+  status: 'ours' | 'missing' | 'elsewhere' | 'unknown';
+  detail?: string;
+  proxied?: boolean;
+}
+
+/** What moving a project to a domain would do. */
+export interface DomainCheck {
+  domain: string;
+  site: string;
+  custom: boolean;
+  www_redirect: boolean;
+  zone: string | null;
+  hosts: DomainHostCheck[];
+  replaces: { file: string; names: string[] }[];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface DomainSwitch {
+  state: 'running' | 'done' | 'failed';
+  domain: string;
+  www_redirect: boolean;
+  previous_domain: string | null;
+  message: string;
+  started_at: string;
+  finished_at?: string;
 }

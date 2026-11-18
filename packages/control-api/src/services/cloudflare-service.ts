@@ -1,5 +1,8 @@
 import { config, getServerHost } from '@thakur-deploy/config';
 import { SettingsService } from './settings-service';
+import { classifyHostRecords, type HostDnsState } from './domain-names';
+
+export { classifyHostRecords, type HostDnsState };
 
 const BASE_DOMAIN = config.baseDomain;
 
@@ -26,13 +29,28 @@ interface CloudflareDnsRecord {
 async function cfFetch<T = any>(
   path: string,
   options: RequestInit = {},
+  zoneOverride?: string | null,
 ): Promise<{ success: boolean; result: T; errors?: any[] }> {
-  const { token, zoneId } = credentials();
-  if (!token || !zoneId) {
+  const { zoneId } = credentials();
+  const zone = zoneOverride || zoneId;
+  if (!zone) {
+    throw new Error('Cloudflare is not connected. Add the API token and zone ID in Settings.');
+  }
+  if (!/^[a-f0-9]{32}$/i.test(zone)) throw new Error('Invalid Cloudflare zone ID');
+  return cfRequest<T>(`/zones/${zone}${path}`, options);
+}
+
+/** Any Cloudflare API path (account-level calls such as listing zones). */
+async function cfRequest<T = any>(
+  path: string,
+  options: RequestInit = {},
+): Promise<{ success: boolean; result: T; errors?: any[] }> {
+  const { token } = credentials();
+  if (!token) {
     throw new Error('Cloudflare is not connected. Add the API token and zone ID in Settings.');
   }
 
-  const url = `https://api.cloudflare.com/client/v4/zones/${zoneId}${path}`;
+  const url = `https://api.cloudflare.com/client/v4${path}`;
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -50,6 +68,11 @@ async function cfFetch<T = any>(
   }
 
   return data;
+}
+
+export interface CloudflareZone {
+  id: string;
+  name: string;
 }
 
 export const CloudflareService = {
@@ -134,12 +157,16 @@ export const CloudflareService = {
   /**
    * Deletes a DNS record by its Cloudflare record ID.
    */
-  async deleteARecord(dnsRecordId: string): Promise<void> {
+  async deleteARecord(dnsRecordId: string, zoneId?: string | null): Promise<void> {
     console.log(`[CloudflareService] Deleting DNS record: ${dnsRecordId}`);
 
-    await cfFetch(`/dns_records/${dnsRecordId}`, {
-      method: 'DELETE',
-    });
+    await cfFetch(
+      `/dns_records/${dnsRecordId}`,
+      {
+        method: 'DELETE',
+      },
+      zoneId,
+    );
 
     console.log(`[CloudflareService] DNS record deleted: ${dnsRecordId}`);
   },
@@ -162,15 +189,107 @@ export const CloudflareService = {
    * Updates a DNS record's proxy mode.
    * Call this AFTER SSL is issued to enable Cloudflare CDN + DDoS protection (orange cloud).
    */
-  async updateProxyMode(dnsRecordId: string, proxied: boolean): Promise<void> {
+  async updateProxyMode(
+    dnsRecordId: string,
+    proxied: boolean,
+    zoneId?: string | null,
+  ): Promise<void> {
     const mode = proxied ? 'proxied (orange cloud)' : 'DNS-only (grey cloud)';
     console.log(`[CloudflareService] Updating record ${dnsRecordId} to ${mode}`);
 
-    await cfFetch(`/dns_records/${dnsRecordId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ proxied }),
-    });
+    await cfFetch(
+      `/dns_records/${dnsRecordId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ proxied }),
+      },
+      zoneId,
+    );
 
     console.log(`[CloudflareService] Record ${dnsRecordId} updated to ${mode}`);
+  },
+
+  /**
+   * The Cloudflare zone a hostname belongs to, among the zones this API token can
+   * manage (the account's zones). Throws when none matches.
+   */
+  async zoneFor(hostname: string): Promise<CloudflareZone> {
+    const host = hostname.toLowerCase();
+    const labels = host.split('.');
+    // Longest match first: shop.example.co.uk -> example.co.uk before co.uk.
+    for (let i = 0; i <= labels.length - 2; i++) {
+      const candidate = labels.slice(i).join('.');
+      const data = await cfRequest<CloudflareZone[]>(
+        `/zones?name=${encodeURIComponent(candidate)}&status=active`,
+      ).catch(() => null);
+      const zone = data?.result?.[0];
+      if (zone?.id) return { id: zone.id, name: zone.name };
+    }
+    // Tokens scoped to a single zone may not list zones: try the configured one.
+    const { zoneId } = credentials();
+    if (zoneId) {
+      const configured = await cfRequest<CloudflareZone>(`/zones/${zoneId}`).catch(() => null);
+      const name = configured?.result?.name?.toLowerCase();
+      if (name && (host === name || host.endsWith(`.${name}`))) {
+        return { id: zoneId, name };
+      }
+    }
+    throw new Error(
+      `${hostname} is not in a Cloudflare zone this API token can manage. Add the domain to the same Cloudflare account (and to the token's zones).`,
+    );
+  },
+
+  async listHostRecords(zoneId: string, hostname: string) {
+    const data = await cfFetch<CloudflareDnsRecord[]>(
+      `/dns_records?name=${encodeURIComponent(hostname.toLowerCase())}&per_page=100`,
+      {},
+      zoneId,
+    );
+    return data.result;
+  },
+
+  /** How a hostname resolves today, without changing anything. */
+  async inspectHost(hostname: string, serverIp: string, cnameTarget?: string) {
+    const zone = await this.zoneFor(hostname);
+    const records = await this.listHostRecords(zone.id, hostname);
+    return { zone, dns: classifyHostRecords(records, serverIp, cnameTarget) };
+  },
+
+  /**
+   * Makes a hostname point at this server. Existing records that already do are reused
+   * untouched (owned: false); a missing one is created DNS-only so the certificate can
+   * be issued (owned: true). Anything pointing elsewhere is left alone and reported.
+   */
+  async ensureHost(
+    hostname: string,
+    serverIp: string,
+    cnameTarget?: string,
+  ): Promise<{ zoneId: string; recordId: string; owned: boolean; proxied: boolean }> {
+    const { zone, dns } = await this.inspectHost(hostname, serverIp, cnameTarget);
+    if (dns.state === 'ours') {
+      return { zoneId: zone.id, recordId: dns.recordId, owned: false, proxied: dns.proxied };
+    }
+    if (dns.state === 'elsewhere') {
+      throw new Error(
+        `${hostname} already points somewhere else (${dns.detail}). Remove or change that DNS record in Cloudflare first.`,
+      );
+    }
+    console.log(`[CloudflareService] Creating A record: ${hostname} -> ${serverIp} (DNS-only)`);
+    const data = await cfFetch<CloudflareDnsRecord>(
+      '/dns_records',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'A',
+          name: hostname.toLowerCase(),
+          content: serverIp,
+          ttl: 1,
+          proxied: false,
+          comment: 'Created by ShipYard platform',
+        }),
+      },
+      zone.id,
+    );
+    return { zoneId: zone.id, recordId: data.result.id, owned: true, proxied: false };
   },
 };

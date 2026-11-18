@@ -4,7 +4,8 @@ import { db } from '../db';
 import { deployments, projects } from '../db/schema';
 import type { DeploymentStatus } from '../db/schema';
 import { EnvService } from './env-service';
-import { DomainService } from './domain-service';
+import { DomainService, provisionMatches } from './domain-service';
+import { domainAliases, siteNameFor } from './domain-names';
 import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
 import { isStaticFramework, servesStaticFiles } from '../config/framework-config';
@@ -92,17 +93,15 @@ export const DeploymentService = {
     // Step 1: Domain provisioning (DNS + SSL) — production only
     // ──────────────────────────────────────────────
     if (IS_PLATFORM_PROD && project.domain) {
-      const subdomain =
-        project.domain.split('.')[0] ||
-        project.name
-          .toLowerCase()
-          .replace(/[^a-z0-9-]/g, '-')
-          .replace(/^-+|-+$/g, '');
+      const subdomain = siteNameFor(project.domain);
+      const aliases = domainAliases(project);
 
       // Check if domain is already provisioned
       const domainProvision = await DomainService.getByProjectId(projectId);
+      // Provisioned for exactly this domain and www setting (it may have just changed).
       const isFullyProvisioned =
         domainProvision &&
+        provisionMatches(domainProvision, project.domain.toLowerCase(), aliases) &&
         (domainProvision.dns_status === 'created' || domainProvision.dns_status === 'proxied') &&
         domainProvision.ssl_status === 'issued';
 
@@ -128,6 +127,9 @@ export const DeploymentService = {
               EventStreamService.broadcast(buildId, logMsg, 'deploy');
             },
             buildId,
+            // The activation below writes the site in one switch (and takes over any
+            // existing site for this domain then), so provisioning leaves Nginx alone.
+            { aliases, deferNginx: true },
           );
 
           if (!result.success) {
@@ -223,12 +225,12 @@ export const DeploymentService = {
 
     const deployEngineUrl = config.deployEngineUrl;
     try {
-      const subdomain =
-        project.domain?.split('.')[0] ||
-        project.name
-          .toLowerCase()
-          .replace(/[^a-z0-9-]/g, '-')
-          .replace(/^-+|-+$/g, '');
+      const subdomain = project.domain
+        ? siteNameFor(project.domain)
+        : project.name
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '-')
+            .replace(/^-+|-+$/g, '');
 
       const res = await fetch(`${deployEngineUrl}/activate`, {
         method: 'POST',
@@ -244,6 +246,7 @@ export const DeploymentService = {
           projectName: project.name,
           gated: await GateService.isEnabled(projectId),
           preDeployCommand: project.pre_deploy_command,
+          aliases: domainAliases(project),
         }),
       });
 
@@ -370,7 +373,7 @@ export const DeploymentService = {
         projectId,
         buildId: activeDeployment.build_id,
         appType: project.app_type,
-        subdomain: project.domain?.split('.')[0],
+        subdomain: project.domain ? siteNameFor(project.domain) : undefined,
       }),
     });
 

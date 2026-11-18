@@ -1,5 +1,5 @@
 import { config } from '@thakur-deploy/config';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { staticSiteLocations, type StaticSiteKind } from './static-site';
 
@@ -14,6 +14,68 @@ export const GATE_PATH = '/__shipyard_gate';
 const GATE_MARKER = '# shipyard-gate: on';
 /** Marks a static site served page-by-page (Next.js export) instead of as an SPA. */
 const PAGES_MARKER = '# shipyard-static-kind: pages';
+/** Extra hostnames (e.g. www.example.com) that redirect to the site's own domain. */
+const REDIRECTS_MARKER = '# shipyard-redirects: ';
+
+const HOSTNAME = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+function dashboardHost(): string {
+  try {
+    return new URL(dashboardOrigin()).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** Hostnames a config answers for (wildcards and the catch-all `_` excluded). */
+export function serverNames(content: string): string[] {
+  const names = new Set<string>();
+  for (const match of content.matchAll(/^\s*server_name\s+([^;]+);/gm)) {
+    for (const name of match[1].trim().split(/\s+/)) {
+      const host = name.toLowerCase();
+      if (host && host !== '_' && !host.includes('*') && !host.startsWith('~')) names.add(host);
+    }
+  }
+  return [...names];
+}
+
+/** Where configs that a custom domain takes over are kept, so they can be restored. */
+function replacedDir(): string {
+  return (
+    process.env.NGINX_REPLACED_DIR || join(dirname(getNginxDirs().enabled), 'shipyard-replaced')
+  );
+}
+
+function sslLines(domain: string): string {
+  return `ssl_certificate /etc/letsencrypt/live/${domain}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;`;
+}
+
+/** Port 80: certificate challenges, then everything goes to https://<domain>. */
+function httpRedirectServer(domain: string, aliases: string[]): string {
+  return `server {
+    listen 80;
+    server_name ${[domain, ...aliases].join(' ')};
+    location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
+    location / { return 301 https://${domain}$request_uri; }
+}`;
+}
+
+/** HTTPS for the redirect-only names (www): one hop to the real domain. */
+function aliasRedirectServer(domain: string, aliases: string[]): string {
+  if (aliases.length === 0) return '';
+  return `
+server {
+    listen 443 ssl;
+    server_name ${aliases.join(' ')};
+    ${sslLines(domain)}
+    location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
+    location / { return 301 https://${domain}$request_uri; }
+}
+`;
+}
 
 function gateUpstream(): string {
   const upstream = config.controlApiUrl;
@@ -69,10 +131,16 @@ function acmeLocation(gated: boolean): string {
   return `location /.well-known/acme-challenge/ { ${gated ? 'auth_request off; ' : ''}root ${CERTBOT_WEBROOT}; }`;
 }
 
-function configHeader(root: string | null, gated: boolean, kind: StaticSiteKind = 'spa'): string {
+function configHeader(
+  root: string | null,
+  gated: boolean,
+  kind: StaticSiteKind = 'spa',
+  aliases: string[] = [],
+): string {
   return [
     root ? `# shipyard-static-root: ${JSON.stringify(root)}` : null,
     root && kind === 'pages' ? PAGES_MARKER : null,
+    aliases.length ? `${REDIRECTS_MARKER}${JSON.stringify(aliases)}` : null,
     gated ? GATE_MARKER : null,
   ]
     .filter(Boolean)
@@ -246,14 +314,77 @@ async function retry(fn: () => Promise<void>, retries = 3, delayMs = 300) {
 }
 
 export const NginxService = {
+  /**
+   * A site is named by a label (`app` -> app.<base domain>, the default) or by a full
+   * hostname for a custom domain (`example.com`). The name is also its config file name.
+   */
   domainForSubdomain(sub: string) {
     if (!this.isSubdomainAllowed(sub)) throw new Error(`Invalid or reserved subdomain: ${sub}`);
-    return `${sub}.${baseDomain()}`;
+    return sub.includes('.') ? sub : `${sub}.${baseDomain()}`;
+  },
+
+  siteConfigPaths(sub: string) {
+    this.domainForSubdomain(sub);
+    const { available, enabled } = getNginxDirs();
+    return { available: join(available, `${sub}.conf`), enabled: join(enabled, `${sub}.conf`) };
+  },
+
+  /** Redirect-only names for a site: only `www.<domain>` of a custom domain is accepted. */
+  normalizeAliases(sub: string, aliases: string[] | undefined): string[] | undefined {
+    if (aliases === undefined) return undefined;
+    const domain = this.domainForSubdomain(sub);
+    const unique = [...new Set(aliases.map((a) => a.trim().toLowerCase()).filter(Boolean))];
+    for (const alias of unique) {
+      if (!sub.includes('.') || alias !== `www.${domain}`) {
+        throw new Error(`Unsupported redirect hostname for ${domain}: ${alias}`);
+      }
+    }
+    return unique;
+  },
+
+  /** Redirect names recorded in the live config (used when a caller doesn't pass them). */
+  getAliases(sub: string): string[] {
+    const { available } = this.siteConfigPaths(sub);
+    if (!existsSync(available)) return [];
+    const line = readFileSync(available, 'utf8')
+      .split('\n')
+      .find((l) => l.startsWith(REDIRECTS_MARKER));
+    if (!line) return [];
+    try {
+      const parsed: unknown = JSON.parse(line.slice(REDIRECTS_MARKER.length));
+      return this.normalizeAliases(sub, Array.isArray(parsed) ? parsed.map(String) : []) ?? [];
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Enabled Nginx sites, other than this site's own, that answer for any of `hosts`
+   * (e.g. a hand-written config for the domain being moved onto ShipYard).
+   */
+  findConflicts(sub: string, hosts: string[]): { file: string; names: string[] }[] {
+    const own = this.siteConfigPaths(sub);
+    const { enabled } = getNginxDirs();
+    if (!existsSync(enabled)) return [];
+    const wanted = new Set(hosts.map((h) => h.toLowerCase()));
+    const conflicts: { file: string; names: string[] }[] = [];
+    for (const entry of readdirSync(enabled)) {
+      const path = join(enabled, entry);
+      if (path === own.enabled || path === own.available) continue;
+      let content: string;
+      try {
+        content = readFileSync(path, 'utf8');
+      } catch {
+        continue;
+      }
+      const names = serverNames(content).filter((name) => wanted.has(name));
+      if (names.length) conflicts.push({ file: path, names });
+    }
+    return conflicts;
   },
 
   getStaticRoot(sub: string): string | null {
-    this.domainForSubdomain(sub);
-    const path = join(getNginxDirs().available, `${sub}.conf`);
+    const path = this.siteConfigPaths(sub).available;
     if (!existsSync(path)) return null;
     const marker = readFileSync(path, 'utf8').match(/^# shipyard-static-root: (.+)$/m);
     if (!marker) return null;
@@ -265,15 +396,13 @@ export const NginxService = {
 
   /** How the live static site for this subdomain routes requests ('spa' when unknown). */
   getStaticKind(sub: string): StaticSiteKind {
-    this.domainForSubdomain(sub);
-    const path = join(getNginxDirs().available, `${sub}.conf`);
+    const path = this.siteConfigPaths(sub).available;
     return existsSync(path) && readFileSync(path, 'utf8').includes(PAGES_MARKER) ? 'pages' : 'spa';
   },
 
   /** Whether the live config for this subdomain currently has the password gate on. */
   getGate(sub: string): boolean {
-    this.domainForSubdomain(sub);
-    const path = join(getNginxDirs().available, `${sub}.conf`);
+    const path = this.siteConfigPaths(sub).available;
     return existsSync(path) && /^# shipyard-gate: on$/m.test(readFileSync(path, 'utf8'));
   },
 
@@ -282,29 +411,23 @@ export const NginxService = {
     root: string | null,
     gate?: boolean,
     kind?: StaticSiteKind,
+    aliases?: string[],
   ): string {
     const domain = this.domainForSubdomain(sub);
     const gated = gate ?? this.getGate(sub);
     const siteKind = kind ?? this.getStaticKind(sub);
-    return `${configHeader(root, gated, siteKind)}
-server {
-    listen 80;
-    server_name ${domain};
-    location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
-    location / { return 301 https://$host$request_uri; }
-}
+    const redirects = this.normalizeAliases(sub, aliases) ?? this.getAliases(sub);
+    return `${configHeader(root, gated, siteKind, redirects)}
+${httpRedirectServer(domain, redirects)}
 
 server {
     listen 443 ssl;
     server_name ${domain};
-    ssl_certificate /etc/letsencrypt/live/${domain}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+    ${sslLines(domain)}
     ${acmeLocation(gated)}
 ${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
 }
-`;
+${aliasRedirectServer(domain, redirects)}`;
   },
 
   async createStaticDomainConfig(
@@ -313,10 +436,11 @@ ${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
     verify: () => Promise<void>,
     gated?: boolean,
     kind: StaticSiteKind = 'spa',
+    aliases?: string[],
   ) {
     await this.applyDomainConfig(
       sub,
-      this.generateStaticDomainConfig(sub, root, gated, kind),
+      this.generateStaticDomainConfig(sub, root, gated, kind, aliases),
       verify,
     );
   },
@@ -338,6 +462,18 @@ ${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
 
   isSubdomainAllowed(sub: string) {
     if (!sub) return false;
+    if (sub.includes('.')) {
+      // A custom domain: a real hostname, never the dashboard, and never a plain
+      // <label>.<base domain>, which is always named by its label.
+      const host = sub.trim();
+      if (host !== host.toLowerCase() || !HOSTNAME.test(host)) return false;
+      if (host === dashboardHost()) return false;
+      const base = baseDomain();
+      if (host.endsWith(`.${base}`) && !host.slice(0, -(base.length + 1)).includes('.')) {
+        return false;
+      }
+      return true;
+    }
     const s = sub.toLowerCase().trim();
     if (RESERVED.includes(s)) return false;
     if (!/^[a-z0-9-]+$/.test(s)) return false;
@@ -349,24 +485,21 @@ ${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
    * Generate nginx config with per-domain SSL certificate paths.
    * Uses the domain's own Let's Encrypt cert instead of a wildcard cert.
    */
-  generateConfig(sub: string, port: number | null, gate?: boolean) {
+  generateConfig(sub: string, port: number | null, gate?: boolean, aliases?: string[]) {
     const gated = gate ?? this.getGate(sub);
-    if (port === null) return this.generateStaticDomainConfig(sub, this.getStaticRoot(sub), gated);
-    const fullDomain = `${sub}.${baseDomain()}`;
-    return `${configHeader(null, gated)}
-server {
-    listen 80;
-    server_name ${fullDomain};
-
-    # ACME challenge for Let's Encrypt certificate renewal
-    location /.well-known/acme-challenge/ {
-        root ${CERTBOT_WEBROOT};
+    const redirects = this.normalizeAliases(sub, aliases) ?? this.getAliases(sub);
+    if (port === null) {
+      return this.generateStaticDomainConfig(
+        sub,
+        this.getStaticRoot(sub),
+        gated,
+        undefined,
+        redirects,
+      );
     }
-
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
+    const fullDomain = this.domainForSubdomain(sub);
+    return `${configHeader(null, gated, 'spa', redirects)}
+${httpRedirectServer(fullDomain, redirects)}
 
 server {
     listen 443 ssl;
@@ -421,7 +554,7 @@ ${gated ? gateDirectives() : ''}
         proxy_send_timeout 300;
     }
 }
-`;
+${aliasRedirectServer(fullDomain, redirects)}`;
   },
 
   /**
@@ -429,16 +562,19 @@ ${gated ? gateDirectives() : ''}
    * Used BEFORE SSL cert is issued — only serves ACME challenge + proxy.
    * This allows certbot webroot validation to work.
    */
-  generateHttpOnlyConfig(sub: string, port: number | null, gate?: boolean) {
+  generateHttpOnlyConfig(sub: string, port: number | null, gate?: boolean, aliases?: string[]) {
     const gated = gate ?? this.getGate(sub);
-    const fullDomain = `${sub}.${baseDomain()}`;
+    const fullDomain = this.domainForSubdomain(sub);
+    const redirects = this.normalizeAliases(sub, aliases) ?? this.getAliases(sub);
+    // Certificates for the redirect names are validated over this same listener.
+    const names = [fullDomain, ...redirects].join(' ');
     // The login page needs HTTPS (its cookie is Secure), so until the certificate exists a
     // protected site serves nothing but the ACME challenge rather than its content.
     if (gated) {
-      return `${configHeader(port === null ? this.getStaticRoot(sub) : null, true, this.getStaticKind(sub))}
+      return `${configHeader(port === null ? this.getStaticRoot(sub) : null, true, this.getStaticKind(sub), redirects)}
 server {
     listen 80;
-    server_name ${fullDomain};
+    server_name ${names};
     location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
     location / { return 503; }
 }
@@ -447,19 +583,19 @@ server {
     if (port === null) {
       const root = this.getStaticRoot(sub);
       const kind = this.getStaticKind(sub);
-      return `${configHeader(root, false, kind)}
+      return `${configHeader(root, false, kind, redirects)}
 server {
     listen 80;
-    server_name ${fullDomain};
+    server_name ${names};
     ${acmeLocation(false)}
 ${staticDomainLocations(root, kind)}
 }
 `;
     }
-    return `
+    return `${configHeader(null, false, 'spa', redirects)}
 server {
     listen 80;
-    server_name ${fullDomain};
+    server_name ${names};
 
     # ACME challenge for Let's Encrypt certificate issuance
     location /.well-known/acme-challenge/ {
@@ -481,8 +617,8 @@ server {
 `;
   },
 
-  async createConfig(sub: string, port: number | null, gated?: boolean) {
-    await this.applyDomainConfig(sub, this.generateConfig(sub, port, gated));
+  async createConfig(sub: string, port: number | null, gated?: boolean, aliases?: string[]) {
+    await this.applyDomainConfig(sub, this.generateConfig(sub, port, gated, aliases));
   },
 
   /**
@@ -490,8 +626,7 @@ server {
    * Returns false when the site has no config yet; the next activation applies the setting.
    */
   async setGate(sub: string, port: number | null, gated: boolean): Promise<boolean> {
-    this.domainForSubdomain(sub);
-    const path = join(getNginxDirs().available, `${sub}.conf`);
+    const path = this.siteConfigPaths(sub).available;
     if (!existsSync(path)) return false;
 
     const hasHttps = /^\s*listen 443\b/m.test(readFileSync(path, 'utf8'));
@@ -504,23 +639,48 @@ server {
     return true;
   },
 
+  /**
+   * Writes and enables a site's config, reloads Nginx and runs `verify`. On any failure
+   * the previous state comes back, including sites this one took over.
+   *
+   * Taking over: another enabled site that answers for the same hostname (say a
+   * hand-written config for a domain being moved onto ShipYard) is moved aside in the
+   * same reload, so the domain switches with no gap, and is restored if anything fails.
+   */
   async applyDomainConfig(sub: string, content: string, verify?: () => Promise<void>) {
     if (!this.isSubdomainAllowed(sub)) {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
     }
 
-    const { available, enabled } = getNginxDirs();
-    const availablePath = join(available, `${sub}.conf`);
-    const enabledPath = join(enabled, `${sub}.conf`);
+    const { available: availablePath, enabled: enabledPath } = this.siteConfigPaths(sub);
+    const conflicts = this.findConflicts(sub, serverNames(content));
 
     const previous = existsSync(availablePath) ? readFileSync(availablePath, 'utf8') : null;
+    const moved: { from: string; to: string }[] = [];
     try {
       await writeNginxFile(availablePath, content, false);
       await linkNginxFile(availablePath, enabledPath);
+      if (conflicts.length) {
+        const dir = replacedDir();
+        await runChecked(['sudo', 'mkdir', '-p', dir]);
+        for (const conflict of conflicts) {
+          const to = join(dir, `${conflict.file.split('/').pop()}.${Date.now()}`);
+          console.log(
+            `[NginxService] ${conflict.file} also serves ${conflict.names.join(', ')}; moving it to ${to}`,
+          );
+          await runChecked(['sudo', 'mv', conflict.file, to]);
+          moved.push({ from: conflict.file, to });
+        }
+      }
       await this.reload();
       await verify?.();
     } catch (error) {
       // A failed reload must not leave an invalid file blocking every later deploy.
+      for (const { from, to } of moved.reverse()) {
+        await runChecked(['sudo', 'mv', to, from]).catch((e) =>
+          console.error(`[NginxService] Could not restore ${from} from ${to}:`, e),
+        );
+      }
       if (previous !== null) {
         await writeNginxFile(availablePath, previous, false);
       } else {
@@ -537,9 +697,7 @@ server {
       throw new Error(`Invalid or reserved subdomain: ${sub}`);
     }
 
-    const { available, enabled } = getNginxDirs();
-    const availablePath = join(available, `${sub}.conf`);
-    const enabledPath = join(enabled, `${sub}.conf`);
+    const { available: availablePath, enabled: enabledPath } = this.siteConfigPaths(sub);
     if (existsSync(availablePath) && existsSync(enabledPath)) {
       try {
         const config = readFileSync(availablePath, 'utf8');
@@ -568,31 +726,30 @@ server {
    * Create an HTTP-only nginx config (no SSL) for ACME challenge serving.
    * Used during initial domain provisioning before SSL cert is issued.
    */
-  async createHttpOnlyConfig(sub: string, port: number | null, gated?: boolean) {
-    if (!this.isSubdomainAllowed(sub)) {
-      throw new Error(`Invalid or reserved subdomain: ${sub}`);
+  async createHttpOnlyConfig(
+    sub: string,
+    port: number | null,
+    gated?: boolean,
+    aliases?: string[],
+  ) {
+    if (!existsSync(CERTBOT_WEBROOT)) {
+      await runChecked(['sudo', 'mkdir', '-p', CERTBOT_WEBROOT]);
+      await runChecked(['sudo', 'chmod', '755', CERTBOT_WEBROOT]);
     }
-
-    const { available, enabled } = getNginxDirs();
-    const availablePath = join(available, `${sub}.conf`);
-    const enabledPath = join(enabled, `${sub}.conf`);
-
-    await writeNginxFile(availablePath, this.generateHttpOnlyConfig(sub, port, gated));
-    await linkNginxFile(availablePath, enabledPath);
-    await this.reload();
+    await this.applyDomainConfig(sub, this.generateHttpOnlyConfig(sub, port, gated, aliases));
   },
 
   /**
    * Upgrade an existing HTTP-only config to full HTTPS after SSL cert is issued.
    */
-  async upgradeToHttps(sub: string, port: number | null, gated?: boolean) {
-    await this.createConfig(sub, port, gated);
+  async upgradeToHttps(sub: string, port: number | null, gated?: boolean, aliases?: string[]) {
+    await this.createConfig(sub, port, gated, aliases);
   },
 
   async removeConfig(sub: string) {
-    const { available, enabled } = getNginxDirs();
-    const availablePath = join(available, `${sub}.conf`);
-    const enabledPath = join(enabled, `${sub}.conf`);
+    // A name that can't be a site never had a config of ours.
+    if (!this.isSubdomainAllowed(sub)) return;
+    const { available: availablePath, enabled: enabledPath } = this.siteConfigPaths(sub);
 
     await removeNginxFile(enabledPath);
     if (availablePath !== enabledPath) {

@@ -7,10 +7,71 @@ import { projects, builds, deployments } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { ProjectAccessService } from '../services/project-access-service';
 import { servesStaticFiles } from '../config/framework-config';
+import { domainAliases, siteNameFor } from '../services/domain-names';
 import { EventStreamService } from '../services/event-stream-service';
 import { DeploymentService } from '../services/deployment-service';
+import { DomainChangeService } from '../services/domain-change-service';
 
 export const domainsRoutes = new Elysia({ prefix: '/domains' })
+  /** What moving a project to this domain would do (DNS, takeover), changing nothing. */
+  .get(
+    '/project/:projectId/check',
+    async ({ params: { projectId }, query, request, set }) => {
+      const project = await ProjectAccessService.getOwnedProject(request, projectId);
+      if (!project) {
+        set.status = 404;
+        return { error: 'Project not found' };
+      }
+      try {
+        return await DomainChangeService.check(project, query.domain, query.www === 'true');
+      } catch (error: any) {
+        set.status = 502;
+        return { error: error.message };
+      }
+    },
+    {
+      query: t.Object({
+        domain: t.String({ minLength: 1, maxLength: 300 }),
+        www: t.Optional(t.String()),
+      }),
+    },
+  )
+  /** Moves a project to a subdomain or a custom domain. Runs in the background. */
+  .put(
+    '/project/:projectId',
+    async ({ params: { projectId }, body, request, set }) => {
+      const project = await ProjectAccessService.getOwnedProject(request, projectId);
+      if (!project) {
+        set.status = 404;
+        return { error: 'Project not found' };
+      }
+      try {
+        const result = await DomainChangeService.start(
+          project,
+          body.domain,
+          body.www_redirect ?? false,
+        );
+        set.status = result.started ? 202 : 200;
+        return result;
+      } catch (error: any) {
+        set.status = 400;
+        return { error: error.message };
+      }
+    },
+    {
+      body: t.Object({
+        domain: t.String({ minLength: 1, maxLength: 300 }),
+        www_redirect: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .get('/project/:projectId/switch', async ({ params: { projectId }, request, set }) => {
+    if (!(await ProjectAccessService.getOwnedProject(request, projectId))) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
+    return { switch: DomainChangeService.getSwitch(projectId) };
+  })
   .get(
     '/check',
     async ({ query }) => {
@@ -108,7 +169,7 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
         return { error: 'Project has no port assigned' };
       }
 
-      const subdomain = project.domain.split('.')[0];
+      const subdomain = siteNameFor(project.domain);
 
       const result = await DomainService.provision(
         projectId,
@@ -121,6 +182,8 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
             project_id: projectId,
           });
         },
+        undefined,
+        { aliases: domainAliases(project) },
       );
 
       if (!result.success) {
@@ -166,6 +229,8 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
             project_id: projectId,
           });
         },
+        domainAliases(project),
+        project.domain ? siteNameFor(project.domain) : undefined,
       );
 
       if (!result.success) {

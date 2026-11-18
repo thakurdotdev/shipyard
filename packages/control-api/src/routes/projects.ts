@@ -13,6 +13,7 @@ import { DeploymentService } from '../services/deployment-service';
 import { AppType, APP_TYPES, servesStaticFiles } from '../config/framework-config';
 import { MAX_KEEP_BUILDS, MIN_KEEP_BUILDS } from '../services/build-retention';
 import { EventStreamService } from '../services/event-stream-service';
+import { siteNameFor } from '../services/domain-names';
 
 const appTypeSchema = t.Union(
   APP_TYPES.map((type) => t.Literal(type)) as [
@@ -21,7 +22,6 @@ const appTypeSchema = t.Union(
   ],
   { error: 'Invalid app type' },
 );
-const BASE_DOMAIN = config.baseDomain;
 
 export const projectsRoutes = new Elysia({ prefix: '/projects' })
   .get('/', async ({ request }) => {
@@ -167,7 +167,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         pre_deploy_command: t.Optional(t.Union([t.String({ maxLength: 2000 }), t.Null()])),
         app_type: t.Optional(appTypeSchema),
         root_directory: t.Optional(t.String()),
-        domain: t.Optional(t.String()),
+        // The domain changes through PUT /domains/project/:id, which sets it up safely.
         port: t.Optional(t.Integer({ minimum: 1024, maximum: 65535 })),
         auto_deploy: t.Optional(t.Boolean()),
         auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
@@ -250,13 +250,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       return { preview_url: `https://${project.domain}`, embeddable: false };
     }
 
-    const subdomain = project.domain.slice(0, -(BASE_DOMAIN.length + 1));
-    if (!subdomain || project.domain !== `${subdomain}.${BASE_DOMAIN}`) {
-      return {
-        preview_url: `https://${project.domain}`,
-        embeddable: false,
-      };
-    }
+    const subdomain = siteNameFor(project.domain);
 
     try {
       const deployEngineUrl = config.deployEngineUrl;

@@ -336,6 +336,7 @@ function ProjectDetailsContent() {
               onProtectionChange={(enabled) =>
                 setProject((prev: any) => (prev ? { ...prev, access_protected: enabled } : prev))
               }
+              onDomainChange={refreshData}
             />
           </TabsContent>
         </Tabs>

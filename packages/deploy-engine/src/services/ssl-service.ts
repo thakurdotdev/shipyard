@@ -9,7 +9,16 @@ const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
 const CERTBOT_EMAIL = process.env.CERTBOT_EMAIL?.trim();
 const LETSENCRYPT_DIR = '/etc/letsencrypt/live';
 
+const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+/** DNS names in `openssl x509 -ext subjectAltName` output. */
+export function parseSanNames(output: string): string[] {
+  return [...output.matchAll(/DNS:([^,\s]+)/g)].map((m) => m[1].toLowerCase());
+}
+
 interface SSLResult {
+  /** True when an existing certificate already covered every name. */
+  reused?: boolean;
   success: boolean;
   certPath?: string;
   keyPath?: string;
@@ -22,17 +31,29 @@ export const SSLService = {
    * Issue a Let's Encrypt SSL certificate for a domain using certbot webroot method.
    * Requires nginx to be running and serving /.well-known/acme-challenge/ from CERTBOT_WEBROOT.
    */
-  async issueCertificate(domain: string, buildId?: string): Promise<SSLResult> {
-    console.log(`[SSLService] Issuing certificate for ${domain}`);
+  async issueCertificate(
+    domain: string,
+    buildId?: string,
+    aliases: string[] = [],
+  ): Promise<SSLResult> {
+    const names = [...new Set([domain, ...aliases].map((n) => n.trim().toLowerCase()))];
+    const invalid = names.find((n) => !HOSTNAME.test(n));
+    if (invalid) return { success: false, error: `Invalid domain name: ${invalid}` };
+    console.log(`[SSLService] Issuing certificate for ${names.join(', ')}`);
 
-    // Check if cert already exists
+    // Reuse an existing certificate when it already covers every name.
     const existing = await this.checkCertificate(domain);
     if (existing.success && existing.certPath) {
-      console.log(`[SSLService] Certificate already exists for ${domain}`);
-      if (buildId) {
-        await LogService.success(buildId, `Existing SSL certificate found for ${domain}`);
+      const covered = await this.getCertNames(domain);
+      // Unknown coverage (unreadable SANs) keeps the old behaviour: reuse it.
+      if (covered === null || names.every((n) => covered.includes(n))) {
+        console.log(`[SSLService] Certificate already exists for ${names.join(', ')}`);
+        if (buildId) {
+          await LogService.success(buildId, `Existing SSL certificate found for ${domain}`);
+        }
+        return { ...existing, reused: true };
       }
-      return existing;
+      console.log(`[SSLService] Certificate for ${domain} lacks some names; expanding it`);
     }
 
     if (buildId) {
@@ -55,8 +76,10 @@ export const SSLService = {
         '--webroot',
         '-w',
         CERTBOT_WEBROOT,
-        '-d',
+        '--cert-name',
         domain,
+        ...names.flatMap((name) => ['-d', name]),
+        '--expand',
         '--non-interactive',
         '--agree-tos',
         ...(CERTBOT_EMAIL ? ['--email', CERTBOT_EMAIL] : ['--register-unsafely-without-email']),
@@ -160,6 +183,23 @@ export const SSLService = {
     } catch {
       // Files exist but can't read expiry — still consider it a success
       return { success: true, certPath, keyPath };
+    }
+  },
+
+  /** Names a certificate covers, or null when it can't be read. */
+  async getCertNames(domain: string): Promise<string[] | null> {
+    const certPath = join(LETSENCRYPT_DIR, domain, 'fullchain.pem');
+    try {
+      const proc = Bun.spawn(
+        ['sudo', 'openssl', 'x509', '-noout', '-ext', 'subjectAltName', '-in', certPath],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      const output = await new Response(proc.stdout).text();
+      await proc.exited;
+      if (proc.exitCode !== 0) return null;
+      return parseSanNames(output);
+    } catch {
+      return null;
     }
   },
 

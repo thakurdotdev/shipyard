@@ -60,6 +60,7 @@ const app = new Elysia()
         projectName?: string;
         gated?: boolean;
         preDeployCommand?: string | null;
+        aliases?: string[];
       };
     }) => {
       const {
@@ -73,6 +74,7 @@ const app = new Elysia()
         projectName,
         gated,
         preDeployCommand,
+        aliases,
       } = body;
 
       try {
@@ -87,6 +89,7 @@ const app = new Elysia()
           projectName,
           gated,
           preDeployCommand,
+          aliases,
         );
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
@@ -113,6 +116,7 @@ const app = new Elysia()
         projectName: t.Optional(t.String()),
         gated: t.Optional(t.Boolean()),
         preDeployCommand: t.Optional(t.Nullable(t.String({ maxLength: 2000 }))),
+        aliases: t.Optional(t.Array(t.String({ maxLength: 253 }), { maxItems: 4 })),
       }),
     },
   )
@@ -202,10 +206,18 @@ const app = new Elysia()
   })
   // SSL certificate management endpoints
   .post('/ssl/issue', async ({ body }) => {
-    const { domain, buildId } = body as { domain: string; buildId?: string };
+    const { domain, buildId, aliases } = body as {
+      domain: string;
+      buildId?: string;
+      aliases?: string[];
+    };
     if (!domain) return new Response('domain required', { status: 400 });
     try {
-      const result = await SSLService.issueCertificate(domain, buildId);
+      const result = await SSLService.issueCertificate(
+        domain,
+        buildId,
+        Array.isArray(aliases) ? aliases : [],
+      );
       if (!result.success) {
         return new Response(JSON.stringify({ error: result.error }), {
           status: 500,
@@ -218,10 +230,17 @@ const app = new Elysia()
     }
   })
   .get('/ssl/status', async ({ query }) => {
-    const { domain } = query as { domain: string };
+    const { domain, aliases } = query as { domain: string; aliases?: string };
     if (!domain) return new Response('domain required', { status: 400 });
     const result = await SSLService.checkCertificate(domain);
-    return result;
+    // `covered`: the certificate exists and already includes every requested name.
+    const names = [domain, ...(aliases ? aliases.split(',') : [])].map((n) => n.toLowerCase());
+    const covered = result.success
+      ? await SSLService.getCertNames(domain).then(
+          (sans) => sans !== null && names.every((n) => sans.includes(n)),
+        )
+      : false;
+    return { ...result, covered };
   })
   .post('/ssl/revoke', async ({ body }) => {
     const { domain } = body as { domain: string };
@@ -235,34 +254,36 @@ const app = new Elysia()
   })
   // Nginx configuration management endpoints
   .post('/nginx/http-only', async ({ body }) => {
-    const { subdomain, port, gated } = (body || {}) as {
+    const { subdomain, port, gated, aliases } = (body || {}) as {
       subdomain: string;
       port: number | null;
       gated?: boolean;
+      aliases?: string[];
     };
     if (!subdomain || port === undefined)
       return new Response('subdomain and port (or null for static hosting) required', {
         status: 400,
       });
     try {
-      await NginxService.createHttpOnlyConfig(subdomain, port, gated);
+      await NginxService.createHttpOnlyConfig(subdomain, port, gated, aliases);
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
     }
   })
   .post('/nginx/upgrade-https', async ({ body }) => {
-    const { subdomain, port, gated } = body as {
+    const { subdomain, port, gated, aliases } = body as {
       subdomain: string;
       port: number | null;
       gated?: boolean;
+      aliases?: string[];
     };
     if (!subdomain || port === undefined)
       return new Response('subdomain and port (or null for static hosting) required', {
         status: 400,
       });
     try {
-      await NginxService.upgradeToHttps(subdomain, port, gated);
+      await NginxService.upgradeToHttps(subdomain, port, gated, aliases);
       return { success: true };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
@@ -300,6 +321,27 @@ const app = new Elysia()
       return { success: true, applied: await NginxService.setGate(subdomain, port, gated) };
     } catch (e: any) {
       return new Response(e.message, { status: 500 });
+    }
+  })
+  /** Other enabled Nginx sites that a site with these hostnames would take over. */
+  .post('/nginx/conflicts', async ({ body }) => {
+    const { subdomain, aliases } = (body || {}) as { subdomain: string; aliases?: string[] };
+    if (!subdomain || !NginxService.isSubdomainAllowed(subdomain)) {
+      return new Response('valid subdomain or hostname required', { status: 400 });
+    }
+    try {
+      const names = [
+        NginxService.domainForSubdomain(subdomain),
+        ...(NginxService.normalizeAliases(subdomain, aliases ?? []) ?? []),
+      ];
+      return {
+        conflicts: NginxService.findConflicts(subdomain, names).map((c) => ({
+          file: c.file,
+          names: c.names,
+        })),
+      };
+    } catch (e: any) {
+      return new Response(e.message, { status: 400 });
     }
   })
   .post('/nginx/remove', async ({ body }) => {

@@ -5,6 +5,7 @@ import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { AppType, isStaticFramework } from '../config/framework-config';
 import { normalizeWatchPatternsInput } from './deploy-change-detection';
 import { GateService } from './gate-service';
+import { normalizeDomainInput, siteNameFor } from './domain-names';
 
 const IS_PLATFORM_PROD = config.isProduction;
 
@@ -212,7 +213,8 @@ export const ProjectService = {
     );
 
     // Determine domain (Auto-generate in Production if missing)
-    let domain = data.domain?.trim() || null;
+    // `app` and `app.<base domain>` both mean the subdomain; a custom domain is kept as is.
+    let domain = data.domain?.trim() ? normalizeDomainInput(data.domain) : null;
     if (IS_PLATFORM_PROD && !domain) {
       const baseDomain = config.baseDomain;
       const slug = data.name
@@ -369,7 +371,7 @@ export const ProjectService = {
     const deployEngineUrl = config.deployEngineUrl;
     try {
       const subdomain =
-        project.domain?.split('.')[0] ||
+        (project.domain && siteNameFor(project.domain)) ||
         project.name
           .toLowerCase()
           .replace(/[^a-z0-9-]/g, '-')

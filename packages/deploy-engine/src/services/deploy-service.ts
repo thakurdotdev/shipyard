@@ -78,6 +78,8 @@ export const DeployService = {
     projectName?: string,
     gated?: boolean,
     preDeployCommand?: string | null,
+    /** Redirect-only hostnames for a custom domain (www.<domain>). */
+    aliases?: string[],
   ) {
     const paths = this.getPaths(projectId, buildId);
     // Vite is always static; anything else needs a port unless its build turns out static.
@@ -179,7 +181,7 @@ export const DeployService = {
       await LogService.step(buildId, 'Configuring domain routing');
       await LogService.detail(buildId, `Subdomain: ${subdomain}`);
       try {
-        await retry(() => NginxService.createConfig(subdomain, port, gated), {
+        await retry(() => NginxService.createConfig(subdomain, port, gated, aliases), {
           name: `nginx config ${subdomain}`,
           timeoutMs: 6000,
         });
@@ -217,6 +219,7 @@ export const DeployService = {
         },
         gated,
         staticSite.kind,
+        aliases,
       );
       domainConfigured = true;
       await LogService.success(buildId, 'Static domain configured and responding');

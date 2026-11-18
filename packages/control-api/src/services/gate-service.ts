@@ -10,10 +10,10 @@ import {
   MIN_SESSION_HOURS,
   monitorToken,
 } from './gate-session';
+import { siteNameFor } from './domain-names';
 
 const IS_PLATFORM_PROD = config.isProduction;
 const DEPLOY_ENGINE_URL = config.deployEngineUrl;
-const BASE_DOMAIN = config.baseDomain;
 
 export interface GateRecord {
   projectId: string;
@@ -223,8 +223,8 @@ export const GateService = {
    * no live config yet needs nothing: the next activation reads the setting.
    */
   async applyToProxy(project: { domain: string | null; port: number | null }, gated: boolean) {
-    if (!IS_PLATFORM_PROD || !project.domain?.endsWith(`.${BASE_DOMAIN}`)) return;
-    const subdomain = project.domain.slice(0, -(BASE_DOMAIN.length + 1));
+    if (!IS_PLATFORM_PROD || !project.domain) return;
+    const subdomain = siteNameFor(project.domain);
     const response = await fetch(`${DEPLOY_ENGINE_URL}/nginx/gate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
