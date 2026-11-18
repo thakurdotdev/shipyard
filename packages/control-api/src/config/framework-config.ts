@@ -7,6 +7,18 @@ export function isStaticFramework(type: string): boolean {
   return type === 'vite';
 }
 
+/**
+ * Whether the live site is plain files that Nginx serves: always for Vite, and for
+ * Next.js when its last deploy was a static export (`output: "export"`). Such sites
+ * need no port, so their domain config must never be rebuilt as a proxy.
+ */
+export function servesStaticFiles(project: {
+  app_type: string;
+  serving_mode?: string | null;
+}): boolean {
+  return isStaticFramework(project.app_type) || project.serving_mode === 'static';
+}
+
 export interface FrameworkConfig {
   id: AppType;
   displayName: string;

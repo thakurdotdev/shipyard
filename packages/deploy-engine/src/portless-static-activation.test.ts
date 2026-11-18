@@ -69,6 +69,8 @@ describe.skipIf(process.env.PLATFORM_ENV !== 'production' && process.env.NODE_EN
           'static-fixture',
           join(directory, 'extracted', 'client', 'dist'),
           expect.any(Function),
+          undefined,
+          'spa',
         );
         expect(probe).toHaveBeenCalledWith(NginxService.domainForSubdomain('static-fixture'));
         expect(order).toEqual([
@@ -131,6 +133,111 @@ describe.skipIf(process.env.PLATFORM_ENV !== 'production' && process.env.NODE_EN
         expect(track).not.toHaveBeenCalled();
       } finally {
         for (const spy of [paths, log, configure, check, stop, retire, track]) spy.mockRestore();
+      }
+    });
+
+    test('a Next.js static export is served by Nginx and its server process is retired', async () => {
+      const out = join(directory, 'next', 'extracted', 'out');
+      await mkdir(join(out, '_next', 'static'), { recursive: true });
+      await writeFile(join(out, 'index.html'), '<html>next export</html>');
+      const order: string[] = [];
+      const paths = spyOn(DeployService, 'getPaths').mockReturnValue({
+        projectDir: join(directory, 'next'),
+        extractDir: join(directory, 'next', 'extracted'),
+        artifact: join(directory, 'unused.tar.gz'),
+      });
+      const log = spyOn(LogService, 'stream').mockResolvedValue(undefined);
+      const configure = spyOn(NginxService, 'createStaticDomainConfig').mockImplementation(
+        async (_sub, _root, verify) => {
+          order.push('configure');
+          await verify();
+        },
+      );
+      const probe = spyOn(health, 'requestNginxOrigin').mockResolvedValue(
+        new Response('<html>next export</html>'),
+      );
+      const stop = spyOn(PM0Service, 'delete').mockImplementation(async () => {
+        order.push('stop next server');
+        return true;
+      });
+      const retire = spyOn(NginxService, 'removeStaticConfig').mockResolvedValue(undefined);
+      const start = spyOn(PM0Service, 'start').mockResolvedValue({ success: false });
+      const proxy = spyOn(NginxService, 'createConfig').mockResolvedValue(undefined);
+      const dockerStop = spyOn(DockerService, 'stop').mockResolvedValue(true);
+      try {
+        const result = await DeployService.activateDeployment(
+          'project-next',
+          'build-next',
+          5123, // Next.js projects keep their port for a later server build.
+          'nextjs',
+          'static-fixture',
+        );
+        expect(result).toEqual({ success: true, hosting: 'static' });
+        expect(configure).toHaveBeenCalledWith(
+          'static-fixture',
+          out,
+          expect.any(Function),
+          undefined,
+          'pages',
+        );
+        expect(order).toEqual(['configure', 'stop next server']);
+        expect(start).not.toHaveBeenCalled();
+        expect(proxy).not.toHaveBeenCalled();
+      } finally {
+        for (const spy of [paths, log, configure, probe, stop, retire, start, proxy, dockerStop])
+          spy.mockRestore();
+      }
+    });
+
+    test('a Next.js server build still runs as a process behind the proxy', async () => {
+      await mkdir(join(directory, 'next-ssr', 'extracted', '.next'), { recursive: true });
+      const paths = spyOn(DeployService, 'getPaths').mockReturnValue({
+        projectDir: join(directory, 'next-ssr'),
+        extractDir: join(directory, 'next-ssr', 'extracted'),
+        artifact: join(directory, 'unused.tar.gz'),
+      });
+      const log = spyOn(LogService, 'stream').mockResolvedValue(undefined);
+      const staticConfig = spyOn(NginxService, 'createStaticDomainConfig').mockResolvedValue(
+        undefined,
+      );
+      const retire = spyOn(NginxService, 'removeStaticConfig').mockResolvedValue(undefined);
+      const kill = spyOn(DeployService, 'killProjectProcess').mockResolvedValue(undefined);
+      const startApp = spyOn(DeployService, 'startApplication').mockResolvedValue(undefined);
+      const proxy = spyOn(NginxService, 'createConfig').mockResolvedValue(undefined);
+      try {
+        const result = await DeployService.activateDeployment(
+          'project-next',
+          'build-ssr',
+          5123,
+          'nextjs',
+          'static-fixture',
+        );
+        expect(result).toEqual({ success: true, hosting: 'process' });
+        expect(staticConfig).not.toHaveBeenCalled();
+        expect(startApp).toHaveBeenCalled();
+        expect(proxy).toHaveBeenCalledWith('static-fixture', 5123, undefined);
+      } finally {
+        for (const spy of [paths, log, staticConfig, retire, kill, startApp, proxy])
+          spy.mockRestore();
+      }
+    });
+
+    test('stopping a Next.js export removes its site (there is no process to stop)', async () => {
+      const log = spyOn(LogService, 'stream').mockResolvedValue(undefined);
+      const root = spyOn(NginxService, 'getStaticRoot').mockReturnValue('/srv/next/out');
+      const remove = spyOn(NginxService, 'removeConfig').mockResolvedValue(undefined);
+      const retire = spyOn(NginxService, 'removeStaticConfig').mockResolvedValue(undefined);
+      const stop = spyOn(PM0Service, 'delete').mockResolvedValue(true);
+      const dockerStop = spyOn(DockerService, 'stop').mockResolvedValue(true);
+      try {
+        await DeployService.stopDeployment(5123, 'project-next', 'b', 'static-fixture', 'nextjs');
+        expect(remove).toHaveBeenCalledWith('static-fixture');
+        root.mockReturnValue(null);
+        remove.mockClear();
+        await DeployService.stopDeployment(5123, 'project-next', 'b', 'static-fixture', 'nextjs');
+        expect(remove).not.toHaveBeenCalled();
+      } finally {
+        for (const spy of [log, root, remove, retire, stop, dockerStop]) spy.mockRestore();
       }
     });
 

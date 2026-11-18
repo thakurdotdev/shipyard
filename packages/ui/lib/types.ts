@@ -19,6 +19,8 @@ export interface Project {
   auto_deploy_paths: string | null;
   /** Builds kept after each successful deploy; null keeps all. */
   keep_builds?: number | null;
+  /** 'static' when the live deployment is files served by Nginx (Vite, Next.js export). */
+  serving_mode?: 'static' | 'process' | null;
   created_at: string;
   updated_at: string;
   latest_build?: Pick<Build, 'id' | 'status' | 'created_at' | 'completed_at'> | null;

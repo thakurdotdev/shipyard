@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, FolderOpen, Loader2, RotateCw, Server, Square, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatUptime } from '@/lib/format';
-import { isStaticFramework } from '@/lib/framework-config';
 import { pm0Api, type PM0Process } from '@/lib/pm0-api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -57,10 +56,11 @@ function Stat({ label, value, danger }: { label: string; value: string; danger?:
 
 export function ProjectProcessCard({
   projectId,
-  appType,
+  staticSite = false,
 }: {
   projectId: string;
-  appType?: string;
+  /** The live deployment is static files served by Nginx, so no process is expected. */
+  staticSite?: boolean;
 }) {
   const [process, setProcess] = useState<PM0Process | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ export function ProjectProcessCard({
   };
 
   // Static sites are served by Nginx, so having no process is the normal state.
-  if (!loading && !process && !error && appType && isStaticFramework(appType)) return null;
+  if (!loading && !process && !error && staticSite) return null;
 
   const online = process?.status === 'online';
   const restartsExhausted =

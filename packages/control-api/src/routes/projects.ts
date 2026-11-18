@@ -10,7 +10,7 @@ import { db } from '../db';
 import { deployments, uptimeMonitors } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { DeploymentService } from '../services/deployment-service';
-import { AppType, APP_TYPES, isStaticFramework } from '../config/framework-config';
+import { AppType, APP_TYPES, servesStaticFiles } from '../config/framework-config';
 import { MAX_KEEP_BUILDS, MIN_KEEP_BUILDS } from '../services/build-retention';
 import { EventStreamService } from '../services/event-stream-service';
 
@@ -240,11 +240,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       where: and(eq(deployments.project_id, id), eq(deployments.status, 'active')),
       columns: { id: true },
     });
-    if (
-      !activeDeployment ||
-      (!project.port && !isStaticFramework(project.app_type)) ||
-      !project.domain
-    ) {
+    if (!activeDeployment || (!project.port && !servesStaticFiles(project)) || !project.domain) {
       return { preview_url: null, embeddable: false };
     }
 

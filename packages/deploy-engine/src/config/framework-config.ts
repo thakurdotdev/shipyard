@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { basename, join } from 'path';
 import { isExecutableFile, readGoBuildInfo } from '../utils/go';
+import { isNextStaticExport } from '../services/static-site';
 
 /**
  * Supported application framework types.
@@ -39,7 +40,8 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
     displayName: 'Next.js',
     category: 'frontend',
     requiresInstall: true,
-    isStaticBuild: (cwd) => existsSync(join(cwd, 'out')),
+    // `output: "export"` builds a static site in out/; otherwise `next start` serves it.
+    isStaticBuild: (cwd) => isNextStaticExport(cwd),
     startCommand: (port) => ['bun', 'run', 'start', '--', '--port', port.toString()],
   },
 

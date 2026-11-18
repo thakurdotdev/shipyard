@@ -1,7 +1,7 @@
 import { config } from '@thakur-deploy/config';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { staticSiteLocations } from './static-site';
+import { staticSiteLocations, type StaticSiteKind } from './static-site';
 
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
 
@@ -12,6 +12,8 @@ const dashboardOrigin = () => config.publicUrl;
 /** Public path on a protected site that nginx proxies to the Control API's login page. */
 export const GATE_PATH = '/__shipyard_gate';
 const GATE_MARKER = '# shipyard-gate: on';
+/** Marks a static site served page-by-page (Next.js export) instead of as an SPA. */
+const PAGES_MARKER = '# shipyard-static-kind: pages';
 
 function gateUpstream(): string {
   const upstream = config.controlApiUrl;
@@ -67,9 +69,10 @@ function acmeLocation(gated: boolean): string {
   return `location /.well-known/acme-challenge/ { ${gated ? 'auth_request off; ' : ''}root ${CERTBOT_WEBROOT}; }`;
 }
 
-function configHeader(root: string | null, gated: boolean): string {
+function configHeader(root: string | null, gated: boolean, kind: StaticSiteKind = 'spa'): string {
   return [
     root ? `# shipyard-static-root: ${JSON.stringify(root)}` : null,
+    root && kind === 'pages' ? PAGES_MARKER : null,
     gated ? GATE_MARKER : null,
   ]
     .filter(Boolean)
@@ -82,12 +85,13 @@ function validateStaticRoot(root: string) {
   }
 }
 
-function staticDomainLocations(root: string | null): string {
+function staticDomainLocations(root: string | null, kind: StaticSiteKind = 'spa'): string {
   if (!root) return 'location / { return 503; }';
   validateStaticRoot(root);
+  if (kind === 'pages') return pageDomainLocations(root);
   return `
     root "${root}";
-${staticSiteLocations()}
+${staticSiteLocations('spa')}
     location = /__shipyard_preview {
         return 301 /__shipyard_preview/;
     }
@@ -113,6 +117,24 @@ ${staticSiteLocations()}
         internal;
         try_files /index.html =404;
         default_type text/html;
+        add_header Cache-Control "no-cache" always;
+        add_header Content-Security-Policy "frame-ancestors ${dashboardOrigin()}" always;
+    }
+`;
+}
+
+/** A Next.js export: real 404s, and the preview resolves pages like the public site. */
+function pageDomainLocations(root: string): string {
+  return `
+    root "${root}";
+${staticSiteLocations('pages')}
+    location = /__shipyard_preview {
+        return 301 /__shipyard_preview/;
+    }
+
+    location ^~ /__shipyard_preview/ {
+        rewrite ^/__shipyard_preview/(.*)$ /$1 break;
+        try_files $uri.html $uri/index.html $uri =404;
         add_header Cache-Control "no-cache" always;
         add_header Content-Security-Policy "frame-ancestors ${dashboardOrigin()}" always;
     }
@@ -241,6 +263,13 @@ export const NginxService = {
     return root;
   },
 
+  /** How the live static site for this subdomain routes requests ('spa' when unknown). */
+  getStaticKind(sub: string): StaticSiteKind {
+    this.domainForSubdomain(sub);
+    const path = join(getNginxDirs().available, `${sub}.conf`);
+    return existsSync(path) && readFileSync(path, 'utf8').includes(PAGES_MARKER) ? 'pages' : 'spa';
+  },
+
   /** Whether the live config for this subdomain currently has the password gate on. */
   getGate(sub: string): boolean {
     this.domainForSubdomain(sub);
@@ -248,10 +277,16 @@ export const NginxService = {
     return existsSync(path) && /^# shipyard-gate: on$/m.test(readFileSync(path, 'utf8'));
   },
 
-  generateStaticDomainConfig(sub: string, root: string | null, gate?: boolean): string {
+  generateStaticDomainConfig(
+    sub: string,
+    root: string | null,
+    gate?: boolean,
+    kind?: StaticSiteKind,
+  ): string {
     const domain = this.domainForSubdomain(sub);
     const gated = gate ?? this.getGate(sub);
-    return `${configHeader(root, gated)}
+    const siteKind = kind ?? this.getStaticKind(sub);
+    return `${configHeader(root, gated, siteKind)}
 server {
     listen 80;
     server_name ${domain};
@@ -267,7 +302,7 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ${acmeLocation(gated)}
-${gated ? gateDirectives() : ''}${staticDomainLocations(root)}
+${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
 }
 `;
   },
@@ -277,8 +312,13 @@ ${gated ? gateDirectives() : ''}${staticDomainLocations(root)}
     root: string,
     verify: () => Promise<void>,
     gated?: boolean,
+    kind: StaticSiteKind = 'spa',
   ) {
-    await this.applyDomainConfig(sub, this.generateStaticDomainConfig(sub, root, gated), verify);
+    await this.applyDomainConfig(
+      sub,
+      this.generateStaticDomainConfig(sub, root, gated, kind),
+      verify,
+    );
   },
 
   staticConfigPath(projectId: string) {
@@ -395,7 +435,7 @@ ${gated ? gateDirectives() : ''}
     // The login page needs HTTPS (its cookie is Secure), so until the certificate exists a
     // protected site serves nothing but the ACME challenge rather than its content.
     if (gated) {
-      return `${configHeader(port === null ? this.getStaticRoot(sub) : null, true)}
+      return `${configHeader(port === null ? this.getStaticRoot(sub) : null, true, this.getStaticKind(sub))}
 server {
     listen 80;
     server_name ${fullDomain};
@@ -406,12 +446,13 @@ server {
     }
     if (port === null) {
       const root = this.getStaticRoot(sub);
-      return `${configHeader(root, false)}
+      const kind = this.getStaticKind(sub);
+      return `${configHeader(root, false, kind)}
 server {
     listen 80;
     server_name ${fullDomain};
     ${acmeLocation(false)}
-${staticDomainLocations(root)}
+${staticDomainLocations(root, kind)}
 }
 `;
     }

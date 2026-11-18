@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "serving_mode" varchar(20);
