@@ -89,11 +89,27 @@ export function PwaProvider() {
       })
       .catch((error) => console.warn('[PWA] Service worker registration failed', error));
 
+    // Tell the service worker whether this window is the installed app, so tapping a
+    // notification opens the app rather than a browser tab.
+    const reportMode = () => {
+      navigator.serviceWorker.ready
+        .then((registration) =>
+          registration.active?.postMessage({ type: 'CLIENT_MODE', standalone: isStandalone() }),
+        )
+        .catch(() => {});
+    };
+    reportMode();
+    const standaloneQuery = window.matchMedia('(display-mode: standalone)');
+    standaloneQuery.addEventListener('change', reportMode);
+    navigator.serviceWorker.addEventListener('controllerchange', reportMode);
+
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
     navigator.serviceWorker.addEventListener('message', onMessage);
     void refreshPushSubscription();
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      navigator.serviceWorker.removeEventListener('controllerchange', reportMode);
+      standaloneQuery.removeEventListener('change', reportMode);
       navigator.serviceWorker.removeEventListener('message', onMessage);
     };
   }, []);
