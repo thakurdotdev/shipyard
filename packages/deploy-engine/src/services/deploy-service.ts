@@ -7,7 +7,6 @@ import {
   FRAMEWORKS,
   getBackendStartCommand,
   isBackendFramework,
-  shouldUseStaticServer,
 } from '../config/framework-config';
 import { LogService } from './log-service';
 import { NginxService } from './nginx-service';
@@ -15,7 +14,7 @@ import { DockerService } from './docker';
 import { PM0Service } from './pm0';
 import { isWorkspaceRoot } from '../utils/workspace';
 import { ARTIFACTS_DIR, BASE_DIR, getBuildExtractDir, getProjectDir } from '../config/paths';
-import { getStaticDirectory } from './static-site';
+import { resolveStaticSite } from './static-site';
 import { isPortAvailable } from '../utils/port';
 import { requestNginxOrigin } from './nginx-health';
 import { runPreDeployCommand } from './pre-deploy';
@@ -81,17 +80,15 @@ export const DeployService = {
     preDeployCommand?: string | null,
   ) {
     const paths = this.getPaths(projectId, buildId);
-    const directStatic = appType === 'vite' && IS_PLATFORM_PROD;
-    if (!directStatic && !port) throw new Error('Runtime applications require an assigned port');
+    // Vite is always static; anything else needs a port unless its build turns out static.
+    if (appType !== 'vite' && appType !== 'nextjs' && !port) {
+      throw new Error('Runtime applications require an assigned port');
+    }
 
     // Step 1: Verify artifact exists (pre-built fast path directory or remote tarball)
     await LogService.step(buildId, 'Starting deployment activation');
     await LogService.detail(buildId, `Project: ${projectId}`);
     await LogService.detail(buildId, `Framework: ${appType}`);
-    await LogService.detail(
-      buildId,
-      directStatic ? 'Hosting: static files on the domain (no application port)' : `Port: ${port}`,
-    );
 
     let effectiveExtractDir = paths.extractDir;
     let hasExtractedDir = existsSync(paths.extractDir);
@@ -143,7 +140,15 @@ export const DeployService = {
       : effectiveExtractDir;
 
     // Validate before stopping the live deployment or changing any routing.
-    const staticDir = appType === 'vite' ? getStaticDirectory(effectiveAppDir) : null;
+    const staticSite = resolveStaticSite(appType, effectiveAppDir);
+    const directStatic = Boolean(staticSite) && IS_PLATFORM_PROD;
+    if (!directStatic && !port) throw new Error('Runtime applications require an assigned port');
+    await LogService.detail(
+      buildId,
+      directStatic
+        ? `Hosting: static files on the domain (${staticSite!.kind === 'pages' ? 'Next.js static export' : 'single-page app'}, no application process)`
+        : `Port: ${port}`,
+    );
 
     if (isMonorepo) {
       await LogService.detail(
@@ -187,8 +192,14 @@ export const DeployService = {
     };
 
     // Step 4: Start application (Docker or direct)
-    if (staticDir && directStatic) {
-      await LogService.step(buildId, 'Serving Vite build as static files with Nginx');
+    if (staticSite && directStatic) {
+      const staticDir = staticSite.directory;
+      await LogService.step(
+        buildId,
+        staticSite.kind === 'pages'
+          ? 'Serving Next.js static export with Nginx'
+          : 'Serving Vite build as static files with Nginx',
+      );
       await LogService.detail(buildId, `Static root: ${staticDir}`);
       await NginxService.createStaticDomainConfig(
         subdomain,
@@ -205,6 +216,7 @@ export const DeployService = {
           );
         },
         gated,
+        staticSite.kind,
       );
       domainConfigured = true;
       await LogService.success(buildId, 'Static domain configured and responding');
@@ -272,7 +284,8 @@ export const DeployService = {
     await LogService.step(buildId, 'Deployment complete');
     await LogService.success(buildId, 'Your application is now live! 🎉');
 
-    return { success: true };
+    // Lets the Control API know whether a process (and its port) backs this deployment.
+    return { success: true, hosting: directStatic ? ('static' as const) : ('process' as const) };
   },
 
   async stopDeployment(
@@ -287,7 +300,13 @@ export const DeployService = {
     }
 
     if (projectId) {
-      if (IS_PLATFORM_PROD && appType === 'vite') {
+      // A static site has no process to stop: taking it offline means removing its site.
+      const servedStatically =
+        appType === 'vite' ||
+        (subdomain !== undefined &&
+          NginxService.isSubdomainAllowed(subdomain) &&
+          NginxService.getStaticRoot(subdomain) !== null);
+      if (IS_PLATFORM_PROD && servedStatically) {
         if (!subdomain) throw new Error('Static deployment stop requires its subdomain');
         await NginxService.removeConfig(subdomain);
       }
@@ -462,12 +481,12 @@ export const DeployService = {
     projectName?: string,
   ) {
     const framework = FRAMEWORKS[appType];
-    const useStaticServer = shouldUseStaticServer(appType, cwd);
+    const staticSite = resolveStaticSite(appType, cwd);
 
     let startCmd: string[];
     let workingDir: string;
 
-    if (useStaticServer) {
+    if (staticSite) {
       if (buildId) {
         await LogService.detail(buildId, 'Detected static site - using static file server');
       }
@@ -475,8 +494,14 @@ export const DeployService = {
       const serverScript = existsSync(bundledServer)
         ? bundledServer
         : join(import.meta.dir, '..', 'static-server.ts');
-      const distDir = getStaticDirectory(cwd, appType === 'nextjs' ? 'out' : 'dist');
-      startCmd = ['bun', 'run', serverScript, distDir, port.toString()];
+      startCmd = [
+        'bun',
+        'run',
+        serverScript,
+        staticSite.directory,
+        port.toString(),
+        staticSite.kind,
+      ];
       workingDir = process.cwd();
     } else {
       if (framework.requiresInstall) {
@@ -546,7 +571,7 @@ export const DeployService = {
     }
 
     try {
-      await this.performHealthCheck(port, buildId, useStaticServer);
+      await this.performHealthCheck(port, buildId, staticSite !== null);
       console.log(`[DeployService] Health check completed successfully for port ${port}`);
       if (buildId) {
         await LogService.success(buildId, 'Health check passed - application is responding');

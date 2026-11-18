@@ -34,6 +34,11 @@ export const projects = pgTable(
     auto_deploy_paths: text('auto_deploy_paths'),
     /** Builds to keep after each successful deploy. Null keeps every build. */
     keep_builds: integer('keep_builds'),
+    /**
+     * How the live deployment is served: 'static' (files from Nginx, no process) or
+     * 'process'. Set by each activation; null until the first one.
+     */
+    serving_mode: varchar('serving_mode', { length: 20 }),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
   },

@@ -10,6 +10,7 @@ import { ActivityList } from './activity-list';
 import { DeploymentProgress } from './deployment-pipeline';
 import { DomainStatusCard } from './domain-status-card';
 import { ProjectProcessCard } from './project-process-card';
+import { servesStaticFiles } from '@/lib/framework-config';
 import { UptimeOverviewCard } from './uptime-overview-card';
 
 interface OverviewTabProps {
@@ -77,7 +78,7 @@ export function OverviewTab({
         onStopDeployment={onStopDeployment}
       />
 
-      <ProjectProcessCard projectId={project.id} appType={project.app_type} />
+      <ProjectProcessCard projectId={project.id} staticSite={servesStaticFiles(project)} />
 
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
         <Collapsible open={configurationOpen} onOpenChange={setConfigurationOpen}>

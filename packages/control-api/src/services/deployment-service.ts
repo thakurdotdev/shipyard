@@ -7,7 +7,7 @@ import { EnvService } from './env-service';
 import { DomainService } from './domain-service';
 import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
-import { isStaticFramework } from '../config/framework-config';
+import { isStaticFramework, servesStaticFiles } from '../config/framework-config';
 import { GateService } from './gate-service';
 import { GitHubDeploymentStatus } from './github-deployment-status';
 
@@ -111,7 +111,7 @@ export const DeploymentService = {
           const result = await DomainService.provision(
             projectId,
             subdomain,
-            directStatic ? null : project.port,
+            servesStaticFiles(project) ? null : project.port,
             async (step, message) => {
               // Map domain provisioning steps to deployment statuses
               await this.updateDeploymentStatus(deploymentId, step as DeploymentStatus, message);
@@ -251,15 +251,30 @@ export const DeploymentService = {
         const err = await res.text();
         throw new Error(`Deploy Engine activation failed: ${err}`);
       }
+      const activation = (await res.json().catch(() => ({}))) as { hosting?: string };
+      // Older engines don't say; only Vite was ever static there.
+      const servingMode =
+        activation.hosting === 'static' || activation.hosting === 'process'
+          ? activation.hosting
+          : directStatic
+            ? 'static'
+            : 'process';
 
       // ──────────────────────────────────────────────
       // Step 3: Mark as active
       // ──────────────────────────────────────────────
       try {
         await db.transaction(async (tx) => {
-          if (directStatic) {
-            await tx.update(projects).set({ port: null }).where(eq(projects.id, projectId));
-          }
+          // Vite never needs its port again. A Next.js export keeps it, so switching
+          // back to a server build later still has one.
+          await tx
+            .update(projects)
+            .set(
+              directStatic
+                ? { port: null, serving_mode: servingMode }
+                : { serving_mode: servingMode },
+            )
+            .where(eq(projects.id, projectId));
           // Mark all current active deployments for this project as inactive
           await tx
             .update(deployments)
@@ -340,7 +355,7 @@ export const DeploymentService = {
     const project = await db.query.projects.findFirst({
       where: eq(projects.id, projectId),
     });
-    if (!project || (!project.port && !isStaticFramework(project.app_type))) {
+    if (!project || (!project.port && !servesStaticFiles(project))) {
       throw new Error('Project or runtime port not found');
     }
 

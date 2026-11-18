@@ -7,6 +7,14 @@ export function isStaticFramework(type: string): boolean {
   return type === 'vite';
 }
 
+/** Whether the live site is static files (no process): Vite, or a Next.js static export. */
+export function servesStaticFiles(project: {
+  app_type: string;
+  serving_mode?: string | null;
+}): boolean {
+  return isStaticFramework(project.app_type) || project.serving_mode === 'static';
+}
+
 export interface FrameworkOption {
   value: AppType;
   label: string;

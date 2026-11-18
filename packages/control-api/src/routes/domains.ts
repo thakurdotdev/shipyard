@@ -6,7 +6,7 @@ import { db } from '../db';
 import { projects, builds, deployments } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { ProjectAccessService } from '../services/project-access-service';
-import { isStaticFramework } from '../config/framework-config';
+import { servesStaticFiles } from '../config/framework-config';
 import { EventStreamService } from '../services/event-stream-service';
 import { DeploymentService } from '../services/deployment-service';
 
@@ -103,7 +103,7 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
         return { error: 'Project has no domain assigned' };
       }
 
-      if (!project.port && !isStaticFramework(project.app_type)) {
+      if (!project.port && !servesStaticFiles(project)) {
         set.status = 400;
         return { error: 'Project has no port assigned' };
       }
@@ -113,7 +113,7 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
       const result = await DomainService.provision(
         projectId,
         subdomain,
-        isStaticFramework(project.app_type) ? null : project.port,
+        servesStaticFiles(project) ? null : project.port,
         async (step, message) => {
           EventStreamService.broadcastDomainStatus(projectId, {
             step,
@@ -151,14 +151,14 @@ export const domainsRoutes = new Elysia({ prefix: '/domains' })
         return { error: 'Project not found' };
       }
 
-      if (!project.port && !isStaticFramework(project.app_type)) {
+      if (!project.port && !servesStaticFiles(project)) {
         set.status = 400;
         return { error: 'Project has no port assigned' };
       }
 
       const result = await DomainService.retry(
         projectId,
-        isStaticFramework(project.app_type) ? null : project.port,
+        servesStaticFiles(project) ? null : project.port,
         async (step, message) => {
           EventStreamService.broadcastDomainStatus(projectId, {
             step,

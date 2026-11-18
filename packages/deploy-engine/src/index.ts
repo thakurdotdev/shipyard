@@ -76,7 +76,7 @@ const app = new Elysia()
       } = body;
 
       try {
-        await DeployService.activateDeployment(
+        return await DeployService.activateDeployment(
           projectId,
           buildId,
           port,
@@ -88,7 +88,6 @@ const app = new Elysia()
           gated,
           preDeployCommand,
         );
-        return { success: true };
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         return new Response(message, { status: 500 });
