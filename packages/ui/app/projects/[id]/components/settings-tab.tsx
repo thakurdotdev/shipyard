@@ -30,15 +30,17 @@ import {
 
 import { Project } from '@/lib/types';
 import { AccessProtectionCard } from './access-protection-card';
+import { DomainSettingsCard } from './domain-settings-card';
 import { FRAMEWORK_OPTIONS, AppType, isStaticFramework } from '@/lib/framework-config';
 import { PreDeployCommandInput } from '@/components/deploy/pre-deploy-command-input';
 
 interface SettingsTabProps {
   project: Project;
   onProtectionChange?: (enabled: boolean) => void;
+  onDomainChange?: () => void;
 }
 
-export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
+export function SettingsTab({ project, onProtectionChange, onDomainChange }: SettingsTabProps) {
   const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [confirmName, setConfirmName] = useState('');
@@ -323,6 +325,8 @@ export function SettingsTab({ project, onProtectionChange }: SettingsTabProps) {
             </div>
           </CardContent>
         </Card>
+
+        <DomainSettingsCard project={project} onDomainChange={onDomainChange} />
 
         <AccessProtectionCard projectId={project.id} onProtectionChange={onProtectionChange} />
 

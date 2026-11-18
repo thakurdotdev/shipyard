@@ -2,6 +2,8 @@ import { API_URL } from '@/lib/api-url';
 
 import {
   AccessSettings,
+  DomainCheck,
+  DomainSwitch,
   Project,
   Build,
   Deployment,
@@ -424,6 +426,41 @@ export const api = {
       throw new Error(error.error || error.message || 'Failed to fetch logs');
     }
     return res.json();
+  },
+
+  // Custom domains
+  async checkProjectDomain(projectId: string, domain: string, www: boolean): Promise<DomainCheck> {
+    const query = new URLSearchParams({ domain, www: String(www) });
+    const res = await fetch(`${API_URL}/domains/project/${projectId}/check?${query}`, {
+      credentials: 'include',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not check the domain');
+    return data;
+  },
+
+  async changeProjectDomain(
+    projectId: string,
+    domain: string,
+    wwwRedirect: boolean,
+  ): Promise<{ started: boolean; check: DomainCheck }> {
+    const res = await fetch(`${API_URL}/domains/project/${projectId}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain, www_redirect: wwwRedirect }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not change the domain');
+    return data;
+  },
+
+  async getDomainSwitch(projectId: string): Promise<DomainSwitch | null> {
+    const res = await fetch(`${API_URL}/domains/project/${projectId}/switch`, {
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    return (await res.json()).switch ?? null;
   },
 
   // Domain Provisioning

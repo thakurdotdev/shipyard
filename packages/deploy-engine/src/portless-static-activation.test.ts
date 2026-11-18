@@ -71,6 +71,7 @@ describe.skipIf(process.env.PLATFORM_ENV !== 'production' && process.env.NODE_EN
           expect.any(Function),
           undefined,
           'spa',
+          undefined,
         );
         expect(probe).toHaveBeenCalledWith(NginxService.domainForSubdomain('static-fixture'));
         expect(order).toEqual([
@@ -179,6 +180,7 @@ describe.skipIf(process.env.PLATFORM_ENV !== 'production' && process.env.NODE_EN
           expect.any(Function),
           undefined,
           'pages',
+          undefined,
         );
         expect(order).toEqual(['configure', 'stop next server']);
         expect(start).not.toHaveBeenCalled();
@@ -215,7 +217,7 @@ describe.skipIf(process.env.PLATFORM_ENV !== 'production' && process.env.NODE_EN
         expect(result).toEqual({ success: true, hosting: 'process' });
         expect(staticConfig).not.toHaveBeenCalled();
         expect(startApp).toHaveBeenCalled();
-        expect(proxy).toHaveBeenCalledWith('static-fixture', 5123, undefined);
+        expect(proxy).toHaveBeenCalledWith('static-fixture', 5123, undefined, undefined);
       } finally {
         for (const spy of [paths, log, staticConfig, retire, kill, startApp, proxy])
           spy.mockRestore();

@@ -39,6 +39,8 @@ export const projects = pgTable(
      * 'process'. Set by each activation; null until the first one.
      */
     serving_mode: varchar('serving_mode', { length: 20 }),
+    /** For a custom domain: also answer on www.<domain>, redirecting to the domain. */
+    www_redirect: boolean('www_redirect').default(false).notNull(),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -295,6 +297,17 @@ export const domainProvisions = pgTable(
     subdomain: varchar('subdomain', { length: 255 }).notNull(),
     full_domain: varchar('full_domain', { length: 255 }).notNull().unique(),
     dns_record_id: text('dns_record_id'), // Cloudflare DNS record ID
+    /** Cloudflare zone of the record (null: the zone configured in Settings). */
+    dns_zone_id: text('dns_zone_id'),
+    /**
+     * False when the record existed before ShipYard (e.g. a domain moved onto it):
+     * such records are reused as they are and never changed or deleted.
+     */
+    dns_record_owned: boolean('dns_record_owned').default(true).notNull(),
+    /** JSON [{ name, id, owned }] for redirect names (www.<domain>). */
+    alias_records: text('alias_records'),
+    /** True when an existing certificate was reused: it is never revoked by ShipYard. */
+    ssl_reused: boolean('ssl_reused').default(false).notNull(),
     dns_status: varchar('dns_status', { length: 20 }).notNull().default('pending'), // DomainDnsStatus
     ssl_status: varchar('ssl_status', { length: 20 }).notNull().default('pending'), // DomainSslStatus
     ssl_cert_path: text('ssl_cert_path'),
