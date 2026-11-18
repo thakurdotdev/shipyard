@@ -25,7 +25,13 @@ export const SETTING_DEFINITIONS = {
   resend_api_key: { env: 'RESEND_API_KEY', secret: true },
   resend_from_email: { env: 'RESEND_FROM_EMAIL', secret: false },
   allow_signups: { env: undefined, secret: false },
-} as const satisfies Record<string, { env: string | undefined; secret: boolean }>;
+  // Web Push signing keys: generated on first use, never shown or edited in the dashboard.
+  vapid_public_key: { env: 'VAPID_PUBLIC_KEY', secret: false, internal: true },
+  vapid_private_key: { env: 'VAPID_PRIVATE_KEY', secret: true, internal: true },
+} as const satisfies Record<
+  string,
+  { env: string | undefined; secret: boolean; internal?: boolean }
+>;
 
 export type SettingKey = keyof typeof SETTING_DEFINITIONS;
 export type SettingSource = 'dashboard' | 'env' | null;
@@ -34,6 +40,11 @@ export const SETTING_KEYS = Object.keys(SETTING_DEFINITIONS) as SettingKey[];
 
 export function isSettingKey(key: string): key is SettingKey {
   return key in SETTING_DEFINITIONS;
+}
+
+/** Settings ShipYard manages itself; the dashboard never lists or edits them. */
+export function isInternalSetting(key: SettingKey): boolean {
+  return 'internal' in SETTING_DEFINITIONS[key];
 }
 
 const stored = new Map<SettingKey, string>();

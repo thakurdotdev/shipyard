@@ -374,3 +374,39 @@ export type DeploymentStatus =
   | 'active'
   | 'inactive'
   | 'failed';
+
+/** A browser or installed app that receives push notifications (one row per device). */
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    user_id: text('user_id')
+      .references(() => user.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** The push service URL; unique per browser installation. */
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    /** Shown in the device list, e.g. "Chrome on Android". */
+    device_label: varchar('device_label', { length: 120 }),
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    last_success_at: timestamp('last_success_at'),
+    /** Consecutive delivery failures; the subscription is dropped after too many. */
+    failure_count: integer('failure_count').notNull().default(0),
+  },
+  (table) => ({
+    userIdx: index('push_subscriptions_user_idx').on(table.user_id),
+  }),
+);
+
+/** Which events reach which channel, per user. Missing events use the defaults. */
+export const notificationPreferences = pgTable('notification_preferences', {
+  user_id: text('user_id')
+    .references(() => user.id, { onDelete: 'cascade' })
+    .primaryKey(),
+  /** JSON: { [event]: { push: boolean, email: boolean } } */
+  events: text('events').notNull().default('{}'),
+  /** JSON array of project ids that never notify. */
+  muted_projects: text('muted_projects').notNull().default('[]'),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+});

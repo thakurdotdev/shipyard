@@ -7,6 +7,7 @@ import { DeploymentService } from './deployment-service';
 import { DomainService, parseAliasRecords } from './domain-service';
 import { isCustomDomain, normalizeDomainInput, siteNameFor } from './domain-names';
 import { EventStreamService } from './event-stream-service';
+import { NotificationService } from './notification-service';
 
 const DEPLOY_ENGINE_URL = config.deployEngineUrl;
 
@@ -50,6 +51,16 @@ const switches = new Map<string, DomainSwitch>();
 
 function report(projectId: string, state: DomainSwitch) {
   switches.set(projectId, state);
+  if (state.state !== 'running') {
+    void NotificationService.notify({
+      event: 'domain_changed',
+      projectId,
+      title: state.state === 'done' ? `🌐 Now on ${state.domain}` : `⚠️ Domain change failed`,
+      body: state.message,
+      url: `/projects/${projectId}?tab=settings`,
+      tag: `domain-${projectId}`,
+    });
+  }
   EventStreamService.broadcastDomainStatus(projectId, {
     project_id: projectId,
     step: state.state === 'running' ? 'domain_switching' : `domain_switch_${state.state}`,
@@ -220,7 +231,8 @@ export const DomainChangeService = {
       });
       if (active && config.isProduction) {
         // Provisions the new domain and switches the site over; throws if it never answers.
-        await DeploymentService.activateBuild(project.id, active.build_id);
+        // The domain change sends its own notification below.
+        await DeploymentService.activateBuild(project.id, active.build_id, { notify: false });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

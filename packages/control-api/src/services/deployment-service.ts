@@ -11,19 +11,29 @@ import { EventStreamService } from './event-stream-service';
 import { isStaticFramework, servesStaticFiles } from '../config/framework-config';
 import { GateService } from './gate-service';
 import { GitHubDeploymentStatus } from './github-deployment-status';
+import { DeployNotifications } from './deploy-notifications';
 
 const IS_PLATFORM_PROD = config.isProduction;
 
 export const DeploymentService = {
   /** Puts a build live (auto-deploy, redeploy or rollback) and reports it on GitHub. */
-  async activateBuild(projectId: string, buildId: string) {
+  /**
+   * Puts a build live (auto-deploy, redeploy or rollback), reports it on GitHub and
+   * notifies the owner. `notify: false` for callers that send their own notification.
+   */
+  async activateBuild(projectId: string, buildId: string, options: { notify?: boolean } = {}) {
+    const notify = options.notify ?? true;
     void GitHubDeploymentStatus.report(buildId, 'deploying');
     try {
       const result = await this.runActivation(projectId, buildId);
       void GitHubDeploymentStatus.report(buildId, 'success');
+      if (notify) DeployNotifications.live(buildId);
       return result;
     } catch (error) {
       void GitHubDeploymentStatus.report(buildId, 'failure', 'Deployment failed');
+      if (notify) {
+        DeployNotifications.deployFailed(buildId, error instanceof Error ? error.message : '');
+      }
       throw error;
     }
   },

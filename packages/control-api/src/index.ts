@@ -13,6 +13,7 @@ import { infraRoutes } from './routes/infra';
 import { internalRoutes } from './routes/internal';
 import { processesRoutes } from './routes/processes';
 import { projectsRoutes } from './routes/projects';
+import { notificationsRoutes } from './routes/notifications';
 import { settingsRoutes } from './routes/settings';
 import { setupRoutes } from './routes/setup';
 import { githubWebhook } from './routes/webhook-handler';
@@ -35,7 +36,8 @@ const protectedRoutes = new Elysia()
   .use(domainsRoutes)
   .use(infraRoutes)
   .use(processesRoutes)
-  .use(settingsRoutes);
+  .use(settingsRoutes)
+  .use(notificationsRoutes);
 
 // 0. Settings edited from the dashboard (GitHub App, Cloudflare, email). An install whose
 // migrations haven't run yet still starts, using values from .env.

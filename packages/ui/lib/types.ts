@@ -212,3 +212,35 @@ export interface DomainSwitch {
   started_at: string;
   finished_at?: string;
 }
+
+export type NotificationEventKey =
+  | 'deploy_succeeded'
+  | 'deploy_failed'
+  | 'deploy_started'
+  | 'uptime_down'
+  | 'uptime_recovered'
+  | 'domain_changed';
+
+export interface NotificationPreferences {
+  events: Record<NotificationEventKey, { push: boolean; email: boolean }>;
+  muted_projects: string[];
+}
+
+export interface NotificationDevice {
+  id: string;
+  device_label: string | null;
+  created_at: string;
+  last_success_at: string | null;
+  failure_count: number;
+  /** End of the push endpoint, to recognise this browser's own row. */
+  endpoint_hint: string;
+}
+
+export interface NotificationSettings {
+  events: { key: NotificationEventKey; label: string; description: string }[];
+  preferences: NotificationPreferences;
+  devices: NotificationDevice[];
+  projects: { id: string; name: string; domain: string | null }[];
+  push: { available: boolean; vapid_public_key: string | null; error: string | null };
+  email: { available: boolean };
+}
