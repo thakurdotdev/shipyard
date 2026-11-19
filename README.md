@@ -44,7 +44,26 @@ so no redeploy is needed, and later deploys keep the setting.
 - The dashboard's embedded preview is replaced by an "Open live site" link while protected.
 - Enforced by Nginx, so only in production. In development the apps are served directly.
 - Deploy Engine reaches the gate at `CONTROL_API_URL` (default `http://127.0.0.1:4010`).
-- Apps with their own port must not be reachable from outside the server except through Nginx.
+- Apps with their own port must not be reachable from outside the server except through Nginx
+  (see App isolation below).
+
+### App isolation
+
+Deployed code is untrusted: a vulnerable app, or a dependency's `postinstall` script, must
+not get the platform's privileges. On a server, run `sudo scripts/isolate-apps.sh` once and
+set `SHIPYARD_APP_USER=shipyard-apps` (plus the `PM0_*` values it prints) in `.env`. Then:
+
+- clones, `bun install`, builds, pre-deploy commands and running apps use that account
+  (no sudo, no access to the platform's home, `.env` files or TLS keys), supervised by its
+  own pm0 daemon (`shipyard-apps-pm0.service`);
+- apps get `HOST`/`HOSTNAME=127.0.0.1` (Next.js also `--hostname`), Nginx proxies to
+  `127.0.0.1`, and a deploy log warning names apps that still bind `0.0.0.0`;
+- `shipyard-apps-guard.service` drops replies from that account's sockets on every
+  interface but loopback, so an app port is never public even if a firewall rule is opened;
+- the Control API and Deploy Engine listen on `127.0.0.1` and authenticate each other with
+  the internal token derived from `SECRET`.
+
+Existing apps switch over on their next activation (redeploy or rollback).
 
 ## Tech Stack
 

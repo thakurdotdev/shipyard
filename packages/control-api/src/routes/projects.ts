@@ -14,6 +14,7 @@ import { AppType, APP_TYPES, servesStaticFiles } from '../config/framework-confi
 import { MAX_KEEP_BUILDS, MIN_KEEP_BUILDS } from '../services/build-retention';
 import { EventStreamService } from '../services/event-stream-service';
 import { siteNameFor } from '../services/domain-names';
+import { deployEngineFetch } from '../services/deploy-engine-client';
 
 const appTypeSchema = t.Union(
   APP_TYPES.map((type) => t.Literal(type)) as [
@@ -253,8 +254,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
     const subdomain = siteNameFor(project.domain);
 
     try {
-      const deployEngineUrl = config.deployEngineUrl;
-      const response = await fetch(`${deployEngineUrl}/nginx/preview`, {
+      const response = await deployEngineFetch(`/nginx/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subdomain, port: project.port }),

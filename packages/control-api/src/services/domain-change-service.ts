@@ -8,8 +8,7 @@ import { DomainService, parseAliasRecords } from './domain-service';
 import { isCustomDomain, normalizeDomainInput, siteNameFor } from './domain-names';
 import { EventStreamService } from './event-stream-service';
 import { NotificationService } from './notification-service';
-
-const DEPLOY_ENGINE_URL = config.deployEngineUrl;
+import { deployEngineFetch } from './deploy-engine-client';
 
 type Project = typeof projects.$inferSelect;
 type ProvisionRow = typeof domainProvisions.$inferSelect;
@@ -150,7 +149,7 @@ export const DomainChangeService = {
 
     if (config.isProduction) {
       try {
-        const res = await fetch(`${DEPLOY_ENGINE_URL}/nginx/conflicts`, {
+        const res = await deployEngineFetch(`/nginx/conflicts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subdomain: result.site, aliases: hosts.slice(1) }),
@@ -313,7 +312,7 @@ export const DomainChangeService = {
     // A config written for the new name (the HTTP-only one for its certificate) goes too,
     // unless that name was taken over from another site: then it stays as it is.
     if (current && current.subdomain !== oldProvision?.subdomain && check.replaces.length === 0) {
-      await fetch(`${DEPLOY_ENGINE_URL}/nginx/remove`, {
+      await deployEngineFetch(`/nginx/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subdomain: current.subdomain }),

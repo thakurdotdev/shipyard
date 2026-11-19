@@ -11,9 +11,9 @@ import {
   monitorToken,
 } from './gate-session';
 import { siteNameFor } from './domain-names';
+import { deployEngineFetch } from './deploy-engine-client';
 
 const IS_PLATFORM_PROD = config.isProduction;
-const DEPLOY_ENGINE_URL = config.deployEngineUrl;
 
 export interface GateRecord {
   projectId: string;
@@ -225,7 +225,7 @@ export const GateService = {
   async applyToProxy(project: { domain: string | null; port: number | null }, gated: boolean) {
     if (!IS_PLATFORM_PROD || !project.domain) return;
     const subdomain = siteNameFor(project.domain);
-    const response = await fetch(`${DEPLOY_ENGINE_URL}/nginx/gate`, {
+    const response = await deployEngineFetch(`/nginx/gate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subdomain, port: project.port, gated }),

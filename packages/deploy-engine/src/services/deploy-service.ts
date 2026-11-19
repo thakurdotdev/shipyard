@@ -1,6 +1,6 @@
 import { config } from '@thakur-deploy/config';
 import { existsSync, mkdirSync } from 'fs';
-import { rm, unlink, symlink, rename } from 'fs/promises';
+import { unlink, symlink, rename } from 'fs/promises';
 import { basename, join } from 'path';
 import {
   AppType,
@@ -13,7 +13,15 @@ import { NginxService } from './nginx-service';
 import { DockerService } from './docker';
 import { PM0Service } from './pm0';
 import { isWorkspaceRoot } from '../utils/workspace';
-import { ARTIFACTS_DIR, BASE_DIR, getBuildExtractDir, getProjectDir } from '../config/paths';
+import { ARTIFACTS_DIR, getBuildDir, getBuildExtractDir, getProjectDir } from '../config/paths';
+import {
+  APP_BIND_HOST,
+  appUser,
+  asAppUser,
+  claimForAppUser,
+  isAppUserEnabled,
+  removeAppTree,
+} from './app-user';
 import { resolveStaticSite } from './static-site';
 import { isPortAvailable } from '../utils/port';
 import { requestNginxOrigin } from './nginx-health';
@@ -95,7 +103,7 @@ export const DeployService = {
     let effectiveExtractDir = paths.extractDir;
     let hasExtractedDir = existsSync(paths.extractDir);
     if (!hasExtractedDir) {
-      const directBuildDir = join(paths.projectDir, 'builds', buildId);
+      const directBuildDir = getBuildDir(projectId, buildId);
       if (existsSync(directBuildDir)) {
         hasExtractedDir = true;
         effectiveExtractDir = directBuildDir;
@@ -140,6 +148,13 @@ export const DeployService = {
     const effectiveAppDir = isMonorepo
       ? join(effectiveExtractDir, rootDirectory!)
       : effectiveExtractDir;
+
+    // Untrusted code (pre-deploy command, the app) runs as the app user, which must own
+    // the checkout. Builds made before isolation was enabled are handed over here.
+    if (isAppUserEnabled()) {
+      await claimForAppUser(effectiveExtractDir);
+      await LogService.detail(buildId, `Runs as unprivileged user: ${appUser()}`);
+    }
 
     // Validate before stopping the live deployment or changing any routing.
     const staticSite = resolveStaticSite(appType, effectiveAppDir);
@@ -342,9 +357,9 @@ export const DeployService = {
     }
 
     // Cleanup filesystem
-    const projectDir = join(BASE_DIR, projectId);
+    const projectDir = getProjectDir(projectId);
     if (existsSync(projectDir)) {
-      await rm(projectDir, { recursive: true, force: true });
+      await removeAppTree(projectDir);
     }
 
     // Cleanup artifacts
@@ -378,7 +393,7 @@ export const DeployService = {
     // so this is a second layer of defense.
     const currentTarget = await this.resolveCurrentTarget(paths.projectDir);
     if (currentTarget) {
-      const buildsRoot = join(paths.projectDir, 'builds', buildId);
+      const buildsRoot = getBuildDir(projectId, buildId);
       if (currentTarget === buildsRoot || currentTarget.startsWith(buildsRoot + '/')) {
         throw new Error('Cannot delete the currently active build');
       }
@@ -386,14 +401,14 @@ export const DeployService = {
 
     // Remove the build output directory (cloned repo + node_modules + dist).
     // This is where almost all per-build disk usage lives.
-    const buildDir = join(paths.projectDir, 'builds', buildId);
+    const buildDir = getBuildDir(projectId, buildId);
     if (existsSync(buildDir)) {
-      await rm(buildDir, { recursive: true, force: true });
+      await removeAppTree(buildDir);
     }
 
     // Remove any stale direct-extract fallback path for very old builds.
     if (existsSync(paths.extractDir)) {
-      await rm(paths.extractDir, { recursive: true, force: true });
+      await removeAppTree(paths.extractDir);
     }
 
     // Remove the legacy artifact tarball, if any.
@@ -505,7 +520,9 @@ export const DeployService = {
         port.toString(),
         staticSite.kind,
       ];
-      workingDir = process.cwd();
+      // The static server runs as the app user, which cannot (and must not) read the
+      // engine's directory: Bun loads .env files from its working directory.
+      workingDir = isAppUserEnabled() ? staticSite.directory : process.cwd();
     } else {
       if (framework.requiresInstall) {
         if (buildId) {
@@ -578,6 +595,7 @@ export const DeployService = {
       console.log(`[DeployService] Health check completed successfully for port ${port}`);
       if (buildId) {
         await LogService.success(buildId, 'Health check passed - application is responding');
+        await this.warnIfPubliclyBound(port, buildId);
       }
     } catch (e: any) {
       console.error(`[DeployService] Health check failed for port ${port}:`, e);
@@ -586,6 +604,25 @@ export const DeployService = {
       }
       throw e;
     }
+  },
+
+  /**
+   * Apps are told to listen on APP_BIND_HOST (HOST/HOSTNAME); servers that hard-code
+   * 0.0.0.0 ignore it. Point that out in the deploy log, since only the firewall then
+   * keeps the port from being public.
+   */
+  async warnIfPubliclyBound(port: number, buildId: string) {
+    const exposed = publicListenAddresses(port);
+    if (exposed.length === 0) return;
+    await LogService.warning(
+      buildId,
+      `The app listens on ${exposed.join(', ')} (port ${port}), not only ${APP_BIND_HOST}. ` +
+        `Bind to process.env.HOST, e.g. Bun.serve({ hostname: process.env.HOST, port }) or ` +
+        `app.listen(port, process.env.HOST).` +
+        (isAppUserEnabled()
+          ? ' The ShipYard firewall guard still keeps it unreachable from outside this server.'
+          : ' Until then only the server firewall keeps it private.'),
+    );
   },
 
   async ensureDependenciesInstalled(cwd: string, buildId?: string) {
@@ -621,7 +658,7 @@ export const DeployService = {
       await LogService.detail(buildId, 'Running bun install...');
     }
 
-    const installProc = Bun.spawn(['bun', 'install', '--production'], {
+    const installProc = Bun.spawn(asAppUser(['bun', 'install', '--production']), {
       cwd,
       stdout: 'pipe',
       stderr: 'pipe',
@@ -729,3 +766,26 @@ export const DeployService = {
     );
   },
 };
+
+function isLoopbackHost(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, '').replace(/%.*$/, '');
+  return h === '::1' || h.startsWith('127.') || h.startsWith('::ffff:127.');
+}
+
+/** Non-loopback addresses with a TCP listener on `port` (empty when `ss` is missing). */
+export function publicListenAddresses(port: number): string[] {
+  try {
+    const res = Bun.spawnSync(['ss', '-Hltn', `sport = :${port}`]);
+    if (res.exitCode !== 0) return [];
+    const hosts = res.stdout
+      .toString()
+      .split('\n')
+      .map((line) => line.trim().split(/\s+/)[3])
+      .filter((addr): addr is string => Boolean(addr))
+      .map((addr) => addr.slice(0, addr.lastIndexOf(':')))
+      .filter((host) => !isLoopbackHost(host));
+    return [...new Set(hosts)];
+  } catch {
+    return [];
+  }
+}

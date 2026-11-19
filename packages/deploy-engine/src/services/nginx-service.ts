@@ -520,7 +520,7 @@ ${gated ? gateDirectives() : ''}
     }
 
     location ^~ /__shipyard_preview/ {
-        proxy_pass http://localhost:${port}/;
+        proxy_pass http://127.0.0.1:${port}/;
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade $http_upgrade;
@@ -539,7 +539,7 @@ ${gated ? gateDirectives() : ''}
     }
 
     location / {
-        proxy_pass http://localhost:${port};
+        proxy_pass http://127.0.0.1:${port};
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade $http_upgrade;
@@ -603,7 +603,7 @@ server {
     }
 
     location / {
-        proxy_pass http://localhost:${port};
+        proxy_pass http://127.0.0.1:${port};
         proxy_http_version 1.1;
 
         proxy_set_header Upgrade $http_upgrade;
@@ -704,7 +704,7 @@ server {
         if (
           config.includes('location ^~ /__shipyard_preview/') &&
           (this.getStaticRoot(sub) !== null ||
-            config.includes(`proxy_pass http://localhost:${port}/;`))
+            config.includes(`proxy_pass http://127.0.0.1:${port}/;`))
         ) {
           return;
         }

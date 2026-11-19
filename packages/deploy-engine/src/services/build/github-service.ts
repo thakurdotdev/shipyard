@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@thakur-deploy/config';
 import jwt from 'jsonwebtoken';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
@@ -71,7 +71,7 @@ async function requestTokenFromControlApi(installationId: string): Promise<strin
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-shipyard-internal': config.internalToken!,
+      ...internalAuthHeaders(),
     },
     body: JSON.stringify({ installation_id: installationId }),
   });

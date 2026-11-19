@@ -211,7 +211,7 @@ describe('Vite static deployment', () => {
       ]) {
         expect(config).toContain(`root "${root}";`);
         expect(config).not.toContain('proxy_pass');
-        expect(config).not.toContain('localhost:null');
+        expect(config).not.toContain('127.0.0.1:null');
       }
       const unbuilt = NginxService.generateHttpOnlyConfig('unbuilt-static', null);
       expect(unbuilt).toContain('return 503;');

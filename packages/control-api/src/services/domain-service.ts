@@ -12,10 +12,10 @@ import {
   provisionMatches,
   type AliasRecord,
 } from './domain-names';
+import { deployEngineFetch } from './deploy-engine-client';
 
 export { domainForSite, parseAliasRecords, provisionMatches, type AliasRecord };
 
-const DEPLOY_ENGINE_URL = config.deployEngineUrl;
 const BASE_DOMAIN = config.baseDomain;
 
 type ProvisionRow = typeof domainProvisions.$inferSelect;
@@ -220,7 +220,7 @@ export const DomainService = {
         // Let's Encrypt validates over plain HTTP on this server.
         try {
           await notify('nginx_configuring', `Setting up HTTP config for ACME validation...`);
-          const httpConfigRes = await fetch(`${DEPLOY_ENGINE_URL}/nginx/http-only`, {
+          const httpConfigRes = await deployEngineFetch(`/nginx/http-only`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ subdomain: site, port, gated, aliases }),
@@ -244,7 +244,7 @@ export const DomainService = {
       await this.updateSslStatus(provision.id, 'issuing');
 
       try {
-        const sslRes = await fetch(`${DEPLOY_ENGINE_URL}/ssl/issue`, {
+        const sslRes = await deployEngineFetch(`/ssl/issue`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain: fullDomain, buildId, aliases }),
@@ -303,7 +303,7 @@ export const DomainService = {
       try {
         await notify('nginx_configuring', `Configuring HTTPS reverse proxy...`);
 
-        const nginxRes = await fetch(`${DEPLOY_ENGINE_URL}/nginx/upgrade-https`, {
+        const nginxRes = await deployEngineFetch(`/nginx/upgrade-https`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subdomain: site, port, gated, aliases }),
@@ -361,7 +361,7 @@ export const DomainService = {
   async certificateCovers(domain: string, aliases: string[]): Promise<boolean> {
     try {
       const query = new URLSearchParams({ domain, aliases: aliases.join(',') });
-      const res = await fetch(`${DEPLOY_ENGINE_URL}/ssl/status?${query}`, {
+      const res = await deployEngineFetch(`/ssl/status?${query}`, {
         signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) return false;
@@ -416,7 +416,7 @@ export const DomainService = {
     // 2. Revoke the certificate, unless it was one ShipYard found and reused
     if (!provision.ssl_reused && provision.ssl_status === 'issued') {
       try {
-        await fetch(`${DEPLOY_ENGINE_URL}/ssl/revoke`, {
+        await deployEngineFetch(`/ssl/revoke`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain: provision.full_domain }),
@@ -428,7 +428,7 @@ export const DomainService = {
 
     // 3. Remove nginx config
     try {
-      await fetch(`${DEPLOY_ENGINE_URL}/nginx/remove`, {
+      await deployEngineFetch(`/nginx/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subdomain: provision.subdomain }),

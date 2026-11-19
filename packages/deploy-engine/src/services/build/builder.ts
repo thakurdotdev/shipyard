@@ -1,10 +1,18 @@
-import { childProcessEnv, config } from '@thakur-deploy/config';
+import { childProcessEnv, config, internalAuthHeaders } from '@thakur-deploy/config';
 import { spawn } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
-import { rm } from 'fs/promises';
-import { join } from 'path';
+import { existsSync, readdirSync, statSync } from 'fs';
+import { unlink, writeFile } from 'fs/promises';
+import { dirname, join } from 'path';
 import { AppType, isBackendFramework } from '../../config/framework-config';
-import { getBuildExtractDir } from '../../config/paths';
+import { assertSafeId, getBuildExtractDir } from '../../config/paths';
+import {
+  appUserEnv,
+  asAppUser,
+  claimForAppUser,
+  isAppUserEnabled,
+  removeAppTree,
+  writeAppFile,
+} from '../app-user';
 import { isWorkspaceRoot } from '../../utils/workspace';
 import {
   GO_BUILD_MARKER,
@@ -47,15 +55,23 @@ export const Builder = {
   async execute(job: BuildJob) {
     console.log(`[Builder] Starting execution for build ${job.build_id}`);
 
+    // Jobs come from Redis; a forged job must not choose paths or leak a clone token.
+    assertSafeId('project', job.project_id);
+    assertSafeId('build', job.build_id);
+    if (job.installation_id) assertGitHubRepoUrl(job.github_url);
+
     const buildDir = getBuildExtractDir(job.project_id, job.build_id);
     const controlApiUrl = config.controlApiUrl;
-    const sentinelPath = join(buildDir, BUILT_SENTINEL);
+    // The sentinel sits next to the checkout (platform-owned), not inside it: the
+    // checkout belongs to the app user, who could otherwise fake a finished build.
+    const sentinelPath = join(dirname(buildDir), BUILT_SENTINEL);
+    const legacySentinelPath = join(buildDir, BUILT_SENTINEL);
 
     const updateStatus = async (status: 'building' | 'success' | 'failed') => {
       try {
         await fetch(`${controlApiUrl}/builds/${job.build_id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...internalAuthHeaders() },
           body: JSON.stringify({ status }),
         });
       } catch (error) {
@@ -67,7 +83,7 @@ export const Builder = {
       await updateStatus('building');
 
       // Idempotency guard: never rebuild output that already completed.
-      if (existsSync(sentinelPath)) {
+      if (existsSync(sentinelPath) || existsSync(legacySentinelPath)) {
         if (job.app_type === 'vite') {
           getStaticDirectory(join(buildDir, job.root_directory || '.'));
         }
@@ -122,6 +138,8 @@ export const Builder = {
       await GitService.clone(job.github_url, buildDir, token, (message) => {
         void LogStreamer.stream(job.build_id, job.project_id, `${message}\n`, 'info');
       });
+      // From here on, everything in the checkout runs as the unprivileged app user.
+      await claimForAppUser(buildDir);
 
       const isMonorepo = Boolean(
         job.root_directory &&
@@ -259,9 +277,9 @@ export const Builder = {
       if (job.app_type === 'vite') getStaticDirectory(projectDir);
 
       // 5. Drop git metadata (not needed at runtime) and mark the build complete
-      await rm(join(buildDir, '.git'), { recursive: true, force: true }).catch(() => {});
-      mkdirSync(buildDir, { recursive: true });
-      await Bun.write(sentinelPath, new Date().toISOString());
+      await removeAppTree(join(buildDir, '.git')).catch(() => {});
+      await unlink(sentinelPath).catch(() => {});
+      await writeFile(sentinelPath, new Date().toISOString(), { flag: 'wx' });
 
       await LogStreamer.ensureFlushed(job.build_id);
       await updateStatus('success');
@@ -276,7 +294,7 @@ export const Builder = {
       await updateStatus('failed');
 
       // Clean the partial build so a retry starts from a clean checkout
-      await rm(buildDir, { recursive: true, force: true }).catch((e) =>
+      await removeAppTree(buildDir).catch((e) =>
         console.error(`[Builder] Failed to clean partial build dir ${buildDir}:`, e),
       );
       throw error;
@@ -338,7 +356,7 @@ export const Builder = {
       throw new Error('Go build produced no executable');
     }
     const info: GoBuildInfo = { binary, package: parsed.package };
-    await Bun.write(join(projectDir, GO_BUILD_MARKER), JSON.stringify(info));
+    await writeAppFile(join(projectDir, GO_BUILD_MARKER), JSON.stringify(info));
 
     await LogStreamer.stream(
       job.build_id,
@@ -385,12 +403,21 @@ export const Builder = {
     const TIMEOUT_MS = 5 * 60 * 1000; // 5 minute timeout
 
     return new Promise<void>((resolve, reject) => {
-      const [cmd, ...args] = bunCommand.split(' ');
-      const child = spawn(cmd, args, {
-        cwd,
-        shell: true,
-        env: { ...childProcessEnv(), ...envVars },
-      });
+      const env = { ...childProcessEnv(), ...envVars };
+      let child;
+      if (isAppUserEnabled()) {
+        // The whole command line (including any `&&` chain) runs as the app user. Our
+        // signal cannot reach a process behind sudo, so `timeout` (running as the app
+        // user) enforces the limit on the command and everything it started.
+        const argv = asAppUser(
+          ['timeout', '-k', '10s', `${TIMEOUT_MS / 1000}s`, 'sh', '-c', bunCommand],
+          { preserveEnv: true },
+        );
+        child = spawn(argv[0], argv.slice(1), { cwd, env: appUserEnv(env) });
+      } else {
+        const [cmd, ...args] = bunCommand.split(' ');
+        child = spawn(cmd, args, { cwd, shell: true, env });
+      }
 
       // Timeout to prevent indefinite hangs
       const timeout = setTimeout(() => {
@@ -537,3 +564,16 @@ export const Builder = {
     }
   },
 };
+
+/** Clone tokens are only ever sent to GitHub over HTTPS. */
+function assertGitHubRepoUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid repository URL: ${url}`);
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'github.com' || parsed.username) {
+    throw new Error(`Refusing to send a GitHub token to ${parsed.protocol}//${parsed.host}`);
+  }
+}

@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@thakur-deploy/config';
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
 const FLUSH_INTERVAL = 300; // 300ms - flush more frequently for real-time feel
@@ -70,7 +70,7 @@ export const LogStreamer = {
       try {
         const res = await fetch(`${controlApiUrl}/builds/${buildId}/logs`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...internalAuthHeaders() },
           body: JSON.stringify({ logs, level }),
         });
         if (!res.ok) {

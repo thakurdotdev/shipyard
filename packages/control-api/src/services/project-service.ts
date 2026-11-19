@@ -6,6 +6,7 @@ import { AppType, isStaticFramework } from '../config/framework-config';
 import { normalizeWatchPatternsInput } from './deploy-change-detection';
 import { GateService } from './gate-service';
 import { normalizeDomainInput, siteNameFor } from './domain-names';
+import { deployEngineFetch } from './deploy-engine-client';
 
 const IS_PLATFORM_PROD = config.isProduction;
 
@@ -94,9 +95,8 @@ export const ProjectService = {
     }
 
     // 2. Check if in use on the host system via Deploy Engine
-    const deployEngineUrl = config.deployEngineUrl;
     try {
-      const res = await fetch(`${deployEngineUrl}/ports/check`, {
+      const res = await deployEngineFetch(`/ports/check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ port }),
@@ -123,11 +123,10 @@ export const ProjectService = {
   },
 
   async allocateNextPort(): Promise<number> {
-    const deployEngineUrl = config.deployEngineUrl;
     let candidatePort: number | null = null;
 
     try {
-      const res = await fetch(`${deployEngineUrl}/ports/allocate`, {
+      const res = await deployEngineFetch(`/ports/allocate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -368,7 +367,6 @@ export const ProjectService = {
 
     // 2. Call Deploy Engine to cleanup
     // WE ALWAYS CALL THIS, even if port is missing, to clean up artifacts/dirs
-    const deployEngineUrl = config.deployEngineUrl;
     try {
       const subdomain =
         (project.domain && siteNameFor(project.domain)) ||
@@ -378,7 +376,7 @@ export const ProjectService = {
           .replace(/^-+|-+$/g, '');
 
       console.log(`[ProjectService] Requesting Deploy Engine cleanup for ${id}...`);
-      const res = await fetch(`${deployEngineUrl}/projects/${id}/delete`, {
+      const res = await deployEngineFetch(`/projects/${id}/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

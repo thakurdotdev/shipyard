@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@thakur-deploy/config';
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
 const CONTROL_API_URL = config.controlApiUrl;
@@ -18,7 +18,7 @@ export const LogService = {
     try {
       const res = await fetch(`${CONTROL_API_URL}/builds/${buildId}/logs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...internalAuthHeaders() },
         body: JSON.stringify({ logs: message, level }),
       });
 

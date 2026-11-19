@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config, platformListenHost } from '@thakur-deploy/config';
 import { cors } from '@elysiajs/cors';
 import { Elysia } from 'elysia';
 import { auth } from './lib/auth';
@@ -112,7 +112,7 @@ UptimeService.initialize().catch((err) => {
 const PORT = Number(process.env.PORT) || 4010;
 
 // 3. Listen directly with native Bun server
-app.listen(PORT, () => {
+app.listen({ port: PORT, hostname: platformListenHost() }, () => {
   console.log(`Control API running on port ${PORT} 🚀`);
   if (config.isProduction) {
     // Installers released before the shared config check the build for this exact text,

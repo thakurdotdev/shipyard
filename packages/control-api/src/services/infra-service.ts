@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { infrastructureServices, ServiceType, ServiceStatus, user } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { config, getServerHost } from '@thakur-deploy/config';
+import { getServerHost } from '@thakur-deploy/config';
 import { randomBytes } from 'crypto';
 import { decrypt, encrypt } from '../lib/crypto';
 import {
@@ -10,13 +10,13 @@ import {
   RedisCredentials,
   PostgresCredentials,
 } from '../utils/credential-generator';
+import { deployEngineFetch } from './deploy-engine-client';
 
 // Port range for infrastructure services
 const PORT_RANGE_START = 20000;
 const PORT_RANGE_END = 25000;
 
 // Deploy engine URL
-const DEPLOY_ENGINE_URL = config.deployEngineUrl;
 
 /**
  * Encrypt credentials for storage
@@ -104,7 +104,7 @@ export const InfraService = {
 
     // Start container via deploy engine
     try {
-      const res = await fetch(`${DEPLOY_ENGINE_URL}/infra/start`, {
+      const res = await deployEngineFetch(`/infra/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -212,7 +212,7 @@ export const InfraService = {
 
     // Stop container via deploy engine
     try {
-      await fetch(`${DEPLOY_ENGINE_URL}/infra/stop`, {
+      await deployEngineFetch(`/infra/stop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -254,7 +254,7 @@ export const InfraService = {
 
     try {
       // Stop existing container
-      await fetch(`${DEPLOY_ENGINE_URL}/infra/stop`, {
+      await deployEngineFetch(`/infra/stop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,7 +264,7 @@ export const InfraService = {
       });
 
       // Start container again
-      const res = await fetch(`${DEPLOY_ENGINE_URL}/infra/start`, {
+      const res = await deployEngineFetch(`/infra/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -317,8 +317,8 @@ export const InfraService = {
       throw new Error('Service not found');
     }
 
-    const res = await fetch(
-      `${DEPLOY_ENGINE_URL}/infra/logs?containerName=${service.container_name}&tail=${tail}`,
+    const res = await deployEngineFetch(
+      `/infra/logs?containerName=${service.container_name}&tail=${tail}`,
     );
 
     if (!res.ok) {

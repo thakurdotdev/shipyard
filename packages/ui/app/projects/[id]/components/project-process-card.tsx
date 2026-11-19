@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, FolderOpen, Loader2, RotateCw, Server, Square, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatUptime } from '@/lib/format';
-import { pm0Api, type PM0Process } from '@/lib/pm0-api';
+import { pm0Api, processTarget, type PM0Process } from '@/lib/pm0-api';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,10 +99,10 @@ export function ProjectProcessCard({
     setAction(nextAction);
     try {
       if (nextAction === 'restart') {
-        await pm0Api.restartProcess(String(process.pm_id));
+        await pm0Api.restartProcess(processTarget(process));
         toast.success(process.status === 'online' ? 'Process restarted' : 'Process started');
       } else {
-        await pm0Api.stopProcess(String(process.pm_id));
+        await pm0Api.stopProcess(processTarget(process));
         toast.success('Process stopped');
         setStopDialogOpen(false);
       }
@@ -259,7 +259,7 @@ export function ProjectProcessCard({
             </SheetHeader>
             <div className="min-h-0 flex-1 overflow-hidden">
               <ProcessLogViewer
-                target={String(process.pm_id)}
+                target={processTarget(process)}
                 processName={process.name}
                 onClose={() => setLogsOpen(false)}
               />

@@ -11,6 +11,7 @@ import { LogService } from './log-service';
 import { EventStreamService } from './event-stream-service';
 import { GitHubDeploymentStatus } from './github-deployment-status';
 import { DeployNotifications } from './deploy-notifications';
+import { deployEngineFetch } from './deploy-engine-client';
 
 export const BuildService = {
   async create(data: {
@@ -181,9 +182,8 @@ export const BuildService = {
 
     // Tell the deploy engine to remove the build output dir + artifact tarball
     // before dropping the DB rows. Best-effort: DB deletion proceeds regardless.
-    const deployEngineUrl = config.deployEngineUrl;
     try {
-      const res = await fetch(`${deployEngineUrl}/projects/${build.project_id}/builds/${id}`, {
+      const res = await deployEngineFetch(`/projects/${build.project_id}/builds/${id}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
