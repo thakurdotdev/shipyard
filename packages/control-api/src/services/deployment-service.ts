@@ -12,6 +12,7 @@ import { isStaticFramework, servesStaticFiles } from '../config/framework-config
 import { GateService } from './gate-service';
 import { GitHubDeploymentStatus } from './github-deployment-status';
 import { DeployNotifications } from './deploy-notifications';
+import { deployEngineFetch } from './deploy-engine-client';
 
 const IS_PLATFORM_PROD = config.isProduction;
 
@@ -233,7 +234,6 @@ export const DeploymentService = {
     await LogService.persist(buildId, startingMsg, 'deploy');
     EventStreamService.broadcast(buildId, startingMsg, 'deploy');
 
-    const deployEngineUrl = config.deployEngineUrl;
     try {
       const subdomain = project.domain
         ? siteNameFor(project.domain)
@@ -242,7 +242,7 @@ export const DeploymentService = {
             .replace(/[^a-z0-9-]/g, '-')
             .replace(/^-+|-+$/g, '');
 
-      const res = await fetch(`${deployEngineUrl}/activate`, {
+      const res = await deployEngineFetch(`/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -373,9 +373,8 @@ export const DeploymentService = {
     }
 
     // Call Deploy Engine
-    const deployEngineUrl = config.deployEngineUrl;
 
-    const res = await fetch(`${deployEngineUrl}/stop`, {
+    const res = await deployEngineFetch(`/stop`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

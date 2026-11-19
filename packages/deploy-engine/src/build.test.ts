@@ -64,8 +64,9 @@ describe('Deploy Engine builder (in-place build)', () => {
       job.env_vars,
     );
 
-    const extractDir = join(TEST_BASE_DIR, 'project-test-1', 'builds', 'build-test-1', 'extracted');
-    expect(existsSync(join(extractDir, '.shipyard-built'))).toBe(true);
+    // Next to the checkout, which the app user owns when isolation is on.
+    const buildRoot = join(TEST_BASE_DIR, 'project-test-1', 'builds', 'build-test-1');
+    expect(existsSync(join(buildRoot, '.shipyard-built'))).toBe(true);
   });
 
   it('skips rebuilding when the build already completed', async () => {

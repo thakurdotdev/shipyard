@@ -89,7 +89,7 @@ describe('gate configuration', () => {
   test('gates reverse-proxied apps too', () => {
     const config = NginxService.generateConfig(SUBDOMAIN, 5100, true);
     expect(config).toContain('auth_request /__shipyard_auth;');
-    expect(config).toContain('proxy_pass http://localhost:5100;');
+    expect(config).toContain('proxy_pass http://127.0.0.1:5100;');
   });
 
   test('serves nothing but the ACME challenge before the certificate exists', () => {

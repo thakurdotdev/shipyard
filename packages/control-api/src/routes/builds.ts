@@ -1,3 +1,4 @@
+import { hasInternalToken } from '@thakur-deploy/config';
 import { Elysia } from 'elysia';
 import { LogLevel } from '../db/schema';
 import { BuildQueue } from '../queue';
@@ -123,8 +124,20 @@ export const buildsRoutes = new Elysia()
       }),
   );
 
+/**
+ * Build status and log callbacks from the Deploy Engine. These sit outside the session
+ * guard, and a `success` status auto-activates the build, so they require the internal
+ * token: without it anyone could reach them through the public `/api` prefix (or any
+ * deployed app over loopback) and activate or spoof builds.
+ */
 export const internalBuildRoutes = new Elysia().group('/builds', (app) =>
   app
+    .onBeforeHandle(({ request, set }) => {
+      if (!hasInternalToken(request)) {
+        set.status = 403;
+        return { error: 'Forbidden' };
+      }
+    })
     .post('/:id/logs', async ({ params: { id }, body }) => {
       const { logs, level } = body as { logs: string; level?: LogLevel };
       // Persist first so the DB is the source of truth, then broadcast with the

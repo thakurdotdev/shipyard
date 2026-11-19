@@ -1,6 +1,7 @@
 import { childProcessEnv } from '@thakur-deploy/config';
 import { spawn } from 'child_process';
 import { delimiter, join } from 'path';
+import { appUserEnv, asAppUser, isAppUserEnabled } from './app-user';
 import { Builder } from './build/builder';
 import { LogService } from './log-service';
 
@@ -34,20 +35,44 @@ export async function runPreDeployCommand({
   await LogService.detail(buildId, `$ ${resolved}`);
 
   const startedAt = performance.now();
+  const env = {
+    ...childProcessEnv(),
+    ...envVars,
+    NODE_ENV: 'production',
+    PLATFORM_ENV: 'production',
+  };
+  const binDir = join(cwd, 'node_modules', '.bin');
   // Own process group, so a timeout also kills children of `sh` (e.g. a
   // migration CLI) instead of leaving them holding the output pipes open.
-  const child = spawn('sh', ['-c', resolved], {
+  // As the app user, the signal cannot cross sudo, so `timeout` enforces the limit.
+  const argv = isAppUserEnabled()
+    ? asAppUser(
+        [
+          'timeout',
+          '-k',
+          '10s',
+          `${Math.ceil(timeoutMs / 1000)}s`,
+          'sh',
+          '-c',
+          // Lets commands call locally installed CLIs (drizzle-kit, prisma...) directly.
+          'PATH="$SHIPYARD_BIN_DIR:$PATH"; export PATH; exec sh -c "$1"',
+          'sh',
+          resolved,
+        ],
+        { preserveEnv: true },
+      )
+    : ['sh', '-c', resolved];
+  const child = spawn(argv[0], argv.slice(1), {
     cwd,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...childProcessEnv(),
-      ...envVars,
-      NODE_ENV: 'production',
-      PLATFORM_ENV: 'production',
-      // Lets commands call locally installed CLIs (drizzle-kit, prisma...) directly.
-      PATH: [join(cwd, 'node_modules', '.bin'), process.env.PATH].filter(Boolean).join(delimiter),
-    },
+    env: isAppUserEnabled()
+      ? { ...appUserEnv(env), SHIPYARD_BIN_DIR: binDir }
+      : {
+          ...env,
+          // Lets commands call locally installed CLIs (drizzle-kit, prisma...) directly.
+          PATH: [binDir, process.env.PATH].filter(Boolean).join(delimiter),
+        },
   });
 
   let timedOut = false;

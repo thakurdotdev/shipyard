@@ -54,16 +54,55 @@ describe('pm0 project ownership and static migration', () => {
       expect(await PM0Service.findProcessByProjectId('project-123')).toEqual({
         name: 'syncvibe',
         pm_id: 7,
+        daemon: 'platform',
       });
       expect(await PM0Service.isRunning('project-123')).toBe(true);
       expect(await PM0Service.list()).toEqual([
         { name: 'syncvibe', projectId: 'project-123', buildId: 'build-456', status: 'online' },
       ]);
       expect(await PM0Service.delete('project-123')).toBe(true);
-      expect(command).toHaveBeenCalledWith(['delete', '7']);
-      expect(command).toHaveBeenCalledWith(['save']);
+      expect(command).toHaveBeenCalledWith(['delete', '7'], { daemon: 'platform' });
+      expect(command).toHaveBeenCalledWith(['save'], { daemon: 'platform' });
     } finally {
       command.mockRestore();
+    }
+  });
+
+  test('with an app user, retires the legacy copy in the platform daemon too', async () => {
+    const previous = globalThis.process.env.SHIPYARD_APP_USER;
+    globalThis.process.env.SHIPYARD_APP_USER = 'shipyard-apps';
+    const appProcess = { ...process, pm_id: 3 };
+    const platformService = {
+      ...process,
+      name: 'control-api',
+      pm_id: 0,
+      pm2_env: { ...process.pm2_env, env: { PORT: '4010' } },
+    };
+    const command = spyOn(exec, 'execPm0').mockImplementation(async (args, options) => ({
+      exitCode: 0,
+      stdout:
+        args[0] === 'jlist'
+          ? JSON.stringify(options?.daemon === 'apps' ? [appProcess] : [process, platformService])
+          : '',
+      stderr: '',
+    }));
+    try {
+      expect(await PM0Service.findProcessByProjectId('project-123')).toEqual({
+        name: 'syncvibe',
+        pm_id: 3,
+        daemon: 'apps',
+      });
+      // Platform services (no DEPLOY_PROJECT_ID) are never listed as deployments.
+      expect((await PM0Service.list()).map((p) => p.name)).toEqual(['syncvibe', 'syncvibe']);
+      expect(await PM0Service.delete('project-123')).toBe(true);
+      expect(command).toHaveBeenCalledWith(['delete', '3'], { daemon: 'apps' });
+      expect(command).toHaveBeenCalledWith(['delete', '7'], { daemon: 'platform' });
+      expect(command).not.toHaveBeenCalledWith(['delete', '0'], { daemon: 'platform' });
+      expect(command).toHaveBeenCalledWith(['save'], { daemon: 'platform' });
+    } finally {
+      command.mockRestore();
+      if (previous === undefined) delete globalThis.process.env.SHIPYARD_APP_USER;
+      else globalThis.process.env.SHIPYARD_APP_USER = previous;
     }
   });
 });

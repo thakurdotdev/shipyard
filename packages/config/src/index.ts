@@ -16,7 +16,7 @@
  * PLATFORM_ENV, ...) are still honoured. Explicit values always win over derived ones,
  * which matters for ENCRYPTION_KEY: data encrypted with it must stay readable.
  */
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { networkInterfaces } from 'os';
 import { dirname, join } from 'path';
@@ -268,4 +268,38 @@ export function childProcessEnv(): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = { ...env };
   for (const key of PLATFORM_SECRET_KEYS) delete out[key];
   return out;
+}
+
+// ---------------------------------------------------------------------------------------
+// Internal service-to-service authentication
+
+/** Header carrying the internal token between the Control API and the Deploy Engine. */
+export const INTERNAL_TOKEN_HEADER = 'x-shipyard-internal';
+
+/** Headers that authenticate a request from one platform service to the other. */
+export function internalAuthHeaders(): Record<string, string> {
+  const token = config.internalToken;
+  return token ? { [INTERNAL_TOKEN_HEADER]: token } : {};
+}
+
+/**
+ * True when the request carries the token only the platform's own services can derive.
+ * Deployed apps share the host and can reach every loopback port, so internal APIs must
+ * check this instead of trusting the caller's address.
+ */
+export function hasInternalToken(request: Request): boolean {
+  const expected = config.internalToken;
+  const given = request.headers.get(INTERNAL_TOKEN_HEADER);
+  if (!expected || !given) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Address the platform's own HTTP services bind to. Nginx reaches them over loopback, so
+ * nothing else needs them on a public interface. Override with LISTEN_HOST.
+ */
+export function platformListenHost(): string {
+  return trimmed('LISTEN_HOST') || '127.0.0.1';
 }

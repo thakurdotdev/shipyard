@@ -1,4 +1,4 @@
-import '@thakur-deploy/config';
+import { hasInternalToken, platformListenHost } from '@thakur-deploy/config';
 import { Elysia, t } from 'elysia';
 import { syncPlatformInfo } from './services/platform-sync';
 import { DeployService } from './services/deploy-service';
@@ -15,6 +15,14 @@ const PORT = process.env.PORT || 4012;
 const USE_DOCKER = process.env.USE_DOCKER === 'true';
 
 const app = new Elysia()
+  // Every route below acts with the platform's privileges (writes Nginx configs, issues
+  // certificates, starts and deletes deployments). Deployed apps share this host and can
+  // reach the port over loopback, so only the Control API (holding the internal token)
+  // may call them. The bare liveness response stays open.
+  .onBeforeHandle(({ request, path }) => {
+    if (request.method === 'GET' && path === '/') return;
+    if (!hasInternalToken(request)) return new Response('Forbidden', { status: 403 });
+  })
   .post('/ports/check', async ({ body }) => {
     const { port } = body as { port: number };
     if (!port) return new Response('Port required', { status: 400 });
@@ -357,7 +365,7 @@ const app = new Elysia()
   .get('/*', () => {
     return DeployService.serveRequest();
   })
-  .listen(PORT);
+  .listen({ port: Number(PORT), hostname: platformListenHost() });
 
 console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.server?.port}`);
 

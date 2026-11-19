@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { pm0Api, PM0Process, PM0Health, PM0SystemStats } from '@/lib/pm0-api';
+import { pm0Api, PM0Process, PM0Health, PM0SystemStats, processTarget } from '@/lib/pm0-api';
 import { ProcessTable } from '@/components/process-manager/process-table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -126,7 +126,7 @@ export default function ProcessesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [compact, setCompact] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<'stop' | 'restart' | 'delete' | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<'stop' | 'restart' | 'delete' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -174,7 +174,7 @@ export default function ProcessesPage() {
   useEffect(() => {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
-      const ids = new Set(processes.map((p) => p.pm_id));
+      const ids = new Set(processes.map((p) => processTarget(p)));
       const next = new Set([...prev].filter((id) => ids.has(id)));
       return next.size === prev.size ? prev : next;
     });
@@ -215,15 +215,16 @@ export default function ProcessesPage() {
     .slice()
     .sort((a, b) => attentionRank(a.status) - attentionRank(b.status) || a.pm_id - b.pm_id);
 
-  const selectedProcesses = processes.filter((p) => selectedIds.has(p.pm_id));
+  const selectedProcesses = processes.filter((p) => selectedIds.has(processTarget(p)));
   const allVisibleSelected =
-    filteredProcesses.length > 0 && filteredProcesses.every((p) => selectedIds.has(p.pm_id));
+    filteredProcesses.length > 0 &&
+    filteredProcesses.every((p) => selectedIds.has(processTarget(p)));
 
-  const toggleSelect = (pmId: number) => {
+  const toggleSelect = (target: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(pmId)) next.delete(pmId);
-      else next.add(pmId);
+      if (next.has(target)) next.delete(target);
+      else next.add(target);
       return next;
     });
   };
@@ -232,7 +233,7 @@ export default function ProcessesPage() {
     if (allVisibleSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredProcesses.map((p) => p.pm_id)));
+      setSelectedIds(new Set(filteredProcesses.map((p) => processTarget(p))));
     }
   };
 
@@ -251,10 +252,10 @@ export default function ProcessesPage() {
     const results = await Promise.allSettled(
       targets.map((p) =>
         action === 'stop'
-          ? pm0Api.stopProcess(String(p.pm_id))
+          ? pm0Api.stopProcess(processTarget(p))
           : action === 'restart'
-            ? pm0Api.restartProcess(String(p.pm_id))
-            : pm0Api.deleteProcess(String(p.pm_id)),
+            ? pm0Api.restartProcess(processTarget(p))
+            : pm0Api.deleteProcess(processTarget(p)),
       ),
     );
 
@@ -416,10 +417,15 @@ export default function ProcessesPage() {
             </div>
             <h3 className="text-base font-semibold tracking-tight">PM0 daemon is unreachable</h3>
             <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Make sure the PM0 daemon is running with the HTTP API enabled on{' '}
+              Make sure the PM0 daemon is running with its HTTP API on a Unix socket (
               <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
-                127.0.0.1:9615
+                PM0_HTTP_ADDR=unix:~/.pm0/http.sock
               </code>
+              ) and that the Control API&apos;s{' '}
+              <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
+                PM0_API_URL
+              </code>{' '}
+              points at it.
             </p>
             <Button variant="outline" size="sm" className="mt-5" onClick={() => void fetchData()}>
               <RefreshCw className="size-3.5" />

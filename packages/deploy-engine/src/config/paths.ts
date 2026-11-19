@@ -46,12 +46,31 @@ function ensureDir(path: string): void {
 ensureDir(BASE_DIR);
 ensureDir(ARTIFACTS_DIR);
 
+/**
+ * Project and build ids become path segments of directories the engine deletes and
+ * hands to the app user. They arrive over HTTP and the Redis build queue, so reject
+ * anything that is not a plain id (`..`, slashes) before it reaches the filesystem.
+ */
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function assertSafeId(kind: string, id: string): string {
+  if (typeof id !== 'string' || !SAFE_ID.test(id)) {
+    throw new Error(`Invalid ${kind} id: ${JSON.stringify(id)}`);
+  }
+  return id;
+}
+
 /** Absolute path to a project's directory. */
 export function getProjectDir(projectId: string): string {
-  return join(BASE_DIR, projectId);
+  return join(BASE_DIR, assertSafeId('project', projectId));
+}
+
+/** Directory holding everything for one build (platform-owned). */
+export function getBuildDir(projectId: string, buildId: string): string {
+  return join(getProjectDir(projectId), 'builds', assertSafeId('build', buildId));
 }
 
 /** Absolute path where a build's output lives (also the git clone root for monorepos). */
 export function getBuildExtractDir(projectId: string, buildId: string): string {
-  return join(getProjectDir(projectId), 'builds', buildId, 'extracted');
+  return join(getBuildDir(projectId, buildId), 'extracted');
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PM0Process, pm0Api } from '@/lib/pm0-api';
+import { PM0Process, pm0Api, processTarget } from '@/lib/pm0-api';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -121,8 +121,8 @@ interface ProcessTableProps {
   processes: PM0Process[];
   onRefresh: () => void;
   compact?: boolean;
-  selectedIds?: Set<number>;
-  onToggleSelect?: (pmId: number) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (target: string) => void;
   /** True when a search or status filter is hiding processes. */
   filtered?: boolean;
   onClearFilters?: () => void;
@@ -143,30 +143,30 @@ export function ProcessTable({
     process: PM0Process;
   } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const runAction = async (
     action: 'stop' | 'restart' | 'reload' | 'delete',
     process: PM0Process,
   ) => {
-    const key = `${action}-${process.pm_id}`;
+    const key = `${action}-${processTarget(process)}`;
     setActionLoading(key);
     try {
       switch (action) {
         case 'stop':
-          await pm0Api.stopProcess(String(process.pm_id));
+          await pm0Api.stopProcess(processTarget(process));
           toast.success(`Stopped ${process.name}`);
           break;
         case 'restart':
-          await pm0Api.restartProcess(String(process.pm_id));
+          await pm0Api.restartProcess(processTarget(process));
           toast.success(`Restarted ${process.name}`);
           break;
         case 'reload':
-          await pm0Api.reloadProcess(String(process.pm_id));
+          await pm0Api.reloadProcess(processTarget(process));
           toast.success(`Reloaded ${process.name}`);
           break;
         case 'delete':
-          await pm0Api.deleteProcess(String(process.pm_id));
+          await pm0Api.deleteProcess(processTarget(process));
           toast.success(`Deleted ${process.name}`);
           break;
       }
@@ -234,9 +234,9 @@ export function ProcessTable({
             const sc = getStatusConfig(proc.status);
             const isOnline = proc.status === 'online';
             const isErrored = proc.status === 'errored';
-            const isLoading = (a: string) => actionLoading === `${a}-${proc.pm_id}`;
-            const logsOpen = expandedLogs === String(proc.pm_id);
-            const selected = selectedIds?.has(proc.pm_id) ?? false;
+            const isLoading = (a: string) => actionLoading === `${a}-${processTarget(proc)}`;
+            const logsOpen = expandedLogs === processTarget(proc);
+            const selected = selectedIds?.has(processTarget(proc)) ?? false;
 
             const scriptName = proc.script?.split('/').pop() || proc.script || '—';
             const interpreter =
@@ -283,7 +283,7 @@ export function ProcessTable({
                     'h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground',
                     logsOpen && 'bg-accent text-foreground',
                   )}
-                  onClick={() => setExpandedLogs(logsOpen ? null : String(proc.pm_id))}
+                  onClick={() => setExpandedLogs(logsOpen ? null : processTarget(proc))}
                   title={logsOpen ? 'Hide logs' : 'View logs'}
                   aria-label={`${logsOpen ? 'Hide' : 'View'} logs for ${proc.name}`}
                   aria-expanded={logsOpen}
@@ -426,12 +426,15 @@ export function ProcessTable({
                   aria-label={`Copy working directory of ${proc.name}`}
                   onClick={() => {
                     navigator.clipboard.writeText(proc.cwd);
-                    setCopiedId(proc.pm_id);
+                    setCopiedId(processTarget(proc));
                     toast.success('Path copied');
-                    setTimeout(() => setCopiedId((v) => (v === proc.pm_id ? null : v)), 2000);
+                    setTimeout(
+                      () => setCopiedId((v) => (v === processTarget(proc) ? null : v)),
+                      2000,
+                    );
                   }}
                 >
-                  {copiedId === proc.pm_id ? (
+                  {copiedId === processTarget(proc) ? (
                     <Check className="size-3 text-emerald-700 dark:text-emerald-400" />
                   ) : (
                     <Copy className="size-3" />
@@ -474,7 +477,7 @@ export function ProcessTable({
 
             return (
               <div
-                key={proc.pm_id}
+                key={processTarget(proc)}
                 className={cn(isErrored && 'bg-red-500/[0.04]', selected && 'bg-surface-muted/50')}
               >
                 <div
@@ -488,7 +491,7 @@ export function ProcessTable({
                       <input
                         type="checkbox"
                         checked={selected}
-                        onChange={() => onToggleSelect(proc.pm_id)}
+                        onChange={() => onToggleSelect(processTarget(proc))}
                         aria-label={`Select ${proc.name}`}
                         className="size-4 shrink-0 cursor-pointer rounded border-border bg-surface-muted accent-brand-500"
                       />
@@ -553,7 +556,7 @@ export function ProcessTable({
                 {logsOpen && (
                   <div className="border-t border-border">
                     <ProcessLogViewer
-                      target={String(proc.pm_id)}
+                      target={processTarget(proc)}
                       processName={proc.name}
                       onClose={() => setExpandedLogs(null)}
                     />

@@ -1,10 +1,19 @@
 import { API_URL } from '@/lib/api-url';
 
+/** How the Control API addresses a process: `apps:3` for the apps daemon, `3` otherwise. */
+export function processTarget(p: Pick<PM0Process, 'pm_id' | 'target'>): string {
+  return p.target ?? String(p.pm_id);
+}
+
 // Sanitized process object returned by our proxy (no env vars)
 export interface PM0Process {
   pid: number;
   name: string;
   pm_id: number;
+  /** Which pm0 daemon runs it: the platform's own, or the unprivileged apps daemon. */
+  daemon?: 'platform' | 'apps';
+  /** Identifier to act on this process (pm_id alone repeats across daemons). */
+  target?: string;
   project_id?: string;
   monit: { memory: number; cpu: number };
   status: string;

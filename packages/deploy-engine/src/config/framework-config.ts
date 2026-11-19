@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { basename, join } from 'path';
 import { isExecutableFile, readGoBuildInfo } from '../utils/go';
 import { isNextStaticExport } from '../services/static-site';
+import { APP_BIND_HOST } from '../services/app-user';
 
 /**
  * Supported application framework types.
@@ -42,7 +43,17 @@ export const FRAMEWORKS: Record<AppType, FrameworkConfig> = {
     requiresInstall: true,
     // `output: "export"` builds a static site in out/; otherwise `next start` serves it.
     isStaticBuild: (cwd) => isNextStaticExport(cwd),
-    startCommand: (port) => ['bun', 'run', 'start', '--', '--port', port.toString()],
+    // Loopback only: Nginx proxies to it, nothing else should reach the port.
+    startCommand: (port) => [
+      'bun',
+      'run',
+      'start',
+      '--',
+      '--port',
+      port.toString(),
+      '--hostname',
+      APP_BIND_HOST,
+    ],
   },
 
   vite: {

@@ -45,6 +45,8 @@ function respond(req: Request, path: string, status = 200): Response {
 
 Bun.serve({
   port,
+  // ShipYard sets HOST to loopback; Nginx is the only way in.
+  hostname: process.env.HOST || '127.0.0.1',
   async fetch(req) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });

@@ -1,19 +1,8 @@
-import { config } from '@thakur-deploy/config';
-import { timingSafeEqual } from 'crypto';
+import { hasInternalToken, INTERNAL_TOKEN_HEADER } from '@thakur-deploy/config';
 import { Elysia, t } from 'elysia';
 import { GitHubService } from '../services/github-service';
 
-export const INTERNAL_TOKEN_HEADER = 'x-shipyard-internal';
-
-/** True when the request carries the token only the platform's own services can derive. */
-export function hasInternalToken(request: Request): boolean {
-  const expected = config.internalToken;
-  const given = request.headers.get(INTERNAL_TOKEN_HEADER);
-  if (!expected || !given) return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+export { hasInternalToken, INTERNAL_TOKEN_HEADER };
 
 /**
  * Calls from the Deploy Engine. The GitHub App key lives in the database, which only the

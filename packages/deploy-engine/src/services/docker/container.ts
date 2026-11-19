@@ -36,7 +36,9 @@ export async function runContainer(config: ContainerConfig): Promise<RunResult> 
     '--name',
     containerName,
     '-p',
-    `${hostPort}:${internalPort}`,
+    // Published on loopback only: Docker's own iptables rules bypass UFW, so a plain
+    // `-p port:port` would expose the app on every interface. Nginx proxies to it.
+    `127.0.0.1:${hostPort}:${internalPort}`,
     '--restart',
     'unless-stopped',
     '--memory',

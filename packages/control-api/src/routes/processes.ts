@@ -1,6 +1,51 @@
 import { Elysia } from 'elysia';
 
-const PM0_BASE = process.env.PM0_API_URL ?? 'http://127.0.0.1:9615/api/v1';
+/**
+ * pm0 HTTP APIs. The platform daemon runs ShipYard itself (and, before isolation, every
+ * app); the apps daemon (SHIPYARD_APP_USER) runs deployed apps. The API has no auth of
+ * its own, so serve it on a Unix socket: `unix:/path/to/http.sock`. A TCP loopback port
+ * lets every local account (including deployed apps) start processes as its owner.
+ */
+type Daemon = 'platform' | 'apps';
+interface DaemonEndpoint {
+  base: string;
+  unix?: string;
+}
+
+function endpoint(raw: string): DaemonEndpoint {
+  if (raw.startsWith('unix:')) return { base: 'http://localhost/api/v1', unix: raw.slice(5) };
+  return { base: raw.replace(/\/+$/, '') };
+}
+
+const DAEMONS: Partial<Record<Daemon, DaemonEndpoint>> = {
+  platform: endpoint(process.env.PM0_API_URL ?? 'http://127.0.0.1:9615/api/v1'),
+  ...(process.env.PM0_APPS_API_URL ? { apps: endpoint(process.env.PM0_APPS_API_URL) } : {}),
+};
+
+/** Targets for the apps daemon are prefixed (`apps:3`) since pm_ids overlap between daemons. */
+const APPS_PREFIX = 'apps:';
+
+function resolveTarget(target: string): { daemon: Daemon; target: string } {
+  if (target.startsWith(APPS_PREFIX)) {
+    if (!DAEMONS.apps) throw new Error('No apps pm0 daemon is configured (PM0_APPS_API_URL)');
+    return { daemon: 'apps', target: target.slice(APPS_PREFIX.length) };
+  }
+  return { daemon: 'platform', target };
+}
+
+function daemonFetch(daemon: Daemon, path: string, opts?: RequestInit): Promise<Response> {
+  const ep = DAEMONS[daemon];
+  if (!ep) throw new Error(`pm0 ${daemon} daemon is not configured`);
+  // Bun's fetch accepts `unix` to talk HTTP over a Unix domain socket.
+  return fetch(`${ep.base}${path}`, {
+    ...opts,
+    ...(ep.unix ? { unix: ep.unix } : {}),
+  } as RequestInit);
+}
+
+function configuredDaemons(): Daemon[] {
+  return (['apps', 'platform'] as const).filter((d) => DAEMONS[d]);
+}
 
 interface RawPM0Process {
   pid?: number;
@@ -79,9 +124,12 @@ function getErrorMessage(error: unknown): string {
  * Everything else (the full child `env`, log paths, node_args, …) is
  * dropped so we never leak secrets or useless system env vars.
  */
-function sanitizeProcess(proc: RawPM0Process) {
+function sanitizeProcess(proc: RawPM0Process, daemon: Daemon = 'platform') {
   const env = proc.pm2_env ?? {};
   return {
+    daemon,
+    // What the dashboard sends back to act on this process.
+    target: daemon === 'apps' ? `${APPS_PREFIX}${proc.pm_id}` : String(proc.pm_id),
     pid: proc.pid,
     name: proc.name,
     pm_id: proc.pm_id,
@@ -105,8 +153,8 @@ function sanitizeProcess(proc: RawPM0Process) {
   };
 }
 
-async function pm0Fetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${PM0_BASE}${path}`, opts);
+async function pm0Fetch(path: string, opts?: RequestInit, daemon: Daemon = 'platform') {
+  const res = await daemonFetch(daemon, path, opts);
   const text = await res.text();
 
   if (!res.ok) {
@@ -122,50 +170,66 @@ async function pm0Fetch(path: string, opts?: RequestInit) {
   return text ? JSON.parse(text) : null;
 }
 
+/** Proxy an action on one process to the daemon that owns it. */
+function onTarget(target: string, suffix: string, opts?: RequestInit) {
+  const t = resolveTarget(target);
+  return pm0Fetch(`/processes/${encodeURIComponent(t.target)}${suffix}`, opts, t.daemon);
+}
+
 export const processesRoutes = new Elysia().group('/pm0', (app) =>
   app
-    // Daemon health
+    // Daemon health (the platform daemon, falling back to the apps daemon)
     .get('/health', async ({ set }) => {
-      try {
-        return await pm0Fetch('/health');
-      } catch (e: unknown) {
-        set.status = 502;
-        return { error: `PM0 daemon unreachable: ${getErrorMessage(e)}` };
+      let lastError: unknown;
+      for (const daemon of ['platform', 'apps'] as const) {
+        if (!DAEMONS[daemon]) continue;
+        try {
+          return await pm0Fetch('/health', undefined, daemon);
+        } catch (e) {
+          lastError = e;
+        }
       }
+      set.status = 502;
+      return { error: `PM0 daemon unreachable: ${getErrorMessage(lastError)}` };
     })
 
-    // List all processes (sanitized). Pass ?system=true for host telemetry.
+    // List all processes (sanitized) from every daemon. Pass ?system=true for host telemetry.
     .get('/processes', async ({ query, set }) => {
-      try {
-        const withSystem = query?.system === 'true' || query?.system === '1';
+      const withSystem = query?.system === 'true' || query?.system === '1';
+      const processes: ReturnType<typeof sanitizeProcess>[] = [];
+      let system: ReturnType<typeof sanitizeSystem> = null;
+      let reached = 0;
+      let lastError: unknown;
 
-        if (!withSystem) {
-          const procs = (await pm0Fetch('/processes')) as RawPM0Process[];
-          return (procs ?? []).map(sanitizeProcess);
+      for (const daemon of configuredDaemons()) {
+        try {
+          const data = (await pm0Fetch(
+            withSystem ? '/processes?system=true' : '/processes',
+            undefined,
+            daemon,
+          )) as RawPM0ListResponse | RawPM0Process[] | null;
+          reached++;
+          const list = Array.isArray(data) ? data : (data?.processes ?? []);
+          processes.push(...list.map((p) => sanitizeProcess(p, daemon)));
+          if (!Array.isArray(data) && data?.system && !system) system = sanitizeSystem(data.system);
+        } catch (e) {
+          lastError = e;
         }
-
-        const data = (await pm0Fetch('/processes?system=true')) as
-          RawPM0ListResponse | RawPM0Process[];
-
-        if (Array.isArray(data)) {
-          return { processes: data.map(sanitizeProcess), system: null };
-        }
-
-        return {
-          processes: (data.processes ?? []).map(sanitizeProcess),
-          system: sanitizeSystem(data.system),
-        };
-      } catch (e: unknown) {
-        set.status = 502;
-        return { error: getErrorMessage(e) };
       }
+
+      if (reached === 0) {
+        set.status = 502;
+        return { error: getErrorMessage(lastError) };
+      }
+      return withSystem ? { processes, system } : processes;
     })
 
     // Describe a single process (sanitized)
     .get('/processes/:target', async ({ params: { target }, set }) => {
       try {
-        const proc = (await pm0Fetch(`/processes/${encodeURIComponent(target)}`)) as RawPM0Process;
-        return sanitizeProcess(proc);
+        const t = resolveTarget(target);
+        const proc = (await onTarget(target, '')) as RawPM0Process;
+        return sanitizeProcess(proc, t.daemon);
       } catch (e: unknown) {
         const errorMsg = getErrorMessage(e);
         set.status = errorMsg.includes('no matching') ? 404 : 502;
@@ -176,9 +240,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Stop
     .post('/processes/:target/stop', async ({ params: { target }, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}/stop`, {
-          method: 'POST',
-        });
+        return await onTarget(target, '/stop', { method: 'POST' });
       } catch (e: unknown) {
         set.status = 500;
         return { error: getErrorMessage(e) };
@@ -188,7 +250,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Restart
     .post('/processes/:target/restart', async ({ params: { target }, body, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}/restart`, {
+        return await onTarget(target, '/restart', {
           method: 'POST',
           headers: body ? { 'content-type': 'application/json' } : undefined,
           body: body ? JSON.stringify(body) : undefined,
@@ -202,9 +264,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Reload
     .post('/processes/:target/reload', async ({ params: { target }, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}/reload`, {
-          method: 'POST',
-        });
+        return await onTarget(target, '/reload', { method: 'POST' });
       } catch (e: unknown) {
         set.status = 500;
         return { error: getErrorMessage(e) };
@@ -214,9 +274,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Delete
     .delete('/processes/:target', async ({ params: { target }, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}`, {
-          method: 'DELETE',
-        });
+        return await onTarget(target, '', { method: 'DELETE' });
       } catch (e: unknown) {
         set.status = 500;
         return { error: getErrorMessage(e) };
@@ -226,7 +284,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Scale
     .post('/processes/:target/scale', async ({ params: { target }, body, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}/scale`, {
+        return await onTarget(target, '/scale', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
@@ -237,10 +295,15 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
       }
     })
 
-    // Save dump
+    // Save dump (every daemon, so a reboot restores both)
     .post('/daemon/save', async ({ set }) => {
       try {
-        return await pm0Fetch('/daemon/save', { method: 'POST' });
+        const results = [];
+        for (const daemon of configuredDaemons()) {
+          results.push(await pm0Fetch('/daemon/save', { method: 'POST' }, daemon));
+        }
+        const saved = results.reduce((n, r) => n + (Number(r?.saved_count) || 0), 0);
+        return { ...results[0], saved_count: saved };
       } catch (e: unknown) {
         set.status = 500;
         return { error: getErrorMessage(e) };
@@ -250,7 +313,11 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Resurrect
     .post('/daemon/resurrect', async ({ set }) => {
       try {
-        return await pm0Fetch('/daemon/resurrect', { method: 'POST' });
+        const results = [];
+        for (const daemon of configuredDaemons()) {
+          results.push(await pm0Fetch('/daemon/resurrect', { method: 'POST' }, daemon));
+        }
+        return results[results.length - 1];
       } catch (e: unknown) {
         set.status = 500;
         return { error: getErrorMessage(e) };
@@ -266,8 +333,11 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
             if (v !== undefined && v !== '') qs.set(k, v);
           }
         }
-        const url = `${PM0_BASE}/processes/${encodeURIComponent(target)}/logs?${qs.toString()}`;
-        const upstream = await fetch(url);
+        const t = resolveTarget(target);
+        const upstream = await daemonFetch(
+          t.daemon,
+          `/processes/${encodeURIComponent(t.target)}/logs?${qs.toString()}`,
+        );
 
         if (!upstream.ok) {
           set.status = upstream.status;
@@ -290,9 +360,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // Clear logs (truncates files and drops the in-memory backlog)
     .post('/processes/:target/logs/clear', async ({ params: { target }, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}/logs/clear`, {
-          method: 'POST',
-        });
+        return await onTarget(target, '/logs/clear', { method: 'POST' });
       } catch (e: unknown) {
         const errorMsg = getErrorMessage(e);
         set.status = errorMsg.includes('no matching') ? 404 : 500;
@@ -303,9 +371,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     // DELETE is an equivalent alias for clearing logs
     .delete('/processes/:target/logs', async ({ params: { target }, set }) => {
       try {
-        return await pm0Fetch(`/processes/${encodeURIComponent(target)}/logs`, {
-          method: 'DELETE',
-        });
+        return await onTarget(target, '/logs', { method: 'DELETE' });
       } catch (e: unknown) {
         const errorMsg = getErrorMessage(e);
         set.status = errorMsg.includes('no matching') ? 404 : 500;
