@@ -170,6 +170,14 @@ export interface MigrationSuggestion {
 }
 
 /** A deployable folder found by the repository scan. */
+/** A GitHub repository's branches, default branch first. */
+export interface BranchList {
+  default_branch: string | null;
+  branches: { name: string; protected: boolean }[];
+  /** More branches exist than were listed. */
+  truncated: boolean;
+}
+
 export interface RepoFolder {
   path: string;
   name: string;

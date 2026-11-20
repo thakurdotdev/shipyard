@@ -15,6 +15,7 @@ import { MAX_KEEP_BUILDS, MIN_KEEP_BUILDS } from '../services/build-retention';
 import { EventStreamService } from '../services/event-stream-service';
 import { siteNameFor } from '../services/domain-names';
 import { deployEngineFetch } from '../services/deploy-engine-client';
+import { BranchError, ProjectBranch } from '../services/project-branch';
 
 const appTypeSchema = t.Union(
   APP_TYPES.map((type) => t.Literal(type)) as [
@@ -65,6 +66,12 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
           set.status = 401;
           return { error: 'Unauthorized' };
         }
+        if (body.github_branch !== undefined) {
+          await ProjectBranch.assertDeployable(body.github_branch, {
+            installationId: body.github_installation_id ?? null,
+            repoFullName: body.github_repo_full_name ?? null,
+          });
+        }
         return await ProjectService.create({
           ...body,
           owner_id: ownerId,
@@ -95,7 +102,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         env_vars: t.Optional(t.Record(t.String(), t.String())),
         github_repo_id: t.Optional(t.String()),
         github_repo_full_name: t.Optional(t.String()),
-        github_branch: t.Optional(t.String()),
+        github_branch: t.Optional(t.String({ maxLength: 255 })),
         github_installation_id: t.Optional(t.String()),
         auto_deploy: t.Optional(t.Boolean()),
         auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
@@ -125,6 +132,26 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
       access_protected: await GateService.isEnabled(id),
     };
   })
+  .get('/:id/branches', async ({ params: { id }, request, set }) => {
+    const project = await ProjectAccessService.getOwnedProject(request, id);
+    if (!project) {
+      set.status = 404;
+      return { error: 'Project not found' };
+    }
+    if (!project.github_installation_id || !project.github_repo_full_name) {
+      set.status = 400;
+      return { error: 'This project is not connected to a GitHub repository' };
+    }
+    try {
+      return await ProjectBranch.list(
+        project.github_installation_id,
+        project.github_repo_full_name,
+      );
+    } catch (e: any) {
+      set.status = e instanceof BranchError ? e.status : 502;
+      return { error: e.message || 'Could not list branches' };
+    }
+  })
   .get('/:id/events', async ({ params: { id }, request, set }) => {
     const project = await ProjectAccessService.getOwnedProject(request, id);
     if (!project) {
@@ -142,9 +169,20 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
           set.status = 401;
           return { error: 'Unauthorized' };
         }
-        if (!(await ProjectAccessService.getOwnedProject(request, id))) {
+        const project = await ProjectAccessService.getOwnedProject(request, id);
+        if (!project) {
           set.status = 404;
           return { error: 'Project not found' };
+        }
+        if (body.github_branch !== undefined && body.github_branch !== project.github_branch) {
+          if (!project.github_repo_id) {
+            set.status = 400;
+            return { error: 'Only projects connected to a GitHub repository have a branch' };
+          }
+          await ProjectBranch.assertDeployable(body.github_branch, {
+            installationId: project.github_installation_id,
+            repoFullName: project.github_repo_full_name,
+          });
         }
         if (body.build_command) {
           SecurityService.validateBuildCommand(body.build_command);
@@ -170,6 +208,7 @@ export const projectsRoutes = new Elysia({ prefix: '/projects' })
         root_directory: t.Optional(t.String()),
         // The domain changes through PUT /domains/project/:id, which sets it up safely.
         port: t.Optional(t.Integer({ minimum: 1024, maximum: 65535 })),
+        github_branch: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
         auto_deploy: t.Optional(t.Boolean()),
         auto_deploy_paths: t.Optional(t.Union([t.String({ maxLength: 16384 }), t.Null()])),
         keep_builds: t.Optional(

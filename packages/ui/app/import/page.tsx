@@ -147,7 +147,7 @@ export default function ImportPage() {
         port: config.port,
         github_repo_id: selectedRepo.id.toString(),
         github_repo_full_name: selectedRepo.full_name,
-        github_branch: selectedRepo.default_branch,
+        github_branch: config.branch,
         github_installation_id: selectedInstallation.toString(),
         env_vars: config.envVars,
         auto_deploy: config.autoDeploy,
@@ -259,6 +259,9 @@ export default function ImportPage() {
           onBack={() => goTo(autoPickedFolder ? 'repo' : 'directory')}
           backLabel={autoPickedFolder ? 'Change repo' : 'Change app'}
           onSubmit={handleDeploy}
+          loadBranches={() =>
+            api.getRepoBranches(selectedInstallation ?? 0, selectedRepo.full_name)
+          }
           initialRootDirectory={selectedFolder?.path || './'}
           initialFramework={selectedFolder?.framework || undefined}
           detectionReason={selectedFolder?.detectionReason}
