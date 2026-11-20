@@ -3,6 +3,7 @@ import { Queue, QueueEvents, Job } from 'bullmq';
 import { QUEUE_CONFIG } from './config';
 import { EventStreamService } from '../services/event-stream-service';
 import { AppType } from '../config/framework-config';
+import { selectSupersededJobs, type QueuedBuildJob } from './supersede';
 
 /**
  * Build job data structure
@@ -16,6 +17,10 @@ export interface BuildJobData {
   app_type: AppType;
   env_vars: Record<string, string>;
   installation_id?: string;
+  /** Exact commit to build. Absent for projects with no known commit (built at the branch head). */
+  commit_sha?: string;
+  /** Branch to clone, for projects connected to a GitHub repository. */
+  branch?: string;
 }
 
 /**
@@ -144,7 +149,9 @@ export const BuildQueue = {
   /**
    * Add a build job to the queue
    */
-  async addJob(data: BuildJobData): Promise<{ jobId: string; position: number }> {
+  async addJob(
+    data: BuildJobData,
+  ): Promise<{ jobId: string; position: number; timestamp: number }> {
     if (!buildQueue) {
       throw new Error('Build queue not initialized');
     }
@@ -160,7 +167,29 @@ export const BuildQueue = {
     return {
       jobId: job.id!,
       position,
+      timestamp: job.timestamp,
     };
+  },
+
+  /**
+   * Removes the project's builds that were queued before `newer` and have not started.
+   * Returns the build ids actually removed: a job the worker picks up in the meantime
+   * is locked, cannot be removed, and simply runs.
+   */
+  async removeSuperseded(newer: QueuedBuildJob): Promise<string[]> {
+    if (!buildQueue) return [];
+
+    const waiting = await buildQueue.getJobs(['waiting', 'prioritized', 'delayed', 'paused']);
+    const removed: string[] = [];
+    for (const job of selectSupersededJobs(waiting, newer)) {
+      try {
+        await job.remove();
+        removed.push(job.data.build_id);
+      } catch (error) {
+        console.log(`[BuildQueue] Job ${job.id} started before it could be superseded:`, error);
+      }
+    }
+    return removed;
   },
 
   /**

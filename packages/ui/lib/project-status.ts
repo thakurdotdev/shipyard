@@ -62,6 +62,13 @@ export function getProjectStatus(
         };
       case 'failed':
         return { ...common, label: 'Failed', tone: 'error', detail: 'Latest build failed' };
+      case 'cancelled':
+        return {
+          ...common,
+          label: 'Skipped',
+          tone: 'neutral',
+          detail: 'Latest build was skipped for a newer commit',
+        };
       case 'success':
         return {
           ...common,

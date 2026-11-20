@@ -25,6 +25,7 @@ describe('overview latest deployment status', () => {
     ['pending', 'Queued', 'progress'],
     ['building', 'Building', 'progress'],
     ['failed', 'Failed', 'error'],
+    ['cancelled', 'Skipped', 'neutral'],
     ['success', 'Deploying', 'progress'],
   ] as const)('a newer %s build supersedes an older live deployment', (status, label, tone) => {
     const result = getProjectStatus({

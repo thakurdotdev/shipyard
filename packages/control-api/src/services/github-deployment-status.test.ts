@@ -67,6 +67,7 @@ describe('mapState', () => {
     expect(mapState('success')).toMatchObject({ deployment: 'success', commit: 'success' });
     expect(mapState('failure')).toMatchObject({ deployment: 'failure', commit: 'failure' });
     expect(mapState('inactive')).toMatchObject({ deployment: 'inactive', commit: null });
+    expect(mapState('superseded')).toMatchObject({ deployment: 'inactive', commit: 'success' });
   });
 
   it('keeps descriptions within GitHub’s 140 character limit', () => {
@@ -108,6 +109,30 @@ describe('GitHubDeploymentStatus.report', () => {
       .filter((c) => c.url.endsWith('/statuses/abc123'))
       .map((c) => c.body.state);
     expect(commitStates).toEqual(['pending', 'pending', 'success']);
+  });
+
+  it('closes a superseded build: check passes with the reason, deployment goes inactive', async () => {
+    GitHubDeploymentStatus.report('build-1234-5678', 'queued');
+    await GitHubDeploymentStatus.report(
+      'build-1234-5678',
+      'superseded',
+      'Superseded by commit def4567',
+    );
+
+    const commitStatuses = calls.filter((c) => c.url.endsWith('/statuses/abc123'));
+    expect(commitStatuses.map((c) => c.body.state)).toEqual(['pending', 'success']);
+    expect(commitStatuses[1].body.description).toBe('Superseded by commit def4567');
+
+    const deploymentStates = calls
+      .filter((c) => c.url.endsWith('/deployments/777/statuses'))
+      .map((c) => c.body.state);
+    expect(deploymentStates).toEqual(['queued', 'inactive']);
+  });
+
+  it('creates no GitHub deployment just to mark it superseded', async () => {
+    await GitHubDeploymentStatus.report('build-1234-5678', 'superseded');
+    expect(calls.filter((c) => c.url.includes('/deployments'))).toHaveLength(0);
+    expect(calls.filter((c) => c.url.endsWith('/statuses/abc123'))).toHaveLength(1);
   });
 
   it('skips builds without a commit', async () => {

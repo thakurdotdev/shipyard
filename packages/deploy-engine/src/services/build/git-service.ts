@@ -2,6 +2,33 @@ import { mkdir } from 'fs/promises';
 import { removeAppTree } from '../app-user';
 import simpleGit from 'simple-git';
 
+/** What to check out. Both are optional: without them the default branch head is used. */
+export interface CloneTarget {
+  branch?: string;
+  /** Full commit SHA; the checkout is left detached at it. */
+  commit?: string;
+}
+
+/** Full SHA-1 or SHA-256 object name, lowercase as GitHub sends it. */
+export function isCommitSha(value: string): boolean {
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
+}
+
+/**
+ * Rejects what `git check-ref-format` rejects that could matter here: option-like names,
+ * whitespace and control characters, and ref syntax (`..`, `@{`, `~^:?*[\`).
+ */
+export function isSafeBranchName(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 255 &&
+    !value.startsWith('-') &&
+    !value.includes('..') &&
+    !value.includes('@{') &&
+    !/[\x00-\x20\x7f~^:?*[\\]/.test(value)
+  );
+}
+
 /**
  * Clones a repository into the deployment directory.
  * When an installation token is provided the repo is cloned over HTTPS using it.
@@ -12,7 +39,15 @@ export const GitService = {
     targetDir: string,
     token?: string,
     onProgress?: (message: string) => void,
+    target: CloneTarget = {},
   ) {
+    if (target.branch !== undefined && !isSafeBranchName(target.branch)) {
+      throw new Error(`Invalid branch name: ${JSON.stringify(target.branch)}`);
+    }
+    if (target.commit !== undefined && !isCommitSha(target.commit)) {
+      throw new Error(`Invalid commit SHA: ${JSON.stringify(target.commit)}`);
+    }
+
     // The token travels as an HTTP header set through git's environment, never in the
     // URL: a URL credential is visible to every local account in the process list and is
     // saved in .git/config, where the build scripts that run next could read it.
@@ -40,7 +75,9 @@ export const GitService = {
       await removeAppTree(targetDir);
       await mkdir(targetDir, { recursive: true });
       const cloneStartedAt = performance.now();
-      report(`Repository directory prepared in ${((cloneStartedAt - startedAt) / 1000).toFixed(1)}s`);
+      report(
+        `Repository directory prepared in ${((cloneStartedAt - startedAt) / 1000).toFixed(1)}s`,
+      );
 
       phase = 'Git connecting/downloading repository';
       report(phase);
@@ -57,8 +94,28 @@ export const GitService = {
         },
       });
       if (token) git.env({ ...gitBaseEnv(), ...auth });
-      await git.clone(repoUrl, targetDir, ['--progress']);
+      const cloneArgs = ['--progress'];
+      if (target.branch) cloneArgs.push('--branch', target.branch, '--single-branch');
+      await git.clone(repoUrl, targetDir, cloneArgs);
       report(`Git clone completed in ${((performance.now() - cloneStartedAt) / 1000).toFixed(1)}s`);
+
+      if (target.commit) {
+        const short = target.commit.slice(0, 7);
+        phase = `Checking out commit ${short}`;
+        report(phase);
+        const repo = simpleGit({ baseDir: targetDir, unsafe: { allowUnsafeConfigEnvCount: true } });
+        if (token) repo.env({ ...gitBaseEnv(), ...auth });
+        try {
+          await repo.checkout(['--detach', target.commit]);
+        } catch {
+          // Not in the cloned history (e.g. force-pushed away): ask the remote for it.
+          phase = `Fetching commit ${short}`;
+          report(phase);
+          await repo.fetch(['origin', target.commit]);
+          await repo.checkout(['--detach', target.commit]);
+        }
+        report(`Checked out commit ${short}`);
+      }
     } finally {
       clearInterval(heartbeat);
     }

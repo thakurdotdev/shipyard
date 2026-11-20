@@ -12,6 +12,14 @@ import {
   type DeployFilterDecision,
 } from '../services/deploy-change-detection';
 import { RepoChangeResolver } from '../services/deploy-change-resolver';
+import { createKeyedLock } from '../utils/keyed-lock';
+
+/**
+ * Pushes to one branch are handled one at a time, in the order they arrive. Each push
+ * supersedes the builds queued before it, so if a slow earlier push finished queueing
+ * after a later one, it would cancel the newer commit and deploy older code.
+ */
+const pushLock = createKeyedLock(2 * 60 * 1000);
 
 /** Commit SHA currently live for a project (the build behind its active deployment). */
 async function getDeployedCommitSha(projectId: string): Promise<string | null> {
@@ -88,6 +96,7 @@ export const githubWebhook = new Elysia()
       return { error: 'Invalid JSON payload' };
     }
 
+    let releasePushLock: (() => void) | undefined;
     try {
       // =====================
       // INSTALLATION EVENTS
@@ -157,6 +166,7 @@ export const githubWebhook = new Elysia()
 
         // Find connected projects
         const repoId = repo.id.toString();
+        releasePushLock = await pushLock.acquire(`${repoId}:${branch}`);
         const connectedProjects = await db
           .select()
           .from(projects)
@@ -323,5 +333,7 @@ export const githubWebhook = new Elysia()
       log('error', 'Error processing webhook', { error: String(e) });
       set.status = 500;
       return { error: 'Internal processing error' };
+    } finally {
+      releasePushLock?.();
     }
   });

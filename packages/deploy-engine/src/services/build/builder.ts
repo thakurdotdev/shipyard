@@ -20,7 +20,7 @@ import {
   isExecutableFile,
   parseGoBuildCommand,
 } from '../../utils/go';
-import { GitService } from './git-service';
+import { GitService, isCommitSha, isSafeBranchName } from './git-service';
 import { WorkerGitHubService } from './github-service';
 import { LogStreamer } from './log-streamer';
 import { getStaticDirectory } from '../static-site';
@@ -38,6 +38,10 @@ export interface BuildJob {
   app_type: AppType;
   env_vars: Record<string, string>;
   installation_id?: string;
+  /** Exact commit to build; absent means the branch head at clone time. */
+  commit_sha?: string;
+  /** Branch to clone; absent means the repository's default branch. */
+  branch?: string;
 }
 
 /** Written once a build completes so retries/re-triggers can short-circuit. */
@@ -59,6 +63,12 @@ export const Builder = {
     assertSafeId('project', job.project_id);
     assertSafeId('build', job.build_id);
     if (job.installation_id) assertGitHubRepoUrl(job.github_url);
+    if (job.commit_sha !== undefined && !isCommitSha(job.commit_sha)) {
+      throw new Error('Invalid commit SHA in build job');
+    }
+    if (job.branch !== undefined && !isSafeBranchName(job.branch)) {
+      throw new Error('Invalid branch name in build job');
+    }
 
     const buildDir = getBuildExtractDir(job.project_id, job.build_id);
     const controlApiUrl = config.controlApiUrl;
@@ -134,10 +144,25 @@ export const Builder = {
         `Starting build for ${job.build_id}\n`,
         'info',
       );
-      await LogStreamer.stream(job.build_id, job.project_id, 'Cloning repository...\n', 'info');
-      await GitService.clone(job.github_url, buildDir, token, (message) => {
-        void LogStreamer.stream(job.build_id, job.project_id, `${message}\n`, 'info');
-      });
+      const source = [
+        job.branch ? `branch ${job.branch}` : 'default branch',
+        job.commit_sha ? `commit ${job.commit_sha.slice(0, 7)}` : 'latest commit',
+      ].join(', ');
+      await LogStreamer.stream(
+        job.build_id,
+        job.project_id,
+        `Cloning repository (${source})...\n`,
+        'info',
+      );
+      await GitService.clone(
+        job.github_url,
+        buildDir,
+        token,
+        (message) => {
+          void LogStreamer.stream(job.build_id, job.project_id, `${message}\n`, 'info');
+        },
+        { branch: job.branch, commit: job.commit_sha },
+      );
       // From here on, everything in the checkout runs as the unprivileged app user.
       await claimForAppUser(buildDir);
 

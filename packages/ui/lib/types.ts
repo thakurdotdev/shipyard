@@ -62,7 +62,8 @@ export type DeploymentStatus =
 export interface Build {
   id: string;
   project_id: string;
-  status: 'pending' | 'building' | 'success' | 'failed';
+  /** `cancelled`: skipped before it started because a newer commit was queued. */
+  status: 'pending' | 'building' | 'success' | 'failed' | 'cancelled';
   logs: string | null;
   artifact_id: string | null;
   created_at: string;
