@@ -132,7 +132,7 @@ export const builds = pgTable(
     project_id: uuid('project_id')
       .references(() => projects.id)
       .notNull(),
-    status: varchar('status', { length: 50 }).notNull(), // 'pending' | 'building' | 'success' | 'failed'
+    status: varchar('status', { length: 50 }).notNull(), // 'pending' | 'building' | 'success' | 'failed' | 'cancelled'
     commit_sha: text('commit_sha'), // For duplicate build detection
     commit_message: text('commit_message'), // Git commit message
     logs: text('logs'),

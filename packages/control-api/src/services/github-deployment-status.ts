@@ -16,7 +16,8 @@ import { GitHubService } from './github-service';
  * is best effort: GitHub being down or a missing permission never affects a deploy.
  */
 
-export type ReportState = 'queued' | 'building' | 'deploying' | 'success' | 'failure' | 'inactive';
+export type ReportState =
+  'queued' | 'building' | 'deploying' | 'success' | 'failure' | 'inactive' | 'superseded';
 
 type DeploymentState = 'queued' | 'in_progress' | 'success' | 'failure' | 'inactive';
 type CommitState = 'pending' | 'success' | 'failure';
@@ -35,6 +36,13 @@ const MAPPING: Record<ReportState, StateMapping> = {
   failure: { deployment: 'failure', commit: 'failure', description: 'Deployment failed' },
   // A stopped deployment: the environment goes inactive, the commit's check stays as it was.
   inactive: { deployment: 'inactive', commit: null, description: 'Deployment stopped' },
+  // Skipped because a newer commit was queued. Commit statuses have no "cancelled" state,
+  // and a red ✗ would read as a broken commit, so the check passes with an explanation.
+  superseded: {
+    deployment: 'inactive',
+    commit: 'success',
+    description: 'Skipped: a newer commit is being deployed',
+  },
 };
 
 export function mapState(state: ReportState, description?: string): StateMapping {
@@ -162,7 +170,7 @@ async function send(buildId: string, state: ReportState, description?: string) {
     let deploymentId = build.github_deployment_id;
     if (!deploymentId) {
       // Nothing to mark inactive if GitHub never heard of this build.
-      if (state === 'inactive') return;
+      if (mapping.deployment === 'inactive') return;
       const res = await githubFetch(token, `/repos/${repo}/deployments`, {
         method: 'POST',
         body: {

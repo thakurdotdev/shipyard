@@ -36,7 +36,7 @@ export function BuildList({ builds, projectId }: { builds: any[]; projectId: str
                       : 'secondary'
                 }
               >
-                {build.status}
+                {build.status === 'cancelled' ? 'skipped' : build.status}
               </Badge>
             </TableCell>
             <TableCell>

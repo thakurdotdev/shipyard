@@ -33,19 +33,30 @@ import { AccessProtectionCard } from './access-protection-card';
 import { DomainSettingsCard } from './domain-settings-card';
 import { FRAMEWORK_OPTIONS, AppType, isStaticFramework } from '@/lib/framework-config';
 import { PreDeployCommandInput } from '@/components/deploy/pre-deploy-command-input';
+import { BranchSelect } from '@/components/github/branch-select';
 
 interface SettingsTabProps {
   project: Project;
   onProtectionChange?: (enabled: boolean) => void;
   onDomainChange?: () => void;
+  /** Called after a change the rest of the page shows, such as the branch. */
+  onProjectChange?: () => void;
 }
 
-export function SettingsTab({ project, onProtectionChange, onDomainChange }: SettingsTabProps) {
+export function SettingsTab({
+  project,
+  onProtectionChange,
+  onDomainChange,
+  onProjectChange,
+}: SettingsTabProps) {
   const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [confirmName, setConfirmName] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [autoDeploy, setAutoDeploy] = useState(project.auto_deploy ?? true);
+  const [savedBranch, setSavedBranch] = useState(project.github_branch || 'main');
+  const [branch, setBranch] = useState(project.github_branch || 'main');
+  const [savingBranch, setSavingBranch] = useState(false);
   const [savedAutoDeployPaths, setSavedAutoDeployPaths] = useState(project.auto_deploy_paths ?? '');
   const [autoDeployPaths, setAutoDeployPaths] = useState(project.auto_deploy_paths ?? '');
   const autoDeployPathsChanged = autoDeployPaths.trim() !== savedAutoDeployPaths.trim();
@@ -125,6 +136,39 @@ export function SettingsTab({ project, onProtectionChange, onDomainChange }: Set
       });
     } finally {
       setSavingBuildSettings(false);
+    }
+  };
+
+  const handleSaveBranch = async () => {
+    setSavingBranch(true);
+    try {
+      const updated = await api.updateProject(project.id, { github_branch: branch });
+      const stored = updated?.github_branch || branch;
+      setSavedBranch(stored);
+      setBranch(stored);
+      onProjectChange?.();
+      toast.success(`Now deploying from ${stored}`, {
+        description: autoDeploy
+          ? `Pushes to ${stored} deploy from now on. The live deployment stays until then.`
+          : 'Manual deploys build this branch. The live deployment stays until the next one.',
+        action: {
+          label: 'Deploy now',
+          onClick: () => {
+            api
+              .triggerBuild(project.id)
+              .then(() => toast.success(`Deploying the latest commit on ${stored}`))
+              .catch((e: Error) =>
+                toast.error('Could not start the deploy', { description: e.message }),
+              );
+          },
+        },
+      });
+    } catch (e: any) {
+      toast.error('Failed to change the branch', {
+        description: e.message || 'An unexpected error occurred',
+      });
+    } finally {
+      setSavingBranch(false);
     }
   };
 
@@ -330,6 +374,60 @@ export function SettingsTab({ project, onProtectionChange, onDomainChange }: Set
 
         <AccessProtectionCard projectId={project.id} onProtectionChange={onProtectionChange} />
 
+        {/* Production branch */}
+        {project.github_installation_id && project.github_repo_id && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="w-5 h-5" /> Production branch
+              </CardTitle>
+              <CardDescription>
+                The branch every build clones
+                {project.github_repo_full_name ? ` from ${project.github_repo_full_name}` : ''}.
+                With auto-deploy on, pushes to it deploy.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="min-w-0 flex-1">
+                <Label htmlFor="production-branch" className="sr-only">
+                  Production branch
+                </Label>
+                <BranchSelect
+                  id="production-branch"
+                  value={branch}
+                  onChange={setBranch}
+                  load={() => api.getProjectBranches(project.id)}
+                  sourceKey={project.id}
+                  disabled={savingBranch}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                {branch !== savedBranch && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setBranch(savedBranch)}
+                    disabled={savingBranch}
+                  >
+                    Reset
+                  </Button>
+                )}
+                <Button
+                  onClick={handleSaveBranch}
+                  disabled={branch === savedBranch || savingBranch}
+                >
+                  {savingBranch ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    'Save branch'
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Auto Deploy */}
         {project.github_installation_id && (
           <Card>
@@ -340,8 +438,8 @@ export function SettingsTab({ project, onProtectionChange, onDomainChange }: Set
                     <GitBranch className="w-5 h-5" /> Auto-deploy
                   </CardTitle>
                   <CardDescription>
-                    Automatically trigger a new deployment when you push to the connected git
-                    branch.
+                    Automatically trigger a new deployment when you push to{' '}
+                    <code>{savedBranch}</code>.
                   </CardDescription>
                 </div>
                 <Switch

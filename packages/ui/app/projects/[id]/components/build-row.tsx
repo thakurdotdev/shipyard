@@ -1,7 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, GitCommit, Loader2, Terminal, Trash2, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  GitCommit,
+  Loader2,
+  SkipForward,
+  Terminal,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { LogViewer } from '@/components/log-viewer/log-viewer';
 import {
   AlertDialog,
@@ -130,7 +138,8 @@ export function BuildRow({
   const shortId = build.id.slice(0, 8);
   const success = build.status === 'success';
   const failed = build.status === 'failed';
-  const tone = success ? 'success' : failed ? 'error' : 'progress';
+  const skipped = build.status === 'cancelled';
+  const tone = success ? 'success' : failed ? 'error' : skipped ? 'neutral' : 'progress';
   const deployStatus = build.deployment_status as string | undefined;
   const deployBusy =
     !!deployStatus && (isPipelineStatus(deployStatus) || deployStatus === 'activating');
@@ -165,6 +174,8 @@ export function BuildRow({
             <CheckCircle2 className="size-4" />
           ) : failed ? (
             <XCircle className="size-4" />
+          ) : skipped ? (
+            <SkipForward className="size-4" />
           ) : (
             <Loader2 className="size-4 animate-spin" />
           )}
@@ -174,7 +185,11 @@ export function BuildRow({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-mono text-sm font-medium">#{shortId}</span>
             <StatusPill tone={tone}>
-              <span className="capitalize">{build.status}</span>
+              {skipped ? (
+                <span title="A newer commit was queued before this build started">Skipped</span>
+              ) : (
+                <span className="capitalize">{build.status}</span>
+              )}
             </StatusPill>
             {deployStatus &&
               !isCurrent &&

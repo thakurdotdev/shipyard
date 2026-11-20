@@ -2,6 +2,7 @@ import { API_URL } from '@/lib/api-url';
 
 import {
   AccessSettings,
+  BranchList,
   DomainCheck,
   DomainSwitch,
   NotificationPreferences,
@@ -341,6 +342,27 @@ export const api = {
       throw new Error(error.error || error.message || 'Failed to read the repository');
     }
     return res.json() as Promise<{ folders: RepoFolder[] }>;
+  },
+  async getRepoBranches(installationId: number, fullName: string): Promise<BranchList> {
+    const res = await fetch(
+      `${API_URL}/github/installations/${installationId}/repositories/${fullName}/branches`,
+      { credentials: 'include' },
+    );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Could not list branches' }));
+      throw new Error(error.error || error.message || 'Could not list branches');
+    }
+    return res.json();
+  },
+  async getProjectBranches(projectId: string): Promise<BranchList> {
+    const res = await fetch(`${API_URL}/projects/${projectId}/branches`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Could not list branches' }));
+      throw new Error(error.error || error.message || 'Could not list branches');
+    }
+    return res.json();
   },
   async getGithubRepositories(installationId: number) {
     const res = await fetch(`${API_URL}/github/installations/${installationId}/repositories`, {

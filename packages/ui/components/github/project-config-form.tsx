@@ -44,6 +44,8 @@ import {
   toAccessPayload,
 } from '@/components/deploy/password-protection-fields';
 import { GitRepository } from './repository-list';
+import { BranchSelect } from './branch-select';
+import type { BranchList } from '@/lib/types';
 import { EnvEditor, EnvRow, envRowsError, envRowsToEntries } from '@/components/env/env-editor';
 import {
   AppType,
@@ -63,6 +65,8 @@ interface ProjectConfigFormProps {
   onBack: () => void;
   backLabel?: string;
   onSubmit: (config: ProjectConfig) => void;
+  /** Lists the repository's branches for the branch picker. */
+  loadBranches: () => Promise<BranchList>;
   initialRootDirectory?: string;
   initialFramework?: string;
   /** Why the framework was detected, e.g. "Found bun.lock". */
@@ -84,6 +88,8 @@ export interface ProjectConfig {
   buildCommand: string;
   preDeployCommand: string | null;
   rootDirectory: string;
+  /** Branch whose pushes deploy, and which every build clones. */
+  branch: string;
   domain?: string;
   port?: number;
   envVars: Record<string, string>;
@@ -192,6 +198,7 @@ export function ProjectConfigForm({
   onBack,
   backLabel = 'Change repo',
   onSubmit,
+  loadBranches,
   initialRootDirectory = './',
   initialFramework,
   detectionReason,
@@ -209,6 +216,7 @@ export function ProjectConfigForm({
       : getDefaultBuildCommand(type);
   const [name, setName] = useState(trimSlug(toSlug(repo.name)));
   const [rootDirectory, setRootDirectory] = useState(initialRootDirectory);
+  const [branch, setBranch] = useState(repo.default_branch || 'main');
   const [domain, setDomain] = useState('');
   const [port, setPort] = useState('');
   const [appType, setAppType] = useState<AppType>(detectedAppType ?? 'nextjs');
@@ -312,6 +320,7 @@ export function ProjectConfigForm({
       buildCommand: buildCommand.trim(),
       preDeployCommand: effectivePreDeploy || null,
       rootDirectory,
+      branch,
       domain: subdomain,
       port: !isStatic && port ? portNumber : undefined,
       envVars: Object.fromEntries(definedEnvVars.map((v) => [v.key, v.value])),
@@ -335,7 +344,7 @@ export function ProjectConfigForm({
   }, []);
 
   const pipeline = [
-    { icon: GitBranch, label: 'Clone', detail: `${repo.default_branch ?? 'main'} branch` },
+    { icon: GitBranch, label: 'Clone', detail: `${branch} branch` },
     isGo
       ? { icon: Package, label: 'Modules', detail: 'go mod download' }
       : { icon: Package, label: 'Install', detail: 'bun install' },
@@ -514,6 +523,20 @@ export function ProjectConfigForm({
                 {runtimeVersion && appType === detectedAppType ? ` · ${runtimeVersion}` : ''}.
               </p>
             )}
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="branch">Branch</Label>
+              <BranchSelect
+                id="branch"
+                value={branch}
+                onChange={setBranch}
+                load={loadBranches}
+                sourceKey={repo.full_name}
+                aria-describedby="branch-help"
+              />
+              <p id="branch-help" className="text-xs text-muted-foreground">
+                Pushes to this branch deploy, and every build uses it.
+              </p>
+            </div>
             <div className="mt-4 space-y-2">
               <Label htmlFor="root-directory">Root directory</Label>
               <div className="relative">
@@ -725,7 +748,7 @@ export function ProjectConfigForm({
                 >
                   <span className="text-sm font-medium text-foreground">Deploy on push</span>
                   <span className="text-xs text-muted-foreground">
-                    Rebuild when commits land on {repo.default_branch ?? 'main'}.
+                    Rebuild when commits land on {branch}.
                   </span>
                 </Label>
                 <Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={setAutoDeploy} />

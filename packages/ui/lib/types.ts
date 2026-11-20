@@ -62,7 +62,8 @@ export type DeploymentStatus =
 export interface Build {
   id: string;
   project_id: string;
-  status: 'pending' | 'building' | 'success' | 'failed';
+  /** `cancelled`: skipped before it started because a newer commit was queued. */
+  status: 'pending' | 'building' | 'success' | 'failed' | 'cancelled';
   logs: string | null;
   artifact_id: string | null;
   created_at: string;
@@ -169,6 +170,14 @@ export interface MigrationSuggestion {
 }
 
 /** A deployable folder found by the repository scan. */
+/** A GitHub repository's branches, default branch first. */
+export interface BranchList {
+  default_branch: string | null;
+  branches: { name: string; protected: boolean }[];
+  /** More branches exist than were listed. */
+  truncated: boolean;
+}
+
 export interface RepoFolder {
   path: string;
   name: string;

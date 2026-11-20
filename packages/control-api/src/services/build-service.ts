@@ -1,7 +1,7 @@
 import { config } from '@thakur-deploy/config';
 import { db } from '../db';
 import { builds, buildLogs, deployments } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray } from 'drizzle-orm';
 import { DeploymentService } from './deployment-service';
 import { AppType } from '../config/framework-config';
 import { BuildQueue, type BuildJobData } from '../queue';
@@ -12,6 +12,8 @@ import { EventStreamService } from './event-stream-service';
 import { GitHubDeploymentStatus } from './github-deployment-status';
 import { DeployNotifications } from './deploy-notifications';
 import { deployEngineFetch } from './deploy-engine-client';
+
+export type BuildStatus = 'pending' | 'building' | 'success' | 'failed' | 'cancelled';
 
 export const BuildService = {
   async create(data: {
@@ -65,11 +67,20 @@ export const BuildService = {
           app_type: project.app_type as AppType,
           env_vars: envVars,
           installation_id: project.github_installation_id || undefined,
+          // Build exactly the commit this build is recorded as, not whatever the branch
+          // head is when the worker gets to it.
+          commit_sha: commitSha || undefined,
+          // Only repo-connected projects have a branch chosen from the repository; the
+          // column's 'main' default would be a guess for anything else.
+          branch: (project.github_repo_id && project.github_branch) || undefined,
         };
 
         try {
           // Add job to BullMQ queue
-          const { jobId, position } = await BuildQueue.addJob(buildJobData);
+          const { jobId, timestamp } = await BuildQueue.addJob(buildJobData);
+          await this.supersedeOlderBuilds(build, timestamp);
+          // After superseding, so the position doesn't count the builds just removed.
+          const position = await BuildQueue.getJobPosition(jobId);
 
           console.log(`[BuildService] Build ${build.id} queued at position ${position}`);
 
@@ -119,6 +130,56 @@ export const BuildService = {
     }
 
     return build;
+  },
+
+  /**
+   * Latest commit wins: once `newer` is queued, the same project's builds still waiting
+   * in the queue would only deploy older code before it, so they are cancelled. A build
+   * that is already running finishes. Best effort: on any error the old builds just run.
+   */
+  async supersedeOlderBuilds(
+    newer: { id: string; project_id: string; commit_sha: string | null },
+    queuedAt: number,
+  ) {
+    try {
+      const removed = await BuildQueue.removeSuperseded({
+        id: newer.id,
+        timestamp: queuedAt,
+        data: { build_id: newer.id, project_id: newer.project_id },
+      });
+      if (removed.length === 0) return;
+
+      const cancelled = await db
+        .update(builds)
+        .set({ status: 'cancelled', completed_at: new Date() })
+        .where(and(inArray(builds.id, removed), eq(builds.status, 'pending')))
+        .returning();
+
+      const replacement = newer.commit_sha
+        ? `commit ${newer.commit_sha.slice(0, 7)}`
+        : `build #${newer.id.slice(0, 8)}`;
+      for (const build of cancelled) {
+        const message = `⏭️ Skipped: superseded by newer ${replacement} before this build started\n`;
+        await LogService.persist(build.id, message, 'info');
+        EventStreamService.broadcast(build.id, message, 'info');
+        EventStreamService.broadcastBuildUpdate(build.project_id, build);
+        void GitHubDeploymentStatus.report(build.id, 'superseded', `Superseded by ${replacement}`);
+      }
+
+      if (cancelled.length > 0) {
+        const plural = cancelled.length === 1 ? 'build' : 'builds';
+        await LogService.persist(
+          newer.id,
+          `⏭️ Replaced ${cancelled.length} older queued ${plural} for this project\n`,
+          'info',
+        );
+        console.log(
+          `[BuildService] Build ${newer.id} superseded ${cancelled.length} queued ${plural}: ${cancelled.map((b) => b.id).join(', ')}`,
+        );
+      }
+    } catch (error) {
+      console.error(`[BuildService] Could not supersede older builds for ${newer.id}:`, error);
+    }
   },
 
   async getByProjectId(projectId: string) {
@@ -200,16 +261,12 @@ export const BuildService = {
     return { id, project_id: build.project_id };
   },
 
-  async updateStatus(
-    id: string,
-    status: 'pending' | 'building' | 'success' | 'failed',
-    logs?: string,
-    artifactId?: string,
-  ) {
+  async updateStatus(id: string, status: BuildStatus, logs?: string, artifactId?: string) {
     const data: any = { status, updated_at: new Date() };
     if (logs) data.logs = logs;
     if (artifactId) data.artifact_id = artifactId;
-    if (status === 'success' || status === 'failed') {
+    const finished = status === 'success' || status === 'failed' || status === 'cancelled';
+    if (finished) {
       data.completed_at = new Date();
     }
 
@@ -218,7 +275,7 @@ export const BuildService = {
       .set({
         ...data,
         status: status,
-        completed_at: status === 'success' || status === 'failed' ? new Date() : null,
+        completed_at: finished ? new Date() : null,
       })
       .where(eq(builds.id, id))
       .returning();

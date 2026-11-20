@@ -5,6 +5,7 @@ import { db } from '../db';
 import { account, githubInstallations } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { GitHubService } from '../services/github-service';
+import { BranchError, ProjectBranch } from '../services/project-branch';
 import { githubAppConfig } from '../services/settings-service';
 
 interface GitHubInstallation {
@@ -264,6 +265,18 @@ export const githubRoutes = new Elysia({ prefix: '/github' })
       return { error: e.message || 'Internal Server Error' };
     }
   })
+  .get(
+    '/installations/:id/repositories/:owner/:repo/branches',
+    async ({ params, set }) => {
+      try {
+        return await ProjectBranch.list(params.id, `${params.owner}/${params.repo}`);
+      } catch (e: any) {
+        set.status = e instanceof BranchError ? e.status : 502;
+        return { error: e.message || 'Could not list branches' };
+      }
+    },
+    { params: t.Object({ id: t.String(), owner: t.String(), repo: t.String() }) },
+  )
   .get(
     '/installations/:id/repositories/:owner/:repo/folders',
     async ({ params, set }) => {
