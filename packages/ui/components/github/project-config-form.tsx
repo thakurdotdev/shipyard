@@ -870,8 +870,9 @@ export function ProjectConfigForm({
         </aside>
       </div>
 
-      {/* Phones and tablets: keep Deploy in reach while scrolling the form. */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
+      {/* Phones and tablets: keep Deploy in reach while scrolling the form. On phones it
+          sits on top of the mobile tab bar instead of underneath it. */}
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:bottom-0 sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
         <div className="mx-auto flex max-w-5xl items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-foreground">

@@ -633,7 +633,7 @@ export default function ProcessesPage() {
               />
 
               {selectedIds.size > 0 && (
-                <div className="sticky bottom-3 z-20 mx-auto flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-border bg-popover px-3 py-2 shadow-lg">
+                <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 sm:bottom-3 mx-auto flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-border bg-popover px-3 py-2 shadow-lg">
                   <span className="mr-auto text-xs font-medium text-foreground">
                     {selectedIds.size} selected
                   </span>
