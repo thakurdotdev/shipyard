@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Loader2, Lock, RefreshCw, Save, TriangleAlert } from 'lucide-react';
+import { Eye, EyeOff, RefreshCw, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { AccessSettings } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+  Field,
+  SaveFooter,
+  SettingsSection,
+  useUnsavedWarning,
+} from '@/components/settings/settings-section';
 import {
   Select,
   SelectContent,
@@ -65,7 +69,8 @@ export function AccessProtectionCard({ projectId, onProtectionChange }: AccessPr
     (enabled !== settings.enabled ||
       password.length > 0 ||
       Number(sessionHours) !== settings.session_hours);
-  const canSave = dirty && !needsPassword && !passwordTooShort && !saving;
+  const canSave = !needsPassword && !passwordTooShort;
+  useUnsavedWarning(dirty);
 
   const save = async () => {
     if (!settings) return;
@@ -96,158 +101,136 @@ export function AccessProtectionCard({ projectId, onProtectionChange }: AccessPr
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5" /> Password protection
-            </CardTitle>
-            <CardDescription>
-              Ask visitors for a password before they can reach your deployed site. Use it for
-              private projects, previews and client work.
-            </CardDescription>
-          </div>
-          <Switch
-            aria-label="Password protection"
-            checked={enabled}
-            onCheckedChange={setEnabled}
-            disabled={!settings || saving}
+    <SettingsSection
+      id="access"
+      title="Password protection"
+      description="Visitors enter a shared password before they reach the site. For private projects, previews and client work."
+      aside={
+        <Switch
+          aria-label="Password protection"
+          checked={enabled}
+          onCheckedChange={setEnabled}
+          disabled={!settings || saving}
+        />
+      }
+      footer={
+        settings && (
+          <SaveFooter
+            dirty={dirty}
+            saving={saving}
+            canSave={canSave}
+            onSave={save}
+            onReset={() => apply(settings)}
+            note={
+              settings.enabled
+                ? `On${settings.domain ? ` for ${settings.domain}` : ''}. Changes apply immediately, no redeploy.`
+                : 'Off. The site is public.'
+            }
           />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {loadFailed && (
-          <p role="alert" className="text-sm text-destructive">
-            Could not load access settings. Reload the page to try again.
-          </p>
-        )}
-        {!loadFailed && !settings && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading access settings…
-          </div>
-        )}
+        )
+      }
+    >
+      {loadFailed && (
+        <p role="alert" className="text-sm text-destructive">
+          Couldn’t load access settings. Reload the page to try again.
+        </p>
+      )}
+      {!loadFailed && !settings && (
+        <div className="h-16 animate-pulse rounded-lg bg-surface-muted/50" />
+      )}
 
-        {settings && !settings.enforced && (
-          <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Passwords are enforced by the production web server. This development instance serves
-              deployed apps directly, so they stay open.
-            </p>
-          </div>
-        )}
+      {settings && !settings.enforced && (
+        <p className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[13px] text-amber-700 dark:text-amber-400">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          The production web server enforces passwords. This development instance serves apps
+          directly, so they stay open here.
+        </p>
+      )}
 
-        {settings && (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="access-password">
-                  {settings.has_password ? 'New password' : 'Password'}
-                </Label>
-                <div className="flex gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <Input
-                      id="access-password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder={settings.has_password ? 'Leave blank to keep current' : ''}
-                      autoComplete="new-password"
-                      spellCheck={false}
-                      maxLength={128}
-                      aria-invalid={passwordTooShort || needsPassword}
-                      aria-describedby="access-password-help"
-                      disabled={saving}
-                      className="pr-10 font-mono text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((value) => !value)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label="Generate a strong password"
-                    title="Generate a strong password"
+      {settings && (enabled || settings.enabled) && (
+        <>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field
+              label={settings.has_password ? 'New password' : 'Password'}
+              htmlFor="access-password"
+              error={
+                needsPassword
+                  ? 'Set a password to turn protection on.'
+                  : passwordTooShort
+                    ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
+                    : null
+              }
+              hint={
+                settings.has_password
+                  ? 'Leave empty to keep the current one. Changing it signs everyone out.'
+                  : `At least ${MIN_PASSWORD_LENGTH} characters, shared by everyone who needs access.`
+              }
+            >
+              <div className="flex gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Input
+                    id="access-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder={settings.has_password ? '••••••••' : ''}
+                    autoComplete="new-password"
+                    spellCheck={false}
+                    maxLength={128}
+                    aria-invalid={passwordTooShort || needsPassword}
                     disabled={saving}
-                    onClick={() => {
-                      setPassword(generatePassword());
-                      setShowPassword(true);
-                    }}
+                    className="pr-10 font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute inset-y-0 right-0 grid w-10 cursor-pointer place-items-center text-muted-foreground hover:text-foreground"
                   >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
                 </div>
-                <p
-                  id="access-password-help"
-                  className={`text-xs ${passwordTooShort || needsPassword ? 'text-destructive' : 'text-muted-foreground'}`}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Generate a strong password"
+                  title="Generate a strong password"
+                  disabled={saving}
+                  onClick={() => {
+                    setPassword(generatePassword());
+                    setShowPassword(true);
+                  }}
                 >
-                  {needsPassword
-                    ? 'Set a password to turn protection on.'
-                    : passwordTooShort
-                      ? `Use at least ${MIN_PASSWORD_LENGTH} characters.`
-                      : settings.has_password
-                        ? 'Changing the password signs everyone out.'
-                        : `At least ${MIN_PASSWORD_LENGTH} characters. Shared by everyone who needs access.`}
-                </p>
+                  <RefreshCw />
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="access-session">Stay signed in for</Label>
-                <Select value={sessionHours} onValueChange={setSessionHours} disabled={saving}>
-                  <SelectTrigger id="access-session">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SESSION_LENGTHS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  How long a browser stays unlocked after the password is entered.
-                </p>
-              </div>
-            </div>
-
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              <li>
-                Applies immediately to the live site
-                {settings.domain ? ` (${settings.domain})` : ''}; no redeploy needed.
-              </li>
-              <li>
-                The dashboard’s embedded preview is replaced by an “Open live site” link while
-                protection is on. Uptime monitoring keeps working.
-              </li>
-              <li>Everything on the site is covered, including APIs and webhooks it exposes.</li>
-            </ul>
-
-            <div className="flex justify-end">
-              <Button onClick={save} disabled={!canSave}>
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save protection
-                  </>
-                )}
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+            </Field>
+            <Field
+              label="Stay signed in for"
+              htmlFor="access-session"
+              hint="How long a browser stays unlocked."
+            >
+              <Select value={sessionHours} onValueChange={setSessionHours} disabled={saving}>
+                <SelectTrigger id="access-session" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SESSION_LENGTHS.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Covers everything on the site, including APIs and webhooks. The dashboard preview is
+            replaced by a link while protection is on; uptime checks keep working.
+          </p>
+        </>
+      )}
+    </SettingsSection>
   );
 }

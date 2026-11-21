@@ -1,18 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { PM0Process, pm0Api, processTarget } from '@/lib/pm0-api';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  ArrowDown,
+  ArrowUp,
+  ArrowUpRight,
+  Copy,
+  Loader2,
+  MoreHorizontal,
+  Play,
+  RefreshCcw,
+  RotateCw,
+  ScrollText,
+  Square,
+  Trash2,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { copyText } from '@/components/ui/copy-button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,583 +24,390 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Play,
-  Square,
-  RotateCw,
-  RefreshCcw,
-  Trash2,
-  MoreVertical,
-  ScrollText,
-  ExternalLink,
-  Terminal,
-  FolderOpen,
-  Copy,
-  Check,
-} from 'lucide-react';
-import { formatUptime } from '@/lib/format';
+import { StatusDot, TONE_TEXT } from '@/components/ui/status';
+import { formatBytes, formatUptime } from '@/lib/format';
+import { processTarget, type PM0Process } from '@/lib/pm0-api';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
-import { toast } from 'sonner';
-import { ProcessLogViewer } from './process-log-viewer';
+import { processCommand, processStatus, restartsExhausted, restartsLabel } from './process-utils';
+import type { ProcessAction } from './use-process-actions';
 
-// ── helpers ──────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+export type SortKey = 'attention' | 'name' | 'cpu' | 'memory' | 'uptime' | 'restarts';
+export interface SortState {
+  key: SortKey;
+  desc: boolean;
 }
 
-function formatExecMode(mode: string): string {
-  if (!mode) return 'Fork';
-  const label = mode.replace(/_mode$/, '').replace(/-/g, ' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
+const COLUMNS = 'lg:grid-cols-[1.25rem_minmax(0,1fr)_6.5rem_4.5rem_5.5rem_5.5rem_5rem_6.5rem]';
+
+interface ProcessTableProps {
+  groups: { key: string; title: string; note?: string; processes: PM0Process[] }[];
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (target: string) => void;
+  onToggleAll: () => void;
+  allSelected: boolean;
+  onOpen: (process: PM0Process) => void;
+  onAction: (action: ProcessAction, process: PM0Process) => void;
+  isPending: (process: PM0Process, action?: ProcessAction) => boolean;
 }
 
-type StatusKey = 'online' | 'stopped' | 'errored' | 'launching' | 'stopping' | 'waiting restart';
+export function ProcessTable({
+  groups,
+  sort,
+  onSort,
+  selectedIds,
+  onToggleSelect,
+  onToggleAll,
+  allSelected,
+  onOpen,
+  onAction,
+  isPending,
+}: ProcessTableProps) {
+  const someSelected = selectedIds.size > 0 && !allSelected;
+  const showGroupHeads = groups.length > 1;
 
-const statusConfig: Record<StatusKey, { dot: string; text: string; label: string }> = {
-  online: {
-    dot: 'bg-emerald-500',
-    text: 'text-emerald-600 dark:text-emerald-400',
-    label: 'Online',
-  },
-  stopped: {
-    dot: 'bg-zinc-400',
-    text: 'text-muted-foreground',
-    label: 'Stopped',
-  },
-  errored: {
-    dot: 'bg-red-500',
-    text: 'text-red-600 dark:text-red-400',
-    label: 'Errored',
-  },
-  launching: {
-    dot: 'bg-amber-500',
-    text: 'text-amber-600 dark:text-amber-400',
-    label: 'Starting',
-  },
-  stopping: {
-    dot: 'bg-orange-500',
-    text: 'text-orange-600 dark:text-orange-400',
-    label: 'Stopping',
-  },
-  'waiting restart': {
-    dot: 'bg-amber-500',
-    text: 'text-amber-600 dark:text-amber-400',
-    label: 'Restarting',
-  },
-};
-
-function getStatusConfig(status: string) {
   return (
-    statusConfig[status as StatusKey] ?? {
-      dot: 'bg-zinc-400',
-      text: 'text-muted-foreground',
-      label: status,
-    }
+    <div role="table" aria-label="Processes">
+      <div
+        role="row"
+        className={cn(
+          'hidden items-center gap-4 border-b border-border bg-surface-muted/40 px-5 py-2 text-xs text-muted-foreground lg:grid',
+          COLUMNS,
+        )}
+      >
+        <span role="columnheader">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected;
+            }}
+            onChange={onToggleAll}
+            aria-label="Select all shown processes"
+            className="size-3.5 cursor-pointer accent-brand-500"
+          />
+        </span>
+        <SortHeader label="Process" sortKey="name" sort={sort} onSort={onSort} />
+        <span role="columnheader">Status</span>
+        <SortHeader label="CPU" sortKey="cpu" sort={sort} onSort={onSort} />
+        <SortHeader label="Memory" sortKey="memory" sort={sort} onSort={onSort} />
+        <SortHeader label="Uptime" sortKey="uptime" sort={sort} onSort={onSort} />
+        <SortHeader label="Restarts" sortKey="restarts" sort={sort} onSort={onSort} />
+        <span role="columnheader" className="sr-only">
+          Actions
+        </span>
+      </div>
+
+      {groups.map((group) => (
+        <div key={group.key} role="rowgroup">
+          {showGroupHeads && (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-border bg-surface-muted/20 px-4 py-2 sm:px-5">
+              <span className="text-xs font-medium text-foreground">{group.title}</span>
+              <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                {group.processes.length}
+              </span>
+              {group.note && <span className="text-xs text-muted-foreground">{group.note}</span>}
+            </div>
+          )}
+          <div className="divide-y divide-border border-b border-border last:border-b-0">
+            {group.processes.map((process) => (
+              <ProcessRow
+                key={processTarget(process)}
+                process={process}
+                selected={selectedIds.has(processTarget(process))}
+                onToggleSelect={() => onToggleSelect(processTarget(process))}
+                onOpen={() => onOpen(process)}
+                onAction={(action) => onAction(action, process)}
+                isPending={(action) => isPending(process, action)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
-function RowMetric({ value, muted, danger }: { value: string; muted?: boolean; danger?: boolean }) {
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort.key === sortKey;
   return (
     <span
-      className={cn(
-        'truncate font-mono text-xs tabular-nums',
-        muted ? 'text-muted-foreground/60' : 'text-foreground',
-        danger && 'text-red-600 dark:text-red-400',
-      )}
+      role="columnheader"
+      aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'}
     >
-      {value}
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'inline-flex cursor-pointer items-center gap-1 rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+          active && 'text-foreground',
+        )}
+      >
+        {label}
+        {active && (sort.desc ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
+      </button>
     </span>
   );
 }
 
-// ── component ────────────────────────────────────────────────────────
-
-interface ProcessTableProps {
-  processes: PM0Process[];
-  onRefresh: () => void;
-  compact?: boolean;
-  selectedIds?: Set<string>;
-  onToggleSelect?: (target: string) => void;
-  /** True when a search or status filter is hiding processes. */
-  filtered?: boolean;
-  onClearFilters?: () => void;
-}
-
-export function ProcessTable({
-  processes,
-  onRefresh,
-  compact = false,
-  selectedIds,
+function ProcessRow({
+  process,
+  selected,
   onToggleSelect,
-  filtered = false,
-  onClearFilters,
-}: ProcessTableProps) {
-  const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<{
-    action: 'stop' | 'delete';
-    process: PM0Process;
-  } | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const runAction = async (
-    action: 'stop' | 'restart' | 'reload' | 'delete',
-    process: PM0Process,
-  ) => {
-    const key = `${action}-${processTarget(process)}`;
-    setActionLoading(key);
-    try {
-      switch (action) {
-        case 'stop':
-          await pm0Api.stopProcess(processTarget(process));
-          toast.success(`Stopped ${process.name}`);
-          break;
-        case 'restart':
-          await pm0Api.restartProcess(processTarget(process));
-          toast.success(`Restarted ${process.name}`);
-          break;
-        case 'reload':
-          await pm0Api.reloadProcess(processTarget(process));
-          toast.success(`Reloaded ${process.name}`);
-          break;
-        case 'delete':
-          await pm0Api.deleteProcess(processTarget(process));
-          toast.success(`Deleted ${process.name}`);
-          break;
-      }
-      onRefresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to ${action} ${process.name}: ${message}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  if (processes.length === 0) {
-    return (
-      <div className="surface-card flex flex-col items-center justify-center rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
-        <div className="mb-4 grid size-11 place-items-center rounded-lg border border-border bg-surface-muted">
-          <Terminal className="size-5 text-muted-foreground" />
-        </div>
-        {filtered ? (
-          <>
-            <h3 className="text-base font-semibold tracking-tight">No matching processes</h3>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Nothing matches your search and status filter.
-            </p>
-            {onClearFilters && (
-              <Button variant="outline" size="sm" className="mt-5" onClick={onClearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </>
-        ) : (
-          <>
-            <h3 className="text-base font-semibold tracking-tight">No supervised processes</h3>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Deploy a project, or start a process with{' '}
-              <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
-                pm0 start app.js
-              </code>
-            </p>
-          </>
-        )}
-      </div>
-    );
-  }
+  onOpen,
+  onAction,
+  isPending,
+}: {
+  process: PM0Process;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onOpen: () => void;
+  onAction: (action: ProcessAction) => void;
+  isPending: (action?: ProcessAction) => boolean;
+}) {
+  const status = processStatus(process.status);
+  const online = process.status === 'online';
+  const errored = process.status === 'errored';
+  const command = processCommand(process);
+  const exhausted = restartsExhausted(process);
+  const busy = isPending();
+  const metric = 'hidden font-mono text-xs tabular-nums lg:block';
 
   return (
-    <>
-      <div className="surface-card overflow-hidden rounded-xl border border-border bg-card">
-        {/* Column header */}
-        <div className="hidden items-center gap-4 border-b border-border bg-surface-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground lg:flex">
-          <div className="flex-1 pl-14">Process</div>
-          <div className="grid w-[340px] shrink-0 grid-cols-4 gap-4">
-            <span>CPU</span>
-            <span>Memory</span>
-            <span>Uptime</span>
-            <span>Restarts</span>
-          </div>
-          <span className="w-[132px] shrink-0 text-right">
-            <span className="sr-only">Actions</span>
+    <div
+      role="row"
+      onClick={(event) => {
+        // The row opens the inspector unless the click was on a control inside it.
+        if ((event.target as HTMLElement).closest('button, a, input, [role="menuitem"]')) return;
+        onOpen();
+      }}
+      className={cn(
+        'grid cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-surface-muted/40 sm:px-5 lg:gap-x-4',
+        COLUMNS,
+        errored && 'bg-red-500/[0.035]',
+        selected && 'bg-brand-500/[0.06] hover:bg-brand-500/[0.09]',
+      )}
+    >
+      <span role="cell" className="flex items-center">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Select ${process.name}`}
+          className="size-3.5 cursor-pointer accent-brand-500"
+        />
+      </span>
+
+      <div role="cell" className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <StatusDot tone={status.tone} pulse={status.tone === 'progress'} className="lg:hidden" />
+          <button
+            type="button"
+            onClick={onOpen}
+            className="min-w-0 cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {process.name}
+          </button>
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+            #{process.pm_id}
           </span>
         </div>
-
-        <div className="divide-y divide-border">
-          {processes.map((proc) => {
-            const sc = getStatusConfig(proc.status);
-            const isOnline = proc.status === 'online';
-            const isErrored = proc.status === 'errored';
-            const isLoading = (a: string) => actionLoading === `${a}-${processTarget(proc)}`;
-            const logsOpen = expandedLogs === processTarget(proc);
-            const selected = selectedIds?.has(processTarget(proc)) ?? false;
-
-            const scriptName = proc.script?.split('/').pop() || proc.script || '—';
-            const interpreter =
-              proc.interpreter && proc.interpreter !== 'none' ? `${proc.interpreter} ` : '';
-            const args = proc.args?.length ? ` ${proc.args.join(' ')}` : '';
-            const command = `${interpreter}${scriptName}${args}`;
-            const commandTitle = `${proc.interpreter} ${proc.script}${args}`.trim();
-
-            const restartDanger = proc.max_restarts > 0 && proc.restart_time >= proc.max_restarts;
-            const restartValue =
-              proc.max_restarts > 0
-                ? `${proc.restart_time}/${proc.max_restarts}`
-                : String(proc.restart_time);
-            const metrics = [
-              {
-                label: 'CPU',
-                value: isOnline ? `${proc.monit.cpu.toFixed(1)}%` : '—',
-                muted: !isOnline,
-              },
-              {
-                label: 'Memory',
-                value: isOnline ? formatBytes(proc.monit.memory) : '—',
-                muted: !isOnline,
-              },
-              {
-                label: 'Uptime',
-                value: isOnline ? formatUptime(proc.pm_uptime) : '—',
-                muted: !isOnline,
-              },
-              {
-                label: 'Restarts',
-                value: restartValue,
-                muted: proc.restart_time === 0,
-                danger: restartDanger,
-              },
-            ];
-
-            const actions = (
-              <div className="flex shrink-0 items-center gap-0.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    'h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground',
-                    logsOpen && 'bg-accent text-foreground',
-                  )}
-                  onClick={() => setExpandedLogs(logsOpen ? null : processTarget(proc))}
-                  title={logsOpen ? 'Hide logs' : 'View logs'}
-                  aria-label={`${logsOpen ? 'Hide' : 'View'} logs for ${proc.name}`}
-                  aria-expanded={logsOpen}
-                >
-                  <ScrollText className="size-3.5" />
-                  <span className={cn(compact ? 'hidden' : 'hidden md:inline')}>
-                    {logsOpen ? 'Hide' : 'Logs'}
-                  </span>
-                </Button>
-
-                {isOnline ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setConfirmTarget({ action: 'stop', process: proc })}
-                    disabled={isLoading('stop')}
-                    title="Stop"
-                    aria-label={`Stop ${proc.name}`}
-                  >
-                    {isLoading('stop') ? (
-                      <RotateCw className="size-3.5 animate-spin" />
-                    ) : (
-                      <Square className="size-3.5" />
-                    )}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
-                    onClick={() => runAction('restart', proc)}
-                    disabled={isLoading('restart')}
-                    title="Start"
-                    aria-label={`Start ${proc.name}`}
-                  >
-                    {isLoading('restart') ? (
-                      <RotateCw className="size-3.5 animate-spin" />
-                    ) : (
-                      <Play className="size-3.5" />
-                    )}
-                  </Button>
-                )}
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label={`More actions for ${proc.name}`}
-                    >
-                      <MoreVertical className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    {proc.project_id && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/projects/${proc.project_id}`}>
-                            <ExternalLink className="mr-2 size-4" />
-                            Open project
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                      </>
-                    )}
-                    <DropdownMenuItem
-                      onClick={() => runAction('restart', proc)}
-                      disabled={isLoading('restart')}
-                    >
-                      <RotateCw className="mr-2 size-4" />
-                      {isOnline ? 'Restart' : 'Start'}
-                    </DropdownMenuItem>
-                    {isOnline && (
-                      <DropdownMenuItem
-                        onClick={() => runAction('reload', proc)}
-                        disabled={isLoading('reload')}
-                      >
-                        <RefreshCcw className="mr-2 size-4" />
-                        Reload (graceful)
-                      </DropdownMenuItem>
-                    )}
-                    {isOnline && (
-                      <DropdownMenuItem
-                        onClick={() => setConfirmTarget({ action: 'stop', process: proc })}
-                        disabled={isLoading('stop')}
-                      >
-                        <Square className="mr-2 size-4" />
-                        Stop
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => setConfirmTarget({ action: 'delete', process: proc })}
-                    >
-                      <Trash2 className="mr-2 size-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            );
-
-            const metaLine = (
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                <span
-                  className="inline-flex min-w-0 max-w-[260px] items-center gap-1 font-mono"
-                  title={commandTitle}
-                >
-                  <Terminal className="size-3 shrink-0 opacity-60" />
-                  <span className="truncate">{command}</span>
-                </span>
-                {isOnline && proc.pid > 0 && <span className="tabular-nums">PID {proc.pid}</span>}
-                <span>{formatExecMode(proc.exec_mode)}</span>
-                {proc.instances > 1 && <span>{proc.instances} instances</span>}
-                {isErrored && proc.exit_code != null && (
-                  <span className="text-red-600 dark:text-red-400">exit {proc.exit_code}</span>
-                )}
-                {proc.unstable_restarts > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    {proc.unstable_restarts} unstable restart
-                    {proc.unstable_restarts === 1 ? '' : 's'}
-                  </span>
-                )}
-              </div>
-            );
-
-            const cwdLine = proc.cwd && (
-              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                <FolderOpen className="size-3 shrink-0 opacity-60" />
-                <code className="min-w-0 truncate font-mono" title={proc.cwd}>
-                  {proc.cwd}
-                </code>
-                <button
-                  type="button"
-                  className="shrink-0 cursor-pointer rounded p-0.5 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  title="Copy path"
-                  aria-label={`Copy working directory of ${proc.name}`}
-                  onClick={() => {
-                    navigator.clipboard.writeText(proc.cwd);
-                    setCopiedId(processTarget(proc));
-                    toast.success('Path copied');
-                    setTimeout(
-                      () => setCopiedId((v) => (v === processTarget(proc) ? null : v)),
-                      2000,
-                    );
-                  }}
-                >
-                  {copiedId === processTarget(proc) ? (
-                    <Check className="size-3 text-emerald-700 dark:text-emerald-400" />
-                  ) : (
-                    <Copy className="size-3" />
-                  )}
-                </button>
-              </div>
-            );
-
-            // Phones get one plain-language usage line instead of a labelled grid.
-            const usageLine = (
-              <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
-                {isOnline ? (
-                  <>
-                    <span>
-                      <span className="font-medium text-foreground">
-                        {proc.monit.cpu.toFixed(1)}%
-                      </span>{' '}
-                      CPU
-                    </span>
-                    <span>
-                      <span className="font-medium text-foreground">
-                        {formatBytes(proc.monit.memory)}
-                      </span>
-                    </span>
-                    <span>up {formatUptime(proc.pm_uptime)}</span>
-                  </>
-                ) : (
-                  isErrored &&
-                  proc.exit_code != null && (
-                    <span className="text-red-600 dark:text-red-400">exit {proc.exit_code}</span>
-                  )
-                )}
-                {(proc.restart_time > 0 || restartDanger) && (
-                  <span className={cn(restartDanger && 'text-red-600 dark:text-red-400')}>
-                    {restartValue} restarts
-                  </span>
-                )}
-              </p>
-            );
-
-            return (
-              <div
-                key={processTarget(proc)}
-                className={cn(isErrored && 'bg-red-500/[0.04]', selected && 'bg-surface-muted/50')}
-              >
-                <div
-                  className={cn(
-                    'px-4 transition-colors hover:bg-surface-muted/40',
-                    compact ? 'py-2' : 'py-3',
-                  )}
-                >
-                  <div className="flex items-center gap-3 lg:gap-4">
-                    {onToggleSelect && (
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={() => onToggleSelect(processTarget(proc))}
-                        aria-label={`Select ${proc.name}`}
-                        className="size-4 shrink-0 cursor-pointer rounded border-border bg-surface-muted accent-brand-500"
-                      />
-                    )}
-                    <span className={cn('size-2 shrink-0 rounded-full', sc.dot)} aria-hidden />
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                        {proc.project_id ? (
-                          <Link
-                            href={`/projects/${proc.project_id}`}
-                            className="max-w-full truncate rounded-sm text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {proc.name}
-                          </Link>
-                        ) : (
-                          <span className="max-w-full truncate text-sm font-medium text-foreground">
-                            {proc.name}
-                          </span>
-                        )}
-                        <span className={cn('shrink-0 text-[11px] font-medium', sc.text)}>
-                          {sc.label}
-                        </span>
-                        <span className="hidden shrink-0 font-mono text-[11px] text-muted-foreground sm:inline">
-                          #{proc.pm_id}
-                        </span>
-                      </div>
-                      {!compact && (
-                        <div className="mt-1 hidden space-y-1 lg:block">
-                          {metaLine}
-                          {cwdLine}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Desktop metrics */}
-                    <div className="hidden w-[340px] shrink-0 grid-cols-4 items-center gap-4 lg:grid">
-                      {metrics.map((metric) => (
-                        <RowMetric
-                          key={metric.label}
-                          value={metric.value}
-                          muted={metric.muted}
-                          danger={metric.danger}
-                        />
-                      ))}
-                    </div>
-
-                    <div className="flex w-auto shrink-0 items-center justify-end lg:w-[132px]">
-                      {actions}
-                    </div>
-                  </div>
-
-                  {/* Below lg: usage and folder sit under the name, aligned with it. */}
-                  <div
-                    className={cn('mt-1 space-y-1 lg:hidden', onToggleSelect ? 'pl-12' : 'pl-5')}
-                  >
-                    {usageLine}
-                    {!compact && cwdLine}
-                  </div>
-                </div>
-
-                {logsOpen && (
-                  <div className="border-t border-border">
-                    <ProcessLogViewer
-                      target={processTarget(proc)}
-                      processName={proc.name}
-                      onClose={() => setExpandedLogs(null)}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <p
+          className="mt-0.5 hidden truncate font-mono text-[11.5px] text-muted-foreground lg:block"
+          title={command.full}
+        >
+          {command.short}
+        </p>
+        {/* Phones: one plain line of usage instead of columns. */}
+        <p className="mt-0.5 truncate font-mono text-[11.5px] text-muted-foreground tabular-nums lg:hidden">
+          {online ? (
+            <>
+              {process.monit.cpu.toFixed(1)}% · {formatBytes(process.monit.memory)} · up{' '}
+              {formatUptime(process.pm_uptime)}
+            </>
+          ) : (
+            <span className={errored ? TONE_TEXT.error : undefined}>
+              {status.label.toLowerCase()}
+              {errored && process.exit_code != null && ` · exit ${process.exit_code}`}
+            </span>
+          )}
+          {process.restart_time > 0 && (
+            <span className={exhausted ? TONE_TEXT.error : undefined}>
+              {' '}
+              · {restartsLabel(process)} restarts
+            </span>
+          )}
+        </p>
       </div>
 
-      {/* Stopping or deleting takes a service down, so both ask first. */}
-      <AlertDialog open={!!confirmTarget} onOpenChange={(open) => !open && setConfirmTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirmTarget?.action === 'delete'
-                ? `Delete ${confirmTarget.process.name}?`
-                : `Stop ${confirmTarget?.process.name}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmTarget?.action === 'delete'
-                ? 'This stops the process and removes it from PM0. Its ID may be reused. This cannot be undone.'
-                : 'Anything it serves becomes unavailable until you start it again.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (confirmTarget) runAction(confirmTarget.action, confirmTarget.process);
-                setConfirmTarget(null);
-              }}
-            >
-              {confirmTarget?.action === 'delete' ? 'Delete' : 'Stop process'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+      <span role="cell" className="hidden lg:block">
+        <span
+          className={cn(
+            'inline-flex items-center gap-2 text-[13px]',
+            errored ? TONE_TEXT.error : 'text-foreground',
+          )}
+        >
+          <StatusDot tone={status.tone} pulse={status.tone === 'progress'} />
+          {status.label}
+        </span>
+        {errored && process.exit_code != null && (
+          <span className="block pl-4 font-mono text-[11px] text-muted-foreground">
+            exit {process.exit_code}
+          </span>
+        )}
+      </span>
+      <span role="cell" className={cn(metric, !online && 'text-muted-foreground/60')}>
+        {online ? `${process.monit.cpu.toFixed(1)}%` : '—'}
+      </span>
+      <span role="cell" className={cn(metric, !online && 'text-muted-foreground/60')}>
+        {online ? formatBytes(process.monit.memory) : '—'}
+      </span>
+      <span role="cell" className={cn(metric, !online && 'text-muted-foreground/60')}>
+        {online ? formatUptime(process.pm_uptime) : '—'}
+      </span>
+      <span
+        role="cell"
+        className={cn(
+          metric,
+          exhausted ? TONE_TEXT.error : process.restart_time === 0 && 'text-muted-foreground/60',
+        )}
+        title={
+          process.unstable_restarts > 0
+            ? `${process.unstable_restarts} unstable restarts`
+            : undefined
+        }
+      >
+        {restartsLabel(process)}
+      </span>
+
+      <div role="cell" className="row-span-2 flex items-center justify-end gap-0.5 lg:row-span-1">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="hidden text-muted-foreground sm:inline-flex"
+          onClick={onOpen}
+          title="Logs and details"
+          aria-label={`Logs and details for ${process.name}`}
+        >
+          <ScrollText className="size-3.5" />
+        </Button>
+        {online ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            onClick={() => onAction('restart')}
+            disabled={busy}
+            title="Restart"
+            aria-label={`Restart ${process.name}`}
+          >
+            {isPending('restart') ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RotateCw className="size-3.5" />
+            )}
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
+            onClick={() => onAction('start')}
+            disabled={busy}
+            title="Start"
+            aria-label={`Start ${process.name}`}
+          >
+            {isPending('start') ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Play className="size-3.5" />
+            )}
+          </Button>
+        )}
+        <ProcessMenu process={process} onAction={onAction} busy={busy} />
+      </div>
+    </div>
+  );
+}
+
+export function ProcessMenu({
+  process,
+  onAction,
+  busy,
+  align = 'end',
+  showProjectLink = true,
+}: {
+  process: PM0Process;
+  onAction: (action: ProcessAction) => void;
+  busy: boolean;
+  align?: 'start' | 'end';
+  /** Off where the menu already sits on the project's own page. */
+  showProjectLink?: boolean;
+}) {
+  const online = process.status === 'online';
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground"
+          aria-label={`More actions for ${process.name}`}
+        >
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={align} className="w-48">
+        {showProjectLink && process.project_id && (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href={`/projects/${process.project_id}`}>
+                <ArrowUpRight />
+                Open project
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem disabled={busy} onSelect={() => onAction(online ? 'restart' : 'start')}>
+          {online ? <RotateCw /> : <Play />}
+          {online ? 'Restart' : 'Start'}
+        </DropdownMenuItem>
+        {online && (
+          <DropdownMenuItem disabled={busy} onSelect={() => onAction('reload')}>
+            <RefreshCcw />
+            Reload gracefully
+          </DropdownMenuItem>
+        )}
+        {online && (
+          <DropdownMenuItem disabled={busy} onSelect={() => onAction('stop')}>
+            <Square />
+            Stop
+          </DropdownMenuItem>
+        )}
+        {process.cwd && (
+          <DropdownMenuItem onSelect={() => void copyText(process.cwd, 'Copied working directory')}>
+            <Copy />
+            Copy working directory
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" disabled={busy} onSelect={() => onAction('delete')}>
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
