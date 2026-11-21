@@ -17,7 +17,11 @@ export default function config(phase: string): NextConfig {
     return {
       ...base,
       async rewrites() {
-        return [{ source: '/api/:path*', destination: `${controlApi}/api/:path*` }];
+        return [
+          { source: '/api/:path*', destination: `${controlApi}/api/:path*` },
+          // Mirrors Nginx in production: every project id is served by the /projects/_ shell.
+          { source: '/projects/:id((?!_$|new$)[^/]+)', destination: '/projects/_' },
+        ];
       },
     };
   }

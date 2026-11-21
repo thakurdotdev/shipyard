@@ -346,7 +346,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
 
         // Return SSE response
         set.headers['content-type'] = 'text/event-stream';
-        set.headers['cache-control'] = 'no-cache';
+        set.headers['cache-control'] = 'no-cache, no-transform';
         set.headers['connection'] = 'keep-alive';
         set.headers['x-accel-buffering'] = 'no';
 

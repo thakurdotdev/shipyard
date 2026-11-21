@@ -1,11 +1,29 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { pm0Api, PM0Process, PM0Health, PM0SystemStats, processTarget } from '@/lib/pm0-api';
-import { ProcessTable } from '@/components/process-manager/process-table';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Loader2,
+  MoreHorizontal,
+  Play,
+  RefreshCw,
+  RotateCw,
+  Save,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { ProcessInspector } from '@/components/process-manager/process-inspector';
+import {
+  ProcessTable,
+  type SortKey,
+  type SortState,
+} from '@/components/process-manager/process-table';
+import { attentionRank, restartsLabel } from '@/components/process-manager/process-utils';
+import {
+  refreshProcesses,
+  useProcessActions,
+} from '@/components/process-manager/use-process-actions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,239 +34,141 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import {
-  Search,
-  Loader2,
-  Save,
-  RefreshCw,
-  AlertTriangle,
-  List,
-  LayoutGrid,
-  Square,
-  RotateCw,
-  Trash2,
-  X,
-} from 'lucide-react';
-import { toast } from 'sonner';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FilterTabs } from '@/components/ui/filter-tabs';
+import { Meter } from '@/components/ui/meter';
+import { Panel } from '@/components/ui/panel';
+import { SearchField } from '@/components/ui/search-field';
+import { StatusDot, TONE_TEXT } from '@/components/ui/status';
+import { formatBytes } from '@/lib/format';
+import { pm0Api, processTarget, type PM0Process, type PM0SystemStats } from '@/lib/pm0-api';
+import { useProcessList } from '@/lib/queries';
+import { useQuery } from '@/lib/use-query';
+import { useUrlState } from '@/lib/use-url-state';
+import { cn } from '@/lib/utils';
 
-type KpiTone = 'default' | 'warning' | 'danger';
+const POLL_MS = 5000;
+const FILTERS = ['all', 'online', 'stopped', 'errored'] as const;
+type Filter = (typeof FILTERS)[number];
+type BulkAction = 'stop' | 'restart' | 'delete';
 
-const barTone: Record<KpiTone, string> = {
-  default: 'bg-foreground/25',
-  warning: 'bg-amber-500',
-  danger: 'bg-red-500',
-};
-
-function getPressureTone(pct: number): KpiTone {
-  if (pct >= 90) return 'danger';
-  if (pct >= 75) return 'warning';
-  return 'default';
-}
-
-interface MetricCardProps {
-  label: string;
-  value: string | number;
-  unit?: string;
-  hint?: string;
-  tone?: KpiTone;
-  progress?: number | null;
-  className?: string;
-}
-
-function MetricCard({
-  label,
-  value,
-  unit,
-  hint,
-  tone = 'default',
-  progress,
-  className,
-}: MetricCardProps) {
-  const pct = progress == null ? null : Math.max(0, Math.min(100, progress));
-
-  return (
-    <div className={cn('min-w-0 bg-card px-4 py-3.5', className)}>
-      <p className="truncate text-xs text-muted-foreground">{label}</p>
-      <div className="mt-1 flex items-baseline gap-1">
-        <span className="font-mono text-xl font-semibold leading-none tracking-tight text-foreground tabular-nums">
-          {value}
-        </span>
-        {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
-      </div>
-      <p className="mt-1.5 min-h-4 truncate text-xs text-muted-foreground" title={hint}>
-        {hint}
-      </p>
-      {pct !== null && (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-muted">
-          <div
-            className={cn('h-full rounded-full transition-[width] duration-500', barTone[tone])}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DaemonFact({ label, value }: { label: string; value: string | number }) {
-  return (
-    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono text-foreground">{value}</span>
-    </span>
-  );
-}
-
-type StatusFilter = 'all' | 'online' | 'stopped' | 'errored';
-
-const POLL_INTERVAL_MS = 5000;
-
-/** Problems first, then anything mid-transition, running, and finally stopped. */
-function attentionRank(status: string): number {
-  if (status === 'errored') return 0;
-  if (status === 'online') return 2;
-  if (status === 'stopped') return 3;
-  return 1;
-}
-
-const filterDot: Record<StatusFilter, string | null> = {
-  all: null,
-  online: 'bg-emerald-500',
-  stopped: 'bg-zinc-400',
-  errored: 'bg-red-500',
+const SORT_VALUE: Record<Exclude<SortKey, 'attention' | 'name'>, (p: PM0Process) => number> = {
+  cpu: (p) => (p.status === 'online' ? p.monit.cpu : -1),
+  memory: (p) => (p.status === 'online' ? p.monit.memory : -1),
+  uptime: (p) => (p.status === 'online' && p.pm_uptime ? Date.now() - p.pm_uptime : -1),
+  restarts: (p) => p.restart_time,
 };
 
 export default function ProcessesPage() {
-  const [processes, setProcesses] = useState<PM0Process[]>([]);
-  const [health, setHealth] = useState<PM0Health | null>(null);
-  const [system, setSystem] = useState<PM0SystemStats | null>(null);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [compact, setCompact] = useState(false);
+  const list = useProcessList(POLL_MS);
+  const health = useQuery('pm0:health', () => pm0Api.getHealth(), { refreshInterval: 30_000 });
+  const processes = list.data?.processes;
+  const [query, setQuery] = useUrlState('q', '');
+  const [filter, setFilter] = useUrlState<Filter>('status', 'all', FILTERS);
+  const [inspecting, setInspecting] = useUrlState('process', '');
+  const [sort, setSort] = useState<SortState>({ key: 'attention', desc: false });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState<'stop' | 'restart' | 'delete' | null>(null);
-  const [bulkConfirm, setBulkConfirm] = useState<'stop' | 'restart' | 'delete' | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [daemonDown, setDaemonDown] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<BulkAction | null>(null);
+  const [bulkRunning, setBulkRunning] = useState<BulkAction | null>(null);
   const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const actions = useProcessActions();
 
-  const fetching = useRef(false);
-
-  const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
-    if (fetching.current) return;
-    fetching.current = true;
-    if (!silent) setRefreshing(true);
-    try {
-      const [list, h] = await Promise.all([pm0Api.getProcessesWithSystem(), pm0Api.getHealth()]);
-      setProcesses(list.processes);
-      setSystem(list.system);
-      setHealth(h);
-      setDaemonDown(false);
-    } catch {
-      setDaemonDown(true);
-    } finally {
-      fetching.current = false;
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchData();
-    const refreshVisible = () => {
-      if (document.visibilityState === 'visible') void fetchData({ silent: true });
-    };
-    const interval = window.setInterval(refreshVisible, POLL_INTERVAL_MS);
-    window.addEventListener('focus', refreshVisible);
-    document.addEventListener('visibilitychange', refreshVisible);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('focus', refreshVisible);
-      document.removeEventListener('visibilitychange', refreshVisible);
-    };
-  }, [fetchData]);
+  // A failed poll keeps the last good list on screen, marked as stale.
+  const offline = !!list.error && !processes;
+  const stale = !!list.error && !!processes;
 
   // Drop selections for processes that no longer exist.
   useEffect(() => {
+    if (!processes) return;
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
-      const ids = new Set(processes.map((p) => processTarget(p)));
+      const ids = new Set(processes.map(processTarget));
       const next = new Set([...prev].filter((id) => ids.has(id)));
       return next.size === prev.size ? prev : next;
     });
   }, [processes]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const result = await pm0Api.saveDump();
-      toast.success(`Saved ${result.saved_count} process(es) to dump`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(`Save failed: ${message}`);
-    } finally {
-      setSaving(false);
-    }
+  const searched = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return (processes ?? []).filter(
+      (p) =>
+        !needle ||
+        p.name.toLowerCase().includes(needle) ||
+        String(p.pm_id) === needle ||
+        p.script?.toLowerCase().includes(needle) ||
+        p.cwd?.toLowerCase().includes(needle),
+    );
+  }, [processes, query]);
+
+  const counts: Record<Filter, number> = {
+    all: searched.length,
+    online: searched.filter((p) => p.status === 'online').length,
+    stopped: searched.filter((p) => p.status === 'stopped').length,
+    errored: searched.filter((p) => p.status === 'errored').length,
   };
 
-  const searchedProcesses = processes.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      String(p.pm_id).includes(search) ||
-      p.status.toLowerCase().includes(search.toLowerCase()),
-  );
+  const visible = useMemo(() => {
+    const rows = searched.filter((p) => filter === 'all' || p.status === filter);
+    const direction = sort.desc ? -1 : 1;
+    return rows.sort((a, b) => {
+      if (sort.key === 'attention')
+        return attentionRank(a.status) - attentionRank(b.status) || a.pm_id - b.pm_id;
+      if (sort.key === 'name') return direction * a.name.localeCompare(b.name);
+      return direction * (SORT_VALUE[sort.key](a) - SORT_VALUE[sort.key](b)) || a.pm_id - b.pm_id;
+    });
+  }, [searched, filter, sort]);
 
-  const filterCounts: Record<StatusFilter, number> = {
-    all: searchedProcesses.length,
-    online: searchedProcesses.filter((p) => p.status === 'online').length,
-    stopped: searchedProcesses.filter((p) => p.status === 'stopped').length,
-    errored: searchedProcesses.filter((p) => p.status === 'errored').length,
-  };
+  const groups = [
+    {
+      key: 'apps',
+      title: 'Apps',
+      processes: visible.filter((p) => p.daemon !== 'platform'),
+    },
+    {
+      key: 'platform',
+      title: 'Platform',
+      note: 'Shipyard’s own services',
+      processes: visible.filter((p) => p.daemon === 'platform'),
+    },
+  ].filter((group) => group.processes.length > 0);
 
-  const filteredProcesses = (
-    statusFilter === 'all'
-      ? searchedProcesses
-      : searchedProcesses.filter((p) => p.status === statusFilter)
-  )
-    .slice()
-    .sort((a, b) => attentionRank(a.status) - attentionRank(b.status) || a.pm_id - b.pm_id);
+  const allSelected = visible.length > 0 && visible.every((p) => selectedIds.has(processTarget(p)));
+  const selected = (processes ?? []).filter((p) => selectedIds.has(processTarget(p)));
+  const inspected = processes?.find((p) => processTarget(p) === inspecting);
+  const crashed = (processes ?? []).filter((p) => p.status === 'errored');
 
-  const selectedProcesses = processes.filter((p) => selectedIds.has(processTarget(p)));
-  const allVisibleSelected =
-    filteredProcesses.length > 0 &&
-    filteredProcesses.every((p) => selectedIds.has(processTarget(p)));
+  const toggleSort = (key: SortKey) =>
+    setSort((prev) =>
+      prev.key === key
+        ? prev.desc
+          ? { key: 'attention', desc: false } // Third click returns to the default order.
+          : { key, desc: true }
+        : { key, desc: key !== 'name' },
+    );
 
-  const toggleSelect = (target: string) => {
+  const toggleSelect = (target: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(target)) next.delete(target);
       else next.add(target);
       return next;
     });
-  };
 
-  const handleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredProcesses.map((p) => processTarget(p))));
-    }
-  };
-
-  const runBulkAction = async (action: 'stop' | 'restart' | 'delete') => {
-    const targets =
-      action === 'stop'
-        ? selectedProcesses.filter((p) => p.status === 'online')
-        : selectedProcesses;
-
+  const runBulk = async (action: BulkAction) => {
+    const targets = action === 'stop' ? selected.filter((p) => p.status === 'online') : selected;
     if (targets.length === 0) {
-      toast.error(action === 'stop' ? 'No running processes selected' : 'No processes selected');
+      toast.error('None of the selected processes are running');
+      setBulkConfirm(null);
       return;
     }
-
-    setBulkAction(action);
+    setBulkRunning(action);
     const results = await Promise.allSettled(
       targets.map((p) =>
         action === 'stop'
@@ -258,483 +178,421 @@ export default function ProcessesPage() {
             : pm0Api.deleteProcess(processTarget(p)),
       ),
     );
-
-    const failed = results.filter((result) => result.status === 'rejected').length;
-    const succeeded = results.length - failed;
-    const verb = action === 'stop' ? 'stopped' : action === 'restart' ? 'restarted' : 'deleted';
-
-    if (succeeded > 0) {
-      toast.success(`${succeeded} process${succeeded === 1 ? '' : 'es'} ${verb}`);
-    }
-    if (failed > 0) {
-      toast.error(`${failed} process${failed === 1 ? '' : 'es'} failed to ${action}`);
-    }
-
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    const done = results.length - failed;
+    const verb = { stop: 'stopped', restart: 'restarted', delete: 'deleted' }[action];
+    if (done) toast.success(`${done} process${done === 1 ? '' : 'es'} ${verb}`);
+    if (failed) toast.error(`${failed} process${failed === 1 ? '' : 'es'} could not be ${verb}`);
     setSelectedIds(new Set());
-    setBulkAction(null);
+    setBulkRunning(null);
     setBulkConfirm(null);
-    void fetchData();
+    void refreshProcesses();
   };
 
-  // Aggregated stats
-  const onlineCount = processes.filter((p) => p.status === 'online').length;
-  const stoppedCount = processes.filter((p) => p.status === 'stopped').length;
-  const erroredCount = processes.filter((p) => p.status === 'errored').length;
-  const totalCpu = processes.reduce((sum, p) => sum + (p.monit?.cpu ?? 0), 0);
-  const totalMem = processes.reduce((sum, p) => sum + (p.monit?.memory ?? 0), 0);
-
-  // A failed poll keeps the last good numbers on screen, marked as stale.
-  const showOffline = daemonDown && processes.length === 0;
-  const stale = daemonDown && processes.length > 0;
-
-  const processMemPct =
-    system?.has_memory && system.memory_total_bytes > 0
-      ? (totalMem / system.memory_total_bytes) * 100
-      : null;
-
-  const hostLoadPct =
-    system?.has_load && system.cpu_cores > 0 ? (system.load_1 / system.cpu_cores) * 100 : null;
-
-  const statusSummary = [
-    onlineCount > 0 && `${onlineCount} online`,
-    stoppedCount > 0 && `${stoppedCount} stopped`,
-    erroredCount > 0 && `${erroredCount} errored`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
-  const overall = daemonDown
-    ? { label: 'Daemon offline', dot: 'bg-red-500', text: 'text-red-500 dark:text-red-400' }
-    : erroredCount > 0
-      ? {
-          label: `${erroredCount} process${erroredCount === 1 ? '' : 'es'} errored`,
-          dot: 'bg-red-500',
-          text: 'text-red-500 dark:text-red-400',
-        }
-      : stoppedCount > 0
-        ? {
-            label: `${stoppedCount} process${stoppedCount === 1 ? '' : 'es'} stopped`,
-            dot: 'bg-amber-500',
-            text: 'text-amber-500 dark:text-amber-400',
-          }
-        : processes.length > 0
-          ? {
-              label: 'All processes healthy',
-              dot: 'bg-emerald-500',
-              text: 'text-foreground',
-            }
-          : {
-              label: 'No processes',
-              dot: 'bg-muted-foreground',
-              text: 'text-muted-foreground',
-            };
-
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-  }
-
-  const statusFilters: { key: StatusFilter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'online', label: 'Online' },
-    { key: 'stopped', label: 'Stopped' },
-    { key: 'errored', label: 'Errored' },
-  ];
+  const saveList = async () => {
+    setSaving(true);
+    try {
+      const result = await pm0Api.saveDump();
+      toast.success(`Saved ${result.saved_count} processes`, {
+        description: 'PM0 restores this list when the server reboots.',
+      });
+    } catch (err) {
+      toast.error('Could not save the process list', {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="page-width pb-16 pt-8 sm:pt-10">
-      <header className="flex flex-col justify-between gap-5 border-b border-border pb-6 sm:flex-row sm:items-end">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="page-heading">Processes</h1>
-            {daemonDown && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 border-red-500/30 font-normal text-red-500 dark:text-red-400"
-              >
-                <AlertTriangle className="size-3" />
-                Offline
-              </Badge>
+    <div className="page-width pt-7 pb-16 sm:pt-10">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="page-heading">Processes</h1>
+          <p className="mt-1.5 flex items-center gap-2 text-sm text-muted-foreground">
+            {offline ? (
+              <>
+                <StatusDot tone="error" /> PM0 is not responding
+              </>
+            ) : stale ? (
+              <>
+                <StatusDot tone="warning" /> Connection lost, showing the last known state
+              </>
+            ) : (
+              <>
+                <StatusDot tone="success" pulse={!list.isLoading} />
+                Supervised by PM0
+                {health.data && <span className="font-mono text-xs">v{health.data.version}</span>}
+                <span className="hidden sm:inline">· refreshes every {POLL_MS / 1000}s</span>
+              </>
             )}
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Monitor and control services supervised by PM0.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-            <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search processes"
-              aria-label="Search processes"
-              className="h-10 pl-8 text-sm"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setSelectedIds(new Set());
-              }}
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-10 shrink-0"
-            onClick={() => void fetchData()}
-            disabled={refreshing}
-            title="Refresh now"
-            aria-label="Refresh now"
-          >
-            <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
-          </Button>
           <Button
             variant="outline"
             size="sm"
-            className="h-10 shrink-0 gap-1.5"
-            onClick={handleSave}
-            disabled={saving || processes.length === 0}
-            title="Save the current process list to the PM0 dump"
-            aria-label="Save process list"
+            onClick={() => void list.refresh()}
+            disabled={list.isValidating}
           >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            <span className="hidden sm:inline">Save list</span>
+            <RefreshCw className={cn(list.isValidating && 'animate-spin')} />
+            Refresh
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm" aria-label="More process actions">
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem
+                disabled={saving || !processes?.length}
+                onSelect={() => void saveList()}
+              >
+                {saving ? <Loader2 className="animate-spin" /> : <Save />}
+                <div>
+                  <p>Save process list</p>
+                  <p className="text-xs text-muted-foreground">Restored by PM0 after a reboot</p>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
-      <div className="mt-7 space-y-6">
-        {loading ? (
-          <div className="space-y-4">
-            <div className="h-36 animate-pulse surface-card rounded-xl border border-border bg-card" />
-            <div className="h-64 animate-pulse surface-card rounded-xl border border-border bg-card" />
-          </div>
-        ) : showOffline ? (
-          <div className="flex flex-col items-center justify-center surface-card rounded-xl border border-border bg-card px-6 py-16 text-center sm:py-20">
-            <div className="mb-4 grid size-11 place-items-center rounded-lg border border-border bg-surface-muted">
-              <AlertTriangle className="size-5 text-muted-foreground" />
-            </div>
-            <h3 className="text-base font-semibold tracking-tight">PM0 daemon is unreachable</h3>
-            <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Make sure the PM0 daemon is running with its HTTP API on a Unix socket (
-              <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
-                PM0_HTTP_ADDR=unix:~/.pm0/http.sock
-              </code>
-              ) and that the Control API&apos;s{' '}
-              <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs">
-                PM0_API_URL
-              </code>{' '}
-              points at it.
-            </p>
-            <Button variant="outline" size="sm" className="mt-5" onClick={() => void fetchData()}>
-              <RefreshCw className="size-3.5" />
-              Retry
-            </Button>
-          </div>
-        ) : (
-          <>
-            {stale && (
-              <div
-                role="status"
-                className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm"
-              >
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
-                <span>
-                  <span className="font-medium">PM0 isn't responding.</span>{' '}
-                  <span className="text-muted-foreground">
-                    Showing the last known state. Retrying every few seconds.
-                  </span>
-                </span>
-              </div>
-            )}
+      {list.isLoading ? (
+        <div className="mt-6 space-y-4" role="status" aria-label="Loading processes">
+          <div className="h-[92px] animate-pulse rounded-xl border border-border bg-card" />
+          <div className="h-72 animate-pulse rounded-xl border border-border bg-card" />
+        </div>
+      ) : offline ? (
+        <Panel className="mt-6">
+          <EmptyState
+            title="Can't reach the PM0 daemon"
+            description={
+              <>
+                Check that PM0 is running with its HTTP API on a Unix socket (
+                <code className="font-mono text-xs">PM0_HTTP_ADDR=unix:~/.pm0/http.sock</code>) and
+                that the Control API&apos;s <code className="font-mono text-xs">PM0_API_URL</code>{' '}
+                points at it.
+              </>
+            }
+            action={
+              <Button variant="outline" size="sm" onClick={() => void list.refresh()}>
+                <RefreshCw /> Try again
+              </Button>
+            }
+          />
+        </Panel>
+      ) : (
+        <>
+          <HostSummary
+            processes={processes ?? []}
+            system={list.data?.system ?? null}
+            warning={health.data?.cgroup_warning}
+          />
 
-            {/* System summary */}
-            <section className="overflow-hidden surface-card rounded-xl border border-border bg-card">
-              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-4 py-3">
-                <div className="flex items-center gap-2.5">
-                  <span className={cn('size-2 rounded-full', overall.dot)} />
-                  <span className={cn('text-sm font-medium', overall.text)}>{overall.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {processes.length > 0 ? `${processes.length} supervised` : 'Nothing running'}
-                  </span>
-                </div>
-                {!stale && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="relative flex size-1.5">
-                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                      <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
-                    </span>
-                    Updates every {POLL_INTERVAL_MS / 1000}s
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-5">
-                <MetricCard
-                  className="col-span-2 lg:col-span-1"
-                  label="Processes"
-                  value={processes.length}
-                  hint={statusSummary || 'No supervised processes'}
-                />
-                <MetricCard
-                  label="Process CPU"
-                  value={totalCpu.toFixed(1)}
-                  unit="%"
-                  hint={`${onlineCount} running`}
-                />
-                <MetricCard
-                  label="Process memory"
-                  value={formatBytes(totalMem)}
-                  hint={
-                    processMemPct === null
-                      ? 'Resident memory used'
-                      : `${processMemPct.toFixed(1)}% of host`
-                  }
-                  tone={processMemPct === null ? 'default' : getPressureTone(processMemPct)}
-                  progress={processMemPct}
-                />
-                <MetricCard
-                  label="Host load"
-                  value={system?.has_load ? system.load_1.toFixed(2) : '—'}
-                  unit={system?.has_load ? '1m' : undefined}
-                  hint={
-                    system?.has_load
-                      ? `${system.cpu_cores} cores · 5m ${system.load_5.toFixed(2)}`
-                      : 'Load unavailable'
-                  }
-                  tone={hostLoadPct === null ? 'default' : getPressureTone(hostLoadPct)}
-                  progress={hostLoadPct}
-                />
-                <MetricCard
-                  label="Host memory"
-                  value={system?.has_memory ? system.memory_used_pct.toFixed(1) : '—'}
-                  unit={system?.has_memory ? '%' : undefined}
-                  hint={
-                    system?.has_memory
-                      ? `${formatBytes(system.memory_used_bytes)} / ${formatBytes(system.memory_total_bytes)}`
-                      : 'Memory unavailable'
-                  }
-                  tone={system?.has_memory ? getPressureTone(system.memory_used_pct) : 'default'}
-                  progress={system?.has_memory ? system.memory_used_pct : null}
-                />
-              </div>
-
-              {health && (
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-border px-4 py-2.5 text-xs">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                    <span
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        stale ? 'bg-red-500' : 'bg-emerald-500',
-                      )}
-                    />
-                    {stale ? 'Daemon offline' : 'Daemon online'}
-                  </span>
-                  <DaemonFact label="PID" value={health.pid} />
-                  <DaemonFact
-                    label="Version"
-                    value={`v${health.version}${health.commit ? ` · ${health.commit.slice(0, 7)}` : ''}`}
-                  />
-                  <DaemonFact label="Kill mode" value={health.kill_mode} />
-                  <DaemonFact label="Kernel" value={health.kernel_release} />
-                </div>
-              )}
-
-              {health?.cgroup_warning && (
-                <div className="flex items-start gap-1.5 border-t border-border px-4 py-2 text-xs text-amber-500 dark:text-amber-400">
-                  <AlertTriangle className="mt-px size-3 shrink-0" />
-                  <span>{health.cgroup_warning}</span>
-                </div>
-              )}
-            </section>
-
-            {/* Process list */}
-            <section className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-medium text-foreground">Supervised processes</h2>
-                  <span className="rounded-md border border-border bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {filteredProcesses.length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {filteredProcesses.length > 0 && (
-                    <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={handleSelectAll}
-                        aria-label="Select all visible processes"
-                        className="size-3.5 cursor-pointer rounded border-border bg-surface-muted accent-brand-500"
-                      />
-                      <span className="hidden sm:inline">Select all</span>
-                    </label>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1.5 px-2 text-xs"
-                    onClick={() => setCompact((value) => !value)}
-                    title="Toggle row density"
+          {crashed.length > 0 && (
+            <Panel className="mt-4 border-red-500/30" role="alert">
+              <ul className="divide-y divide-border">
+                {crashed.map((process) => (
+                  <li
+                    key={processTarget(process)}
+                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
                   >
-                    {compact ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
-                    <span className="hidden sm:inline">{compact ? 'Comfortable' : 'Compact'}</span>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="no-scrollbar inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-surface-muted/50 p-0.5">
-                {statusFilters.map((filter) => {
-                  const active = statusFilter === filter.key;
-                  return (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      onClick={() => {
-                        setStatusFilter(filter.key);
-                        setSelectedIds(new Set());
-                      }}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        active
-                          ? 'bg-card text-foreground shadow-xs'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {filterDot[filter.key] && (
-                        <span className={cn('size-1.5 rounded-full', filterDot[filter.key])} />
-                      )}
-                      {filter.label}
-                      <span
-                        className={cn(
-                          'font-mono text-[10px] tabular-nums',
-                          active ? 'text-muted-foreground' : 'text-muted-foreground/70',
-                        )}
-                      >
-                        {filterCounts[filter.key]}
+                    <p className="flex min-w-0 flex-1 items-baseline gap-3 text-sm">
+                      <StatusDot tone="error" className="translate-y-[-1px]" />
+                      <span className="min-w-0">
+                        <span className="font-medium">{process.name}</span>{' '}
+                        <span className="text-muted-foreground">
+                          crashed
+                          {process.exit_code != null && ` with exit code ${process.exit_code}`}
+                          {process.restart_time > 0 && ` after ${restartsLabel(process)} restarts`}.
+                        </span>
                       </span>
-                    </button>
-                  );
-                })}
-              </div>
+                    </p>
+                    <div className="flex shrink-0 gap-2 pl-5 sm:pl-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setInspecting(processTarget(process))}
+                      >
+                        View logs
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actions.isPending(process)}
+                        onClick={() => actions.request('start', process)}
+                      >
+                        {actions.isPending(process) ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <Play />
+                        )}
+                        Start
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
 
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <FilterTabs
+              label="Filter processes by status"
+              value={filter}
+              onChange={(value) => {
+                setFilter(value);
+                setSelectedIds(new Set());
+              }}
+              options={[
+                { value: 'all', label: 'All', count: counts.all },
+                { value: 'online', label: 'Online', count: counts.online, tone: 'success' },
+                { value: 'stopped', label: 'Stopped', count: counts.stopped, tone: 'neutral' },
+                { value: 'errored', label: 'Errored', count: counts.errored, tone: 'error' },
+              ]}
+            />
+            <SearchField
+              className="sm:w-64"
+              value={query}
+              onChange={(value) => {
+                setQuery(value);
+                setSelectedIds(new Set());
+              }}
+              onSubmit={() => {
+                if (visible.length === 1) setInspecting(processTarget(visible[0]));
+              }}
+              placeholder="Search name, id, path"
+              label="Search processes"
+            />
+          </div>
+
+          <Panel className="mt-3">
+            {visible.length === 0 ? (
+              processes?.length ? (
+                <EmptyState
+                  title="No processes match"
+                  description="Nothing matches this search and status filter."
+                  action={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setQuery('');
+                        setFilter('all');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="Nothing is running"
+                  description={
+                    <>
+                      Deploy a project, or start a process on the server with{' '}
+                      <code className="font-mono text-xs">pm0 start app.js</code>.
+                    </>
+                  }
+                />
+              )
+            ) : (
               <ProcessTable
-                processes={filteredProcesses}
-                onRefresh={() => void fetchData({ silent: true })}
-                compact={compact}
+                groups={groups}
+                sort={sort}
+                onSort={toggleSort}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
-                filtered={search !== '' || statusFilter !== 'all'}
-                onClearFilters={() => {
-                  setSearch('');
-                  setStatusFilter('all');
-                }}
+                allSelected={allSelected}
+                onToggleAll={() =>
+                  setSelectedIds(allSelected ? new Set() : new Set(visible.map(processTarget)))
+                }
+                onOpen={(process) => setInspecting(processTarget(process))}
+                onAction={actions.request}
+                isPending={actions.isPending}
               />
+            )}
+          </Panel>
 
-              {selectedIds.size > 0 && (
-                <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 sm:bottom-3 mx-auto flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl border border-border bg-popover px-3 py-2 shadow-lg">
-                  <span className="mr-auto text-xs font-medium text-foreground">
-                    {selectedIds.size} selected
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5"
-                    onClick={() => setBulkConfirm('stop')}
-                    disabled={!!bulkAction}
-                    title="Stop selected"
-                    aria-label="Stop selected"
-                  >
-                    {bulkAction === 'stop' ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Square className="size-3.5" />
-                    )}
-                    <span className="hidden sm:inline">Stop</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5"
-                    onClick={() => setBulkConfirm('restart')}
-                    disabled={!!bulkAction}
-                    title="Restart selected"
-                    aria-label="Restart selected"
-                  >
-                    {bulkAction === 'restart' ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <RotateCw className="size-3.5" />
-                    )}
-                    <span className="hidden sm:inline">Restart</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setBulkConfirm('delete')}
-                    disabled={!!bulkAction}
-                    title="Delete selected"
-                    aria-label="Delete selected"
-                  >
-                    <Trash2 className="size-3.5" />
-                    <span className="hidden sm:inline">Delete</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setSelectedIds(new Set())}
-                    title="Clear selection"
-                    aria-label="Clear selection"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              )}
-            </section>
-          </>
-        )}
-      </div>
+          {selected.length > 0 && (
+            <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 mx-auto mt-3 flex w-full max-w-xl items-center gap-1.5 rounded-xl border border-border-strong bg-popover px-3 py-2 shadow-xl animate-in fade-in slide-in-from-bottom-2 sm:bottom-4">
+              <span className="mr-auto pl-1 text-sm font-medium">{selected.length} selected</span>
+              {(
+                [
+                  ['restart', RotateCw, 'Restart'],
+                  ['stop', Square, 'Stop'],
+                ] as const
+              ).map(([action, Icon, label]) => (
+                <Button
+                  key={action}
+                  variant="outline"
+                  size="sm"
+                  disabled={!!bulkRunning}
+                  onClick={() => setBulkConfirm(action)}
+                >
+                  <Icon className="size-3.5" />
+                  <span className="hidden sm:inline">{label}</span>
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-500/30 text-red-700 hover:bg-red-500/10 dark:text-red-400"
+                disabled={!!bulkRunning}
+                onClick={() => setBulkConfirm('delete')}
+              >
+                <Trash2 className="size-3.5" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSelectedIds(new Set())}
+                aria-label="Clear selection"
+              >
+                <X />
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+
+      <ProcessInspector
+        process={inspected}
+        open={!!inspecting}
+        onOpenChange={(open) => !open && setInspecting('')}
+        onAction={actions.request}
+        isPending={actions.isPending}
+      />
+      {actions.dialog}
 
       <AlertDialog
         open={bulkConfirm !== null}
-        onOpenChange={(open) => !open && !bulkAction && setBulkConfirm(null)}
+        onOpenChange={(open) => !open && !bulkRunning && setBulkConfirm(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {bulkConfirm === 'delete' ? 'Delete' : bulkConfirm === 'stop' ? 'Stop' : 'Restart'}{' '}
-              {selectedIds.size} process{selectedIds.size === 1 ? '' : 'es'}?
+              {selected.length} process{selected.length === 1 ? '' : 'es'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               {bulkConfirm === 'delete'
-                ? 'This stops the selected processes and removes them from PM0. This cannot be undone.'
+                ? 'They stop and are removed from PM0.'
                 : bulkConfirm === 'stop'
-                  ? 'Anything they serve becomes unavailable until you start them again.'
-                  : 'They all restart at once, so anything they serve may briefly drop requests.'}
+                  ? 'Anything they serve is unavailable until you start them again.'
+                  : 'They restart at once, so anything they serve may briefly drop requests.'}
+              {selected.some((p) => p.daemon === 'platform') &&
+                ' The selection includes Shipyard’s own services.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!bulkAction}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={!!bulkRunning}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className={
                 bulkConfirm === 'restart'
                   ? undefined
                   : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
               }
-              disabled={!!bulkAction}
+              disabled={!!bulkRunning}
               onClick={(event) => {
                 event.preventDefault();
-                if (bulkConfirm) void runBulkAction(bulkConfirm);
+                if (bulkConfirm) void runBulk(bulkConfirm);
               }}
             >
-              {bulkAction && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {bulkRunning && <Loader2 className="animate-spin" />}
               {bulkConfirm === 'delete' ? 'Delete' : bulkConfirm === 'stop' ? 'Stop' : 'Restart'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function HostSummary({
+  processes,
+  system,
+  warning,
+}: {
+  processes: PM0Process[];
+  system: PM0SystemStats | null;
+  warning?: string;
+}) {
+  const online = processes.filter((p) => p.status === 'online');
+  const stopped = processes.filter((p) => p.status === 'stopped').length;
+  const errored = processes.filter((p) => p.status === 'errored').length;
+  const cpu = processes.reduce((sum, p) => sum + (p.monit?.cpu ?? 0), 0);
+  const memory = processes.reduce((sum, p) => sum + (p.monit?.memory ?? 0), 0);
+  const loadPct =
+    system?.has_load && system.cpu_cores > 0 ? (system.load_1 / system.cpu_cores) * 100 : null;
+
+  const cell = 'min-w-0 px-4 py-3.5 sm:px-5';
+  const value = 'mt-1 font-mono text-lg leading-none font-medium tracking-tight tabular-nums';
+  const sub = 'mt-1.5 truncate text-xs text-muted-foreground';
+
+  return (
+    <Panel className="mt-6">
+      <dl className="grid grid-cols-2 lg:grid-cols-3">
+        <div
+          className={cn(
+            cell,
+            'col-span-2 border-b border-border lg:col-span-1 lg:border-r lg:border-b-0',
+          )}
+        >
+          <dt className="text-xs text-muted-foreground">Processes</dt>
+          <dd className={value}>
+            {online.length}
+            <span className="text-sm text-muted-foreground"> / {processes.length} online</span>
+          </dd>
+          <dd className={sub}>
+            {stopped + errored === 0 ? (
+              'All running'
+            ) : (
+              <>
+                {stopped > 0 && `${stopped} stopped`}
+                {stopped > 0 && errored > 0 && ' · '}
+                {errored > 0 && <span className={TONE_TEXT.error}>{errored} errored</span>}
+              </>
+            )}
+            {` · ${cpu.toFixed(1)}% CPU, ${formatBytes(memory)}`}
+          </dd>
+        </div>
+        <div className={cn(cell, 'border-r border-border')}>
+          <dt className="text-xs text-muted-foreground">Host load</dt>
+          <dd className={value}>
+            {system?.has_load ? system.load_1.toFixed(2) : '—'}
+            {system?.has_load && (
+              <span className="text-sm text-muted-foreground"> / {system.cpu_cores} cores</span>
+            )}
+          </dd>
+          {loadPct !== null && <Meter value={loadPct} label="Host load" className="mt-2.5" />}
+        </div>
+        <div className={cell}>
+          <dt className="text-xs text-muted-foreground">Host memory</dt>
+          <dd className={value}>
+            {system?.has_memory ? `${system.memory_used_pct.toFixed(0)}%` : '—'}
+            {system?.has_memory && (
+              <span className="text-sm text-muted-foreground">
+                {' '}
+                {formatBytes(system.memory_used_bytes)} of {formatBytes(system.memory_total_bytes)}
+              </span>
+            )}
+          </dd>
+          {system?.has_memory && (
+            <Meter value={system.memory_used_pct} label="Host memory" className="mt-2.5" />
+          )}
+        </div>
+      </dl>
+      {warning && (
+        <p className={cn('border-t border-border px-4 py-2 text-xs sm:px-5', TONE_TEXT.warning)}>
+          {warning}
+        </p>
+      )}
+    </Panel>
   );
 }

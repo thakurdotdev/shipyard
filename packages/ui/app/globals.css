@@ -324,7 +324,7 @@ body {
     font-weight: 600;
   }
 
-  /* Shared surfaces. Applied through Button, Card, CardShell and the form fields,
+  /* Shared surfaces. Applied through Button, Card, Panel and the form fields,
      so every screen picks them up together. */
   .surface-card {
     box-shadow:

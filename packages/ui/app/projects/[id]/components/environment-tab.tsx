@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Info, KeyRound, Loader2, RotateCcw, Save } from 'lucide-react';
+import { Loader2, RotateCcw, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { Project, EnvVar } from '@/lib/types';
 import { EnvEntry } from '@/lib/env-parser';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Panel, PanelHeader } from '@/components/ui/panel';
 import {
   EnvEditor,
   EnvRow,
@@ -18,9 +19,12 @@ import {
 
 interface EnvironmentTabProps {
   project: Project;
+  /** A live deployment exists and nothing is deploying, so a redeploy can apply changes. */
+  canRedeploy: boolean;
+  onRedeploy: () => void;
 }
 
-export function EnvironmentTab({ project }: EnvironmentTabProps) {
+export function EnvironmentTab({ project, canRedeploy, onRedeploy }: EnvironmentTabProps) {
   const [rows, setRows] = useState<EnvRow[]>([]);
   const [saved, setSaved] = useState<EnvEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +96,10 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
       });
     } else {
       toast.success('Environment variables saved', {
-        description: 'They apply from the next deployment.',
+        description: canRedeploy
+          ? 'Redeploy to apply them to the running app.'
+          : 'They apply from the next deployment.',
+        ...(canRedeploy ? { action: { label: 'Redeploy now', onClick: onRedeploy } } : {}),
       });
     }
     // Reload so the editor reflects exactly what the server has.
@@ -108,49 +115,40 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
   };
 
   return (
-    <div className="space-y-4 pb-24 animate-in fade-in-50 duration-300 sm:pb-0">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-foreground">
-              <KeyRound className="size-4" />
-            </span>
-            <div>
-              <CardTitle>Environment variables</CardTitle>
-              <CardDescription className="mt-1">
-                Encrypted at rest and injected into builds and the running app.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent>
-          {loading ? (
-            <div className="flex h-44 items-center justify-center">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : loadError ? (
-            <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
-              Could not load the variables.
-              <Button variant="outline" size="sm" onClick={() => void load()}>
-                Try again
+    <div className="space-y-4 pb-24 sm:pb-0">
+      <Panel>
+        <PanelHeader
+          title="Environment variables"
+          description="Encrypted at rest. Injected into builds and the running app on the next deploy."
+          actions={
+            canRedeploy && (
+              <Button variant="outline" size="sm" onClick={onRedeploy} disabled={changeCount > 0}>
+                <RotateCcw />
+                Redeploy to apply
               </Button>
-            </div>
+            )
+          }
+        />
+        <div className="px-4 py-4 sm:px-5">
+          {loading ? (
+            <div className="h-44 animate-pulse rounded-lg bg-surface-muted/50" />
+          ) : loadError ? (
+            <EmptyState
+              title="Couldn’t load the variables"
+              action={
+                <Button variant="outline" size="sm" onClick={() => void load()}>
+                  Try again
+                </Button>
+              }
+            />
           ) : (
             <EnvEditor rows={rows} onChange={setRows} baseline={saved} />
           )}
-        </CardContent>
-      </Card>
-
-      <div className="flex items-start gap-3 surface-card rounded-xl border border-border bg-card p-4 text-xs text-muted-foreground">
-        <Info className="mt-0.5 size-4 shrink-0" />
-        <p>
-          Changes apply from the next deployment. Redeploy the current build to pick them up now.
-        </p>
-      </div>
+        </div>
+      </Panel>
 
       {changeCount > 0 && (
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 border-t border-border bg-background/95 p-3 backdrop-blur animate-in slide-in-from-bottom-2 sm:sticky sm:bottom-4 sm:rounded-xl sm:border sm:bg-card sm:shadow-lg">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 border-t border-border bg-background/95 p-3 backdrop-blur animate-in slide-in-from-bottom-2 sm:sticky sm:bottom-4 sm:rounded-xl sm:border sm:border-border-strong sm:bg-popover sm:shadow-xl">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
             <p className="min-w-0 text-xs">
               <span className="font-medium text-foreground">

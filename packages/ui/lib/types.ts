@@ -25,20 +25,16 @@ export interface Project {
   www_redirect?: boolean;
   created_at: string;
   updated_at: string;
-  latest_build?: Pick<Build, 'id' | 'status' | 'created_at' | 'completed_at'> | null;
+  latest_build?: Pick<
+    Build,
+    'id' | 'status' | 'commit_sha' | 'commit_message' | 'created_at' | 'completed_at'
+  > | null;
   latest_deployment?: {
     id: string;
     build_id: string;
     status: DeploymentStatus;
     status_message: string | null;
     activated_at: string;
-  } | null;
-  managed_process?: {
-    name: string;
-    pm_id: number;
-    status: string;
-    cpu: number;
-    memory: number;
   } | null;
   uptime_status?: 'unknown' | 'up' | 'down' | null;
   /** True when visitors must enter a password to reach the deployed site. */
@@ -64,7 +60,8 @@ export interface Build {
   project_id: string;
   /** `cancelled`: skipped before it started because a newer commit was queued. */
   status: 'pending' | 'building' | 'success' | 'failed' | 'cancelled';
-  logs: string | null;
+  commit_sha?: string | null;
+  commit_message?: string | null;
   artifact_id: string | null;
   created_at: string;
   completed_at: string | null;

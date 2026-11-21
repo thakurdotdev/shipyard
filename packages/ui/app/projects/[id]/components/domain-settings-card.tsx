@@ -7,7 +7,6 @@ import {
   CircleAlert,
   CirclePlus,
   ExternalLink,
-  Globe,
   Loader2,
   Search,
   TriangleAlert,
@@ -16,10 +15,9 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { DomainCheck, DomainHostCheck, DomainSwitch, Project } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Field, SettingsSection, ToggleRow } from '@/components/settings/settings-section';
 
 interface DomainSettingsCardProps {
   project: Project;
@@ -151,69 +149,74 @@ export function DomainSettingsCard({ project, onDomainChange }: DomainSettingsCa
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Globe className="h-5 w-5" />
-          Domain
-        </CardTitle>
-        <CardDescription>
-          A subdomain (just the name, like <span className="font-mono">portfolio</span>) or any
-          domain in your Cloudflare account, including a root domain like{' '}
+    <SettingsSection
+      id="domain"
+      title="Domain"
+      description={
+        <>
+          A subdomain name like <span className="font-mono">portfolio</span>, or any domain in your
+          Cloudflare account, including a root domain like{' '}
           <span className="font-mono">example.com</span>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {project.domain && (
-          <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-            Live at
-            <a
-              href={`https://${project.domain}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 font-mono text-[13px] text-foreground hover:underline"
-            >
-              {project.domain}
-              <ExternalLink className="size-3.5" />
-            </a>
-            {project.www_redirect && (
-              <span>
-                (and <span className="font-mono text-[13px]">www.{project.domain}</span>)
-              </span>
-            )}
-          </p>
-        )}
+        </>
+      }
+    >
+      {project.domain && (
+        <p className="flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
+          Live at
+          <a
+            href={`https://${project.domain}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-mono text-foreground hover:underline"
+          >
+            {project.domain}
+            <ExternalLink className="size-3.5" />
+          </a>
+          {project.www_redirect && (
+            <span>
+              and <span className="font-mono">www.{project.domain}</span>
+            </span>
+          )}
+        </p>
+      )}
 
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <div className="space-y-2">
-            <Label htmlFor="project-domain">Domain</Label>
-            <Input
-              id="project-domain"
-              value={domain}
-              onChange={(e) => {
-                setDomain(e.target.value);
-                setCheck(null);
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && runCheck()}
-              placeholder="example.com"
-              autoComplete="off"
-              spellCheck={false}
-              disabled={running}
-              className="font-mono"
-            />
-          </div>
+      <Field
+        label="Domain"
+        htmlFor="project-domain"
+        hint="Check it first: you'll see exactly which DNS records change."
+      >
+        <div className="flex gap-2">
+          <Input
+            id="project-domain"
+            value={domain}
+            onChange={(e) => {
+              setDomain(e.target.value);
+              setCheck(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && runCheck()}
+            placeholder="example.com"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={running}
+            className="font-mono"
+          />
           <Button
             variant="outline"
             onClick={runCheck}
             disabled={checking || running || !domain.trim()}
-            className="gap-1.5"
+            className="shrink-0"
           >
             {checking ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
             Check
           </Button>
         </div>
+      </Field>
 
-        <div className="flex items-start gap-3">
+      <ToggleRow
+        id="www-redirect"
+        label="Redirect www"
+        description="Custom domains only: www.<domain> sends visitors to the domain itself."
+        control={
           <Switch
             id="www-redirect"
             checked={www}
@@ -223,90 +226,84 @@ export function DomainSettingsCard({ project, onDomainChange }: DomainSettingsCa
             }}
             disabled={running}
           />
-          <div className="space-y-0.5">
-            <Label htmlFor="www-redirect">Redirect www</Label>
+        }
+      />
+
+      {checkedInput && (
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <ul className="space-y-1.5">
+            {checkedInput.hosts.map((host) => (
+              <HostLine key={host.name} host={host} />
+            ))}
+          </ul>
+          {checkedInput.zone && (
             <p className="text-xs text-muted-foreground">
-              Custom domains only: www.{'<domain>'} sends visitors to the domain itself.
+              Cloudflare zone: <span className="font-mono">{checkedInput.zone}</span>
             </p>
-          </div>
-        </div>
-
-        {checkedInput && (
-          <div className="space-y-3 rounded-lg border border-border p-4">
-            <ul className="space-y-1.5">
-              {checkedInput.hosts.map((host) => (
-                <HostLine key={host.name} host={host} />
-              ))}
-            </ul>
-            {checkedInput.zone && (
+          )}
+          {checkedInput.warnings.map((warning) => (
+            <p
+              key={warning}
+              className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs leading-5 text-amber-700 dark:text-amber-400"
+            >
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+              {warning}
+            </p>
+          ))}
+          {checkedInput.errors.map((error) => (
+            <p
+              key={error}
+              className="flex gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-xs leading-5 text-red-700 dark:text-red-400"
+            >
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              {error}
+            </p>
+          ))}
+          {checkedInput.errors.length === 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Cloudflare zone: <span className="font-mono">{checkedInput.zone}</span>
+                {unchanged
+                  ? 'This is the current setting.'
+                  : 'The current domain keeps serving until the new one answers; if anything fails, nothing changes.'}
               </p>
-            )}
-            {checkedInput.warnings.map((warning) => (
-              <p
-                key={warning}
-                className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs leading-5 text-amber-700 dark:text-amber-400"
+              <Button
+                onClick={startChange}
+                disabled={starting || running || unchanged}
+                className="gap-1.5"
               >
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {warning}
-              </p>
-            ))}
-            {checkedInput.errors.map((error) => (
-              <p
-                key={error}
-                className="flex gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-xs leading-5 text-red-700 dark:text-red-400"
-              >
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                {error}
-              </p>
-            ))}
-            {checkedInput.errors.length === 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  {unchanged
-                    ? 'This is the current setting.'
-                    : 'The current domain keeps serving until the new one answers; if anything fails, nothing changes.'}
-                </p>
-                <Button
-                  onClick={startChange}
-                  disabled={starting || running || unchanged}
-                  className="gap-1.5"
-                >
-                  {starting ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <ArrowRight className="size-4" />
-                  )}
-                  Move to {checkedInput.domain}
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+                {starting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="size-4" />
+                )}
+                Move to {checkedInput.domain}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
-        {progress && (progress.state === 'running' || progress.state === 'failed') && (
-          <div
-            role="status"
-            className={
-              progress.state === 'running'
-                ? 'flex items-center gap-2 rounded-lg border border-border bg-surface-muted p-3 text-sm'
-                : 'flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400'
-            }
-          >
-            {progress.state === 'running' ? (
-              <Loader2 className="size-4 shrink-0 animate-spin" />
-            ) : (
-              <CircleAlert className="mt-0.5 size-4 shrink-0" />
-            )}
-            <span>
-              {progress.state === 'running'
-                ? `${progress.message} DNS, certificate and site switch can take a minute.`
-                : progress.message}
-            </span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {progress && (progress.state === 'running' || progress.state === 'failed') && (
+        <div
+          role="status"
+          className={
+            progress.state === 'running'
+              ? 'flex items-center gap-2 rounded-lg border border-border bg-surface-muted p-3 text-sm'
+              : 'flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400'
+          }
+        >
+          {progress.state === 'running' ? (
+            <Loader2 className="size-4 shrink-0 animate-spin" />
+          ) : (
+            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          )}
+          <span>
+            {progress.state === 'running'
+              ? `${progress.message} DNS, certificate and site switch can take a minute.`
+              : progress.message}
+          </span>
+        </div>
+      )}
+    </SettingsSection>
   );
 }

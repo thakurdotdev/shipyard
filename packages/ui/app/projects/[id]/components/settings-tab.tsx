@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Trash2, GitBranch, Settings2, Save, Loader2, Archive } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { ArrowUpRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { PreDeployCommandInput } from '@/components/deploy/pre-deploy-command-input';
+import { BranchSelect } from '@/components/github/branch-select';
+import {
+  Field,
+  SaveFooter,
+  SettingsSection,
+  ToggleRow,
+  useUnsavedWarning,
+} from '@/components/settings/settings-section';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +23,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -27,596 +32,674 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-import { Project } from '@/lib/types';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { api } from '@/lib/api';
+import { FRAMEWORK_OPTIONS, isStaticFramework, type AppType } from '@/lib/framework-config';
+import { queryKeys } from '@/lib/queries';
+import type { Project } from '@/lib/types';
+import { setQueryData } from '@/lib/use-query';
+import { cn } from '@/lib/utils';
 import { AccessProtectionCard } from './access-protection-card';
 import { DomainSettingsCard } from './domain-settings-card';
-import { FRAMEWORK_OPTIONS, AppType, isStaticFramework } from '@/lib/framework-config';
-import { PreDeployCommandInput } from '@/components/deploy/pre-deploy-command-input';
-import { BranchSelect } from '@/components/github/branch-select';
 
 interface SettingsTabProps {
   project: Project;
-  onProtectionChange?: (enabled: boolean) => void;
-  onDomainChange?: () => void;
-  /** Called after a change the rest of the page shows, such as the branch. */
-  onProjectChange?: () => void;
+  hasDeployment: boolean;
+  onStopDeployment: () => void;
+  /** Called after a change other parts of the page show, such as the branch. */
+  onProjectChange: () => void;
 }
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : 'An unexpected error occurred';
 
 export function SettingsTab({
   project,
-  onProtectionChange,
-  onDomainChange,
+  hasDeployment,
+  onStopDeployment,
   onProjectChange,
 }: SettingsTabProps) {
-  const router = useRouter();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [confirmName, setConfirmName] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [autoDeploy, setAutoDeploy] = useState(project.auto_deploy ?? true);
-  const [savedBranch, setSavedBranch] = useState(project.github_branch || 'main');
-  const [branch, setBranch] = useState(project.github_branch || 'main');
-  const [savingBranch, setSavingBranch] = useState(false);
-  const [savedAutoDeployPaths, setSavedAutoDeployPaths] = useState(project.auto_deploy_paths ?? '');
-  const [autoDeployPaths, setAutoDeployPaths] = useState(project.auto_deploy_paths ?? '');
-  const autoDeployPathsChanged = autoDeployPaths.trim() !== savedAutoDeployPaths.trim();
-  const projectRootDirectory = (project.root_directory || './')
-    .replace(/^(\.\/)+|^\.$/, '')
-    .replace(/\/$/, '');
-  const [savingAutoDeployPaths, setSavingAutoDeployPaths] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [keepBuilds, setKeepBuilds] = useState<number | null>(project.keep_builds ?? null);
-  const [savingRetention, setSavingRetention] = useState(false);
-  const retentionOptions = Array.from(
-    new Set([2, 3, 5, 10, ...(keepBuilds ? [keepBuilds] : [])]),
-  ).sort((a, b) => a - b);
+  const connected = !!(project.github_installation_id && project.github_repo_id);
+  const sections = [
+    { id: 'general', label: 'Build & runtime' },
+    { id: 'git', label: 'Git' },
+    { id: 'domain', label: 'Domain' },
+    { id: 'access', label: 'Access' },
+    { id: 'builds', label: 'Build history' },
+    { id: 'danger', label: 'Danger zone' },
+  ];
+  const active = useScrollSpy(sections.map((section) => section.id));
 
-  // Build settings state
-  const [buildCommand, setBuildCommand] = useState(project.build_command);
-  const [preDeployCommand, setPreDeployCommand] = useState(project.pre_deploy_command ?? '');
-  const [appType, setAppType] = useState<AppType>(project.app_type);
-  const isStatic = isStaticFramework(appType);
-  const [rootDirectory, setRootDirectory] = useState(project.root_directory || './');
-  const [port, setPort] = useState(project.port ? String(project.port) : '');
-  const [savingBuildSettings, setSavingBuildSettings] = useState(false);
+  // Reflect saves everywhere the project is shown, without waiting for a refetch.
+  const applyUpdate = (updated: Partial<Project>) =>
+    setQueryData<Project | undefined>(queryKeys.project(project.id), (prev) =>
+      prev ? { ...prev, ...updated } : prev,
+    );
 
-  // Check if build settings have changed
-  const [savedBuildSettings, setSavedBuildSettings] = useState({
-    buildCommand: project.build_command,
-    preDeployCommand: project.pre_deploy_command ?? '',
+  return (
+    <div className="grid gap-8 lg:grid-cols-[11rem_minmax(0,1fr)]">
+      <nav aria-label="Settings sections" className="hidden lg:block">
+        <ul className="sticky top-36 space-y-0.5 text-[13px]">
+          {sections.map((section) => (
+            <li key={section.id}>
+              <a
+                href={`#${section.id}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  document
+                    .getElementById(section.id)
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  history.replaceState(history.state, '', `#${section.id}`);
+                }}
+                className={cn(
+                  'block rounded-md px-2.5 py-1.5 transition-colors',
+                  active === section.id
+                    ? 'bg-accent font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                  section.id === 'danger' &&
+                    active !== 'danger' &&
+                    'hover:text-red-600 dark:hover:text-red-400',
+                )}
+              >
+                {section.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="min-w-0 space-y-5">
+        <GeneralSection project={project} onSaved={applyUpdate} />
+        <GitSection
+          project={project}
+          connected={connected}
+          onSaved={(updated) => {
+            applyUpdate(updated);
+            onProjectChange();
+          }}
+        />
+        <DomainSettingsCard project={project} onDomainChange={onProjectChange} />
+        <AccessProtectionCard
+          projectId={project.id}
+          onProtectionChange={(enabled) => applyUpdate({ access_protected: enabled })}
+        />
+        <RetentionSection project={project} onSaved={applyUpdate} />
+        <DangerSection
+          project={project}
+          hasDeployment={hasDeployment}
+          onStopDeployment={onStopDeployment}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The section nearest the top of the viewport, and scrolling to the URL's #section on load. */
+function useScrollSpy(ids: string[]) {
+  const [active, setActive] = useState(ids[0]);
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash && ids.includes(hash)) {
+      // Wait a frame so the sections have laid out.
+      requestAnimationFrame(() =>
+        document.getElementById(hash)?.scrollIntoView({ block: 'start' }),
+      );
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: '-140px 0px -55% 0px' },
+    );
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return active;
+}
+
+function GeneralSection({
+  project,
+  onSaved,
+}: {
+  project: Project;
+  onSaved: (updated: Partial<Project>) => void;
+}) {
+  const initial = {
     appType: project.app_type,
     rootDirectory: project.root_directory || './',
+    buildCommand: project.build_command,
+    preDeployCommand: project.pre_deploy_command ?? '',
     port: project.port ? String(project.port) : '',
-  });
-  const buildSettingsChanged =
-    buildCommand !== savedBuildSettings.buildCommand ||
-    preDeployCommand.trim() !== savedBuildSettings.preDeployCommand.trim() ||
-    appType !== savedBuildSettings.appType ||
-    rootDirectory !== savedBuildSettings.rootDirectory ||
-    (!isStatic && port !== savedBuildSettings.port);
+  };
+  const [saved, setSaved] = useState(initial);
+  const [form, setForm] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [portError, setPortError] = useState<string | null>(null);
+  const isStatic = isStaticFramework(form.appType);
 
-  const handleSaveBuildSettings = async () => {
-    setSavingBuildSettings(true);
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (key === 'port') setPortError(null);
+  };
+
+  const dirty =
+    form.appType !== saved.appType ||
+    form.rootDirectory !== saved.rootDirectory ||
+    form.buildCommand !== saved.buildCommand ||
+    form.preDeployCommand.trim() !== saved.preDeployCommand.trim() ||
+    (!isStatic && form.port !== saved.port);
+  useUnsavedWarning(dirty);
+
+  const portValue = form.port.trim() ? Number(form.port) : undefined;
+  const portInvalid =
+    !isStatic &&
+    portValue !== undefined &&
+    (!Number.isInteger(portValue) || portValue < 1024 || portValue > 65535);
+
+  const save = async () => {
+    setSaving(true);
     try {
-      let parsedPort: number | undefined = undefined;
-      if (!isStatic && port.trim()) {
-        parsedPort = parseInt(port, 10);
-        if (isNaN(parsedPort) || parsedPort < 1024 || parsedPort > 65535) {
-          throw new Error('Port must be between 1024 and 65535');
-        }
-        if (parsedPort !== project.port) {
-          const check = await api.checkPortAvailability(parsedPort);
-          if (!check.available) {
-            throw new Error(check.reason || `Port ${parsedPort} is not available`);
-          }
+      if (!isStatic && portValue !== undefined && portValue !== project.port) {
+        const check = await api.checkPortAvailability(portValue);
+        if (!check.available) {
+          setPortError(check.reason || `Port ${portValue} is not available`);
+          return;
         }
       }
-
-      await api.updateProject(project.id, {
-        build_command: buildCommand,
-        pre_deploy_command: preDeployCommand.trim() || null,
-        app_type: appType,
-        root_directory: rootDirectory,
-        port: parsedPort,
-      });
-      setSavedBuildSettings({
-        buildCommand,
-        preDeployCommand: preDeployCommand.trim(),
-        appType,
-        rootDirectory,
-        port,
-      });
-      toast.success('Build settings saved', {
-        description: 'Changes will apply to your next build.',
-      });
-    } catch (e: any) {
-      console.error(e);
-      toast.error('Failed to save build settings', {
-        description: e.message || 'An unexpected error occurred',
-      });
+      const changes = {
+        build_command: form.buildCommand,
+        pre_deploy_command: form.preDeployCommand.trim() || null,
+        app_type: form.appType,
+        root_directory: form.rootDirectory,
+        port: isStatic ? undefined : portValue,
+      };
+      await api.updateProject(project.id, changes);
+      const next = { ...form, preDeployCommand: form.preDeployCommand.trim() };
+      setSaved(next);
+      setForm(next);
+      onSaved({ ...changes, port: changes.port ?? project.port });
+      toast.success('Build settings saved', { description: 'They apply from the next deploy.' });
+    } catch (error) {
+      toast.error('Could not save build settings', { description: errorMessage(error) });
     } finally {
-      setSavingBuildSettings(false);
-    }
-  };
-
-  const handleSaveBranch = async () => {
-    setSavingBranch(true);
-    try {
-      const updated = await api.updateProject(project.id, { github_branch: branch });
-      const stored = updated?.github_branch || branch;
-      setSavedBranch(stored);
-      setBranch(stored);
-      onProjectChange?.();
-      toast.success(`Now deploying from ${stored}`, {
-        description: autoDeploy
-          ? `Pushes to ${stored} deploy from now on. The live deployment stays until then.`
-          : 'Manual deploys build this branch. The live deployment stays until the next one.',
-        action: {
-          label: 'Deploy now',
-          onClick: () => {
-            api
-              .triggerBuild(project.id)
-              .then(() => toast.success(`Deploying the latest commit on ${stored}`))
-              .catch((e: Error) =>
-                toast.error('Could not start the deploy', { description: e.message }),
-              );
-          },
-        },
-      });
-    } catch (e: any) {
-      toast.error('Failed to change the branch', {
-        description: e.message || 'An unexpected error occurred',
-      });
-    } finally {
-      setSavingBranch(false);
-    }
-  };
-
-  const handleAutoDeployChange = async (checked: boolean) => {
-    setAutoDeploy(checked);
-    setUpdating(true);
-    try {
-      await api.updateProject(project.id, { auto_deploy: checked });
-      toast.success('Project settings updated', {
-        description: `Auto-deploy is now ${checked ? 'enabled' : 'disabled'}`,
-      });
-    } catch (e) {
-      console.error(e);
-      setAutoDeploy(!checked); // Revert on failure
-      toast.error('Failed to update settings');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleSaveAutoDeployPaths = async () => {
-    setSavingAutoDeployPaths(true);
-    try {
-      const updated = await api.updateProject(project.id, {
-        auto_deploy_paths: autoDeployPaths.trim() || null,
-      });
-      // The server canonicalises paths (trims slashes, de-duplicates); show what was stored.
-      const stored = updated?.auto_deploy_paths ?? '';
-      setSavedAutoDeployPaths(stored);
-      setAutoDeployPaths(stored);
-      toast.success(stored ? 'Build filters saved' : 'Build filters cleared', {
-        description: stored
-          ? 'Pushes deploy only when watched paths or their dependencies change.'
-          : 'Every push to the branch will deploy.',
-      });
-    } catch (e: any) {
-      toast.error('Failed to save build filters', {
-        description: e.message || 'An unexpected error occurred',
-      });
-    } finally {
-      setSavingAutoDeployPaths(false);
-    }
-  };
-
-  const handleRetentionChange = async (value: string) => {
-    const next = value === 'all' ? null : Number(value);
-    const previous = keepBuilds;
-    setKeepBuilds(next);
-    setSavingRetention(true);
-    try {
-      await api.updateProject(project.id, { keep_builds: next });
-      toast.success('Build retention saved', {
-        description: next
-          ? `After each successful deploy, builds older than the newest ${next} are deleted.`
-          : 'Every build is kept.',
-      });
-    } catch (e: any) {
-      setKeepBuilds(previous);
-      toast.error('Failed to save build retention', {
-        description: e.message || 'An unexpected error occurred',
-      });
-    } finally {
-      setSavingRetention(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (confirmName !== project.name) return;
-
-    setIsDeleting(true);
-    try {
-      const promise = api.deleteProject(project.id);
-      toast.promise(promise, {
-        loading: 'Deleting project...',
-        success: 'Project deleted successfully',
-        error: 'Failed to delete project',
-      });
-
-      await promise;
-      router.push('/');
-    } catch (e) {
-      console.error(e);
-      // toast handles error
-    } finally {
-      setIsDeleting(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in-50 duration-300">
-      <div className="grid gap-4">
-        {/* Build Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings2 className="w-5 h-5" />
-              Build settings
-            </CardTitle>
-            <CardDescription>Configure how your project is built and deployed.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="build-command">Build command</Label>
-                <Input
-                  id="build-command"
-                  value={buildCommand}
-                  onChange={(e) => setBuildCommand(e.target.value)}
-                  placeholder="npm run build"
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">Command to build your application</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="app-type">Framework</Label>
-                <Select value={appType} onValueChange={(v) => setAppType(v as AppType)}>
-                  <SelectTrigger id="app-type" className="w-full">
-                    <SelectValue placeholder="Select framework" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FRAMEWORK_OPTIONS.map((framework) => (
-                      <SelectItem key={framework.value} value={framework.value}>
-                        <span className="flex items-center gap-2">
-                          {framework.label}
-                          <span className="text-xs text-muted-foreground">
-                            ({framework.category})
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Framework used for your project</p>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="root-directory">Root directory</Label>
-                <Input
-                  id="root-directory"
-                  value={rootDirectory}
-                  onChange={(e) => setRootDirectory(e.target.value)}
-                  placeholder="./"
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Directory containing your package.json (for monorepos)
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="port">Port</Label>
-                <Input
-                  id="port"
-                  type="number"
-                  min={1024}
-                  max={65535}
-                  value={isStatic ? '' : port}
-                  disabled={isStatic}
-                  onChange={(e) => setPort(e.target.value)}
-                  placeholder={isStatic ? 'Not required for static sites' : 'Auto-assigned'}
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {isStatic
-                    ? 'Static files are served directly by Nginx. No application port is required.'
-                    : 'Assigned port on server (1024-65535)'}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pre-deploy-command">
-                Pre-deploy command{' '}
-                <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <PreDeployCommandInput
-                value={isStatic ? '' : preDeployCommand}
-                onChange={setPreDeployCommand}
-                disabled={isStatic}
+    <SettingsSection
+      id="general"
+      title="Build & runtime"
+      description="How Shipyard builds the project and runs it on the server."
+      footer={
+        <SaveFooter
+          dirty={dirty}
+          saving={saving}
+          canSave={!portInvalid}
+          onSave={save}
+          onReset={() => (setForm(saved), setPortError(null))}
+          note="Changes apply from the next deploy."
+        />
+      }
+    >
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label="Framework" htmlFor="app-type">
+          <Select value={form.appType} onValueChange={(value) => set('appType', value as AppType)}>
+            <SelectTrigger id="app-type" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FRAMEWORK_OPTIONS.map((framework) => (
+                <SelectItem key={framework.value} value={framework.value}>
+                  {framework.label}
+                  <span className="text-xs text-muted-foreground">{framework.category}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field
+          label="Root directory"
+          htmlFor="root-directory"
+          hint="Folder with the app’s package.json, for monorepos."
+        >
+          <Input
+            id="root-directory"
+            value={form.rootDirectory}
+            onChange={(event) => set('rootDirectory', event.target.value)}
+            placeholder="./"
+            spellCheck={false}
+            className="font-mono text-sm"
+          />
+        </Field>
+        <Field label="Build command" htmlFor="build-command">
+          <Input
+            id="build-command"
+            value={form.buildCommand}
+            onChange={(event) => set('buildCommand', event.target.value)}
+            placeholder="npm run build"
+            spellCheck={false}
+            className="font-mono text-sm"
+          />
+        </Field>
+        <Field
+          label="Port"
+          htmlFor="port"
+          error={portError ?? (portInvalid ? 'Use a port between 1024 and 65535.' : null)}
+          hint={
+            isStatic
+              ? 'Static files are served by Nginx; no port needed.'
+              : 'Leave empty to assign one automatically.'
+          }
+        >
+          <Input
+            id="port"
+            type="number"
+            inputMode="numeric"
+            min={1024}
+            max={65535}
+            value={isStatic ? '' : form.port}
+            disabled={isStatic}
+            onChange={(event) => set('port', event.target.value)}
+            placeholder={isStatic ? 'Not used' : 'Auto'}
+            aria-invalid={portInvalid || !!portError}
+            className="font-mono text-sm"
+          />
+        </Field>
+      </div>
+      <Field label="Pre-deploy command" htmlFor="pre-deploy-command" optional>
+        <PreDeployCommandInput
+          value={isStatic ? '' : form.preDeployCommand}
+          onChange={(value) => set('preDeployCommand', value)}
+          disabled={isStatic}
+        />
+      </Field>
+    </SettingsSection>
+  );
+}
+
+function GitSection({
+  project,
+  connected,
+  onSaved,
+}: {
+  project: Project;
+  connected: boolean;
+  onSaved: (updated: Partial<Project>) => void;
+}) {
+  const initial = {
+    branch: project.github_branch || 'main',
+    autoDeploy: project.auto_deploy ?? true,
+    paths: project.auto_deploy_paths ?? '',
+  };
+  const [saved, setSaved] = useState(initial);
+  const [form, setForm] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const root = (project.root_directory || './').replace(/^(\.\/)+|^\.$/, '').replace(/\/$/, '');
+  const repo =
+    project.github_repo_full_name ?? project.github_url.replace(/^https?:\/\/github\.com\//, '');
+
+  const dirty =
+    form.branch !== saved.branch ||
+    form.autoDeploy !== saved.autoDeploy ||
+    form.paths.trim() !== saved.paths.trim();
+  useUnsavedWarning(dirty);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.updateProject(project.id, {
+        ...(form.branch !== saved.branch ? { github_branch: form.branch } : {}),
+        auto_deploy: form.autoDeploy,
+        auto_deploy_paths: form.paths.trim() || null,
+      });
+      // The server canonicalises branch and paths; show what it stored.
+      const next = {
+        branch: updated?.github_branch || form.branch,
+        autoDeploy: updated?.auto_deploy ?? form.autoDeploy,
+        paths: updated?.auto_deploy_paths ?? '',
+      };
+      const branchChanged = next.branch !== saved.branch;
+      setSaved(next);
+      setForm(next);
+      onSaved({
+        github_branch: next.branch,
+        auto_deploy: next.autoDeploy,
+        auto_deploy_paths: next.paths || null,
+      });
+      toast.success(branchChanged ? `Now deploying from ${next.branch}` : 'Git settings saved', {
+        description: branchChanged
+          ? 'The live deployment stays until the next deploy.'
+          : next.autoDeploy
+            ? next.paths
+              ? 'Pushes deploy when watched paths change.'
+              : `Every push to ${next.branch} deploys.`
+            : 'Pushes no longer deploy automatically.',
+        ...(branchChanged
+          ? {
+              action: {
+                label: 'Deploy now',
+                onClick: () =>
+                  void api
+                    .triggerBuild(project.id)
+                    .then(() => toast.success(`Deploying the latest commit on ${next.branch}`))
+                    .catch((error: Error) =>
+                      toast.error('Could not start the deploy', { description: error.message }),
+                    ),
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      toast.error('Could not save Git settings', { description: errorMessage(error) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingsSection
+      id="git"
+      title="Git"
+      description={
+        <>
+          Builds clone{' '}
+          <a
+            href={project.github_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-0.5 font-mono text-xs text-foreground hover:underline"
+          >
+            {repo}
+            <ArrowUpRight className="size-3" />
+          </a>
+          {connected
+            ? '.'
+            : ' over Git. Connect the GitHub app to pick a branch and deploy on push.'}
+        </>
+      }
+      footer={
+        connected && (
+          <SaveFooter
+            dirty={dirty}
+            saving={saving}
+            onSave={save}
+            onReset={() => setForm(saved)}
+            note={
+              form.autoDeploy
+                ? `Pushes to ${saved.branch} deploy automatically.`
+                : 'Deploys only when you press Deploy.'
+            }
+          />
+        )
+      }
+    >
+      {connected && (
+        <>
+          <Field
+            label="Production branch"
+            htmlFor="production-branch"
+            hint="The branch every build clones."
+          >
+            <BranchSelect
+              id="production-branch"
+              value={form.branch}
+              onChange={(branch) => setForm((prev) => ({ ...prev, branch }))}
+              load={() => api.getProjectBranches(project.id)}
+              sourceKey={project.id}
+              disabled={saving}
+            />
+          </Field>
+          <ToggleRow
+            id="auto-deploy"
+            label="Deploy on push"
+            description={`Build and release every push to ${form.branch}.`}
+            control={
+              <Switch
+                id="auto-deploy"
+                checked={form.autoDeploy}
+                onCheckedChange={(autoDeploy) => setForm((prev) => ({ ...prev, autoDeploy }))}
+                disabled={saving}
               />
-            </div>
-            <div className="flex justify-end pt-2">
-              <Button
-                onClick={handleSaveBuildSettings}
-                disabled={!buildSettingsChanged || savingBuildSettings}
-              >
-                {savingBuildSettings ? (
+            }
+          />
+          <Field
+            label="Only deploy when these paths change"
+            htmlFor="auto-deploy-paths"
+            optional
+            hint={
+              <>
+                One path or glob per line (<code>apps/web</code>, <code>packages/*</code>); prefix{' '}
+                <code>!</code> to exclude. Always watched:{' '}
+                {root ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
+                    <code>{root}</code>,{' '}
                   </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save changes
-                  </>
-                )}
-              </Button>
+                ) : null}
+                workspace packages it depends on, and root lockfiles. Empty commits and force pushes
+                always deploy.
+              </>
+            }
+          >
+            <Textarea
+              id="auto-deploy-paths"
+              value={form.paths}
+              onChange={(event) => setForm((prev) => ({ ...prev, paths: event.target.value }))}
+              placeholder={`${root || 'apps/web'}\npackages/config\n!**/*.md`}
+              rows={3}
+              spellCheck={false}
+              disabled={!form.autoDeploy || saving}
+              className="font-mono text-sm"
+            />
+          </Field>
+        </>
+      )}
+    </SettingsSection>
+  );
+}
+
+function RetentionSection({
+  project,
+  onSaved,
+}: {
+  project: Project;
+  onSaved: (updated: Partial<Project>) => void;
+}) {
+  const initial = project.keep_builds ? String(project.keep_builds) : 'all';
+  const [saved, setSaved] = useState(initial);
+  const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const options = Array.from(
+    new Set([2, 3, 5, 10, 20, ...(project.keep_builds ? [project.keep_builds] : [])]),
+  ).sort((a, b) => a - b);
+
+  const save = async () => {
+    const keep = value === 'all' ? null : Number(value);
+    setSaving(true);
+    try {
+      await api.updateProject(project.id, { keep_builds: keep });
+      setSaved(value);
+      onSaved({ keep_builds: keep });
+      toast.success('Build retention saved');
+    } catch (error) {
+      toast.error('Could not save build retention', { description: errorMessage(error) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingsSection
+      id="builds"
+      title="Build history"
+      description="Old builds hold a copy of the repository, dependencies and output. Pruning them frees disk space."
+      footer={
+        <SaveFooter
+          dirty={value !== saved}
+          saving={saving}
+          onSave={save}
+          onReset={() => setValue(saved)}
+          note={
+            saved === 'all'
+              ? 'Builds are kept until you delete them.'
+              : `Pruned after each successful deploy. The live build is always kept.`
+          }
+        />
+      }
+    >
+      <Field label="Keep" htmlFor="keep-builds" className="max-w-xs">
+        <Select value={value} onValueChange={setValue} disabled={saving}>
+          <SelectTrigger id="keep-builds" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Every build</SelectItem>
+            {options.map((count) => (
+              <SelectItem key={count} value={String(count)}>
+                The newest {count} builds
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    </SettingsSection>
+  );
+}
+
+function DangerSection({
+  project,
+  hasDeployment,
+  onStopDeployment,
+}: {
+  project: Project;
+  hasDeployment: boolean;
+  onStopDeployment: () => void;
+}) {
+  const router = useRouter();
+  const [dialog, setDialog] = useState<'stop' | 'delete' | null>(null);
+  const [confirmName, setConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const remove = async () => {
+    if (confirmName !== project.name) return;
+    setDeleting(true);
+    try {
+      await api.deleteProject(project.id);
+      toast.success(`Deleted ${project.name}`);
+      router.push('/');
+    } catch (error) {
+      toast.error('Could not delete the project', { description: errorMessage(error) });
+      setDeleting(false);
+    }
+  };
+
+  const row =
+    'flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between';
+  return (
+    <SettingsSection id="danger" title="Danger zone" tone="danger">
+      <div className="divide-y divide-border">
+        {hasDeployment && (
+          <div className={row}>
+            <div>
+              <p className="text-sm font-medium">Stop production</p>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">
+                Takes the site offline. Builds and settings stay; deploy again to bring it back.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-
-        <DomainSettingsCard project={project} onDomainChange={onDomainChange} />
-
-        <AccessProtectionCard projectId={project.id} onProtectionChange={onProtectionChange} />
-
-        {/* Production branch */}
-        {project.github_installation_id && project.github_repo_id && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <GitBranch className="w-5 h-5" /> Production branch
-              </CardTitle>
-              <CardDescription>
-                The branch every build clones
-                {project.github_repo_full_name ? ` from ${project.github_repo_full_name}` : ''}.
-                With auto-deploy on, pushes to it deploy.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-start">
-              <div className="min-w-0 flex-1">
-                <Label htmlFor="production-branch" className="sr-only">
-                  Production branch
-                </Label>
-                <BranchSelect
-                  id="production-branch"
-                  value={branch}
-                  onChange={setBranch}
-                  load={() => api.getProjectBranches(project.id)}
-                  sourceKey={project.id}
-                  disabled={savingBranch}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                {branch !== savedBranch && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setBranch(savedBranch)}
-                    disabled={savingBranch}
-                  >
-                    Reset
-                  </Button>
-                )}
-                <Button
-                  onClick={handleSaveBranch}
-                  disabled={branch === savedBranch || savingBranch}
-                >
-                  {savingBranch ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
-                    </>
-                  ) : (
-                    'Save branch'
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            <Button variant="outline" className="shrink-0" onClick={() => setDialog('stop')}>
+              Stop production
+            </Button>
+          </div>
         )}
-
-        {/* Auto Deploy */}
-        {project.github_installation_id && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <CardTitle className="flex items-center gap-2">
-                    <GitBranch className="w-5 h-5" /> Auto-deploy
-                  </CardTitle>
-                  <CardDescription>
-                    Automatically trigger a new deployment when you push to{' '}
-                    <code>{savedBranch}</code>.
-                  </CardDescription>
-                </div>
-                <Switch
-                  aria-label="Auto-deploy"
-                  checked={autoDeploy}
-                  onCheckedChange={handleAutoDeployChange}
-                  disabled={updating}
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="auto-deploy-paths">Build filters (optional)</Label>
-                <textarea
-                  id="auto-deploy-paths"
-                  value={autoDeployPaths}
-                  onChange={(e) => setAutoDeployPaths(e.target.value)}
-                  placeholder={`${projectRootDirectory || 'apps/web'}\npackages/config\n!**/*.md`}
-                  rows={4}
-                  spellCheck={false}
-                  disabled={!autoDeploy || savingAutoDeployPaths}
-                  aria-describedby="auto-deploy-paths-help"
-                  className="surface-input flex w-full rounded-lg border border-border bg-surface-muted/60 px-3 py-2 font-mono text-sm outline-none transition-[color,box-shadow,border-color] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <div
-                  id="auto-deploy-paths-help"
-                  className="space-y-1 text-xs text-muted-foreground"
-                >
-                  <p>
-                    Leave blank to deploy on every push. When set, a push deploys only if files
-                    changed since the live deployment match. One repository-relative path or glob
-                    per line (<code>apps/web</code>, <code>packages/*</code>,{' '}
-                    <code>**/*.graphql</code>); prefix with <code>!</code> to exclude.
-                  </p>
-                  <p>
-                    Always watched automatically:{' '}
-                    {projectRootDirectory ? (
-                      <>
-                        the root directory (<code>{projectRootDirectory}</code>),{' '}
-                      </>
-                    ) : null}
-                    internal workspace packages it depends on, and root lockfiles and workspace
-                    config. Empty commits and force pushes always deploy.
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                {autoDeployPathsChanged && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setAutoDeployPaths(savedAutoDeployPaths)}
-                    disabled={savingAutoDeployPaths}
-                  >
-                    Reset
-                  </Button>
-                )}
-                <Button
-                  onClick={handleSaveAutoDeployPaths}
-                  disabled={!autoDeploy || !autoDeployPathsChanged || savingAutoDeployPaths}
-                >
-                  {savingAutoDeployPaths ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
-                    </>
-                  ) : (
-                    'Save filters'
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Build retention */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Archive className="w-5 h-5" />
-              Build retention
-            </CardTitle>
-            <CardDescription>
-              Delete old builds automatically to free disk space on the server.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-[minmax(0,16rem)_1fr] sm:items-start">
-            <div className="space-y-2">
-              <Label htmlFor="keep-builds">Keep</Label>
-              <Select
-                value={keepBuilds ? String(keepBuilds) : 'all'}
-                onValueChange={handleRetentionChange}
-                disabled={savingRetention}
-              >
-                <SelectTrigger id="keep-builds" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All builds</SelectItem>
-                  {retentionOptions.map((count) => (
-                    <SelectItem key={count} value={String(count)}>
-                      Newest {count} builds
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs leading-5 text-muted-foreground sm:pt-7">
-              {keepBuilds
-                ? `After each successful deploy, builds beyond the newest ${keepBuilds} are deleted along with their logs and files. The live build is always kept, so you can still roll back to anything that remains.`
-                : 'Every build is kept until you delete it. You can also select builds to delete on the Deployments tab.'}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Danger zone */}
-        <Card className="flex-col gap-4 border-red-500/25 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">Delete project</h3>
-            <p className="max-w-xl text-sm text-muted-foreground">
-              Permanently removes this project and its deployments, builds, and files. This can't be
-              undone.
+        <div className={row}>
+          <div>
+            <p className="text-sm font-medium">Delete project</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              Removes the project with its deployments, builds, files and domain records. This can’t
+              be undone.
             </p>
           </div>
           <Button
             variant="outline"
-            className="shrink-0 self-start border-red-500/30 text-red-700 hover:border-red-500/50 hover:bg-red-500/10 sm:self-auto dark:text-red-400"
-            onClick={() => setDeleteDialogOpen(true)}
+            className="shrink-0 border-red-500/30 text-red-700 hover:border-red-500/50 hover:bg-red-500/10 dark:text-red-400"
+            onClick={() => setDialog('delete')}
           >
-            <Trash2 className="size-4" />
             Delete project
           </Button>
-        </Card>
+        </div>
       </div>
 
+      <AlertDialog open={dialog === 'stop'} onOpenChange={(open) => !open && setDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop production for {project.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {project.domain ?? 'The site'} stops answering until you deploy again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={onStopDeployment}
+            >
+              Stop production
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog
-        open={deleteDialogOpen}
+        open={dialog === 'delete'}
         onOpenChange={(open) => {
-          setDeleteDialogOpen(open);
-          if (!open) setConfirmName('');
+          if (open || deleting) return;
+          setDialog(null);
+          setConfirmName('');
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              <span className="font-semibold text-foreground"> {project.name} </span>
-              project and remove all associated data.
+              Every deployment, build, log and environment variable of this project is removed, and
+              its site goes offline. This can’t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="py-4 space-y-2">
-            <Label htmlFor="confirm-name" className="text-xs font-medium text-muted-foreground">
-              Type <span className="font-mono font-bold text-foreground">{project.name}</span> to
-              confirm
-            </Label>
+          <Field label={`Type ${project.name} to confirm`} htmlFor="confirm-name">
             <Input
               id="confirm-name"
               value={confirmName}
-              onChange={(e) => setConfirmName(e.target.value)}
-              placeholder={project.name}
+              onChange={(event) => setConfirmName(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && void remove()}
+              autoComplete="off"
+              spellCheck={false}
               className="font-mono"
             />
-          </div>
+          </Field>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleDelete();
-              }}
-              disabled={confirmName !== project.name || isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={confirmName !== project.name || deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void remove();
+              }}
             >
-              {isDeleting ? 'Deleting...' : 'Delete project'}
+              {deleting && <Loader2 className="animate-spin" />}
+              Delete project
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SettingsSection>
   );
 }

@@ -192,7 +192,7 @@ export const BuildService = {
         status: builds.status,
         commit_sha: builds.commit_sha,
         commit_message: builds.commit_message,
-        logs: builds.logs,
+        // Logs live in their own table and stream separately; the list stays light.
         artifact_id: builds.artifact_id,
         created_at: builds.created_at,
         completed_at: builds.completed_at,

@@ -1,21 +1,30 @@
 'use client';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { api } from '@/lib/api';
-import { Activity, KeyRound, LayoutDashboard, Loader2, Rocket, Settings2 } from 'lucide-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api';
+import {
+  queryKeys,
+  useActiveDeployment,
+  useBuilds,
+  useDomainStatus,
+  useProject,
+  type BuildWithDeployment,
+} from '@/lib/queries';
+import type { Project } from '@/lib/types';
+import { setQueryData } from '@/lib/use-query';
 import { DeploymentsTab } from './components/deployments-tab';
 import { EnvironmentTab } from './components/environment-tab';
+import { LogsTab } from './components/logs-tab';
 import { OverviewTab } from './components/overview-tab';
 import { ProjectHeader } from './components/project-header';
+import { ProjectTabs, type ProjectTab, PROJECT_TABS } from './components/project-tabs';
 import { SettingsTab } from './components/settings-tab';
 import { UptimeTab } from './components/uptime-tab';
-
-const VALID_TABS = ['overview', 'deployments', 'environment', 'uptime', 'settings'] as const;
-type TabType = (typeof VALID_TABS)[number];
+import { deriveProjectState, type DeploymentEvent } from './project-state';
 
 /**
  * The dashboard is a static export with one shell page for every project
@@ -32,315 +41,271 @@ function useProjectId(): string | null {
   return id;
 }
 
-function ProjectDetailsContent() {
-  const id = useProjectId() as string;
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const requestedTab = searchParams.get('tab');
-  const currentTab: TabType = VALID_TABS.includes(requestedTab as TabType)
-    ? (requestedTab as TabType)
-    : 'overview';
-
-  const [project, setProject] = useState<any>(null);
-  const [pageError, setPageError] = useState<string | null>(null);
-  const [builds, setBuilds] = useState<any[]>([]);
-  const [activeDeployment, setActiveDeployment] = useState<any>(null);
-  const [isDeploying, setIsDeploying] = useState(false);
-  const [domainProvision, setDomainProvision] = useState<any>(null);
-  const [deploymentStatus, setDeploymentStatus] = useState<any>(null);
-
-  const refreshData = () => {
-    if (!id) return;
-    api
-      .getProject(id)
-      .then((result) => {
-        setProject(result);
-        setPageError(null);
-      })
-      .catch((error) => {
-        console.error(error);
-        setPageError(error instanceof Error ? error.message : 'Unable to load this project');
-      });
-    api.getBuilds(id).then(setBuilds).catch(console.error);
-    api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
-    api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
-  };
-
+/** Keeps every cached view of this project current from its event stream. */
+function useProjectEvents(
+  id: string | null,
+  handlers: {
+    onDeployment: (event: DeploymentEvent | null) => void;
+    refresh: {
+      builds: () => void;
+      deployment: () => void;
+      domain: () => void;
+      project: () => void;
+    };
+  },
+) {
+  const { onDeployment, refresh } = handlers;
   useEffect(() => {
     if (!id) return;
-    refreshData();
-
-    const streamUrl = api.getProjectEventsStreamUrl(id);
-    const es = new EventSource(streamUrl, { withCredentials: true });
-
-    es.onopen = () => {
-      console.log(`[Project] Connected to SSE for project: ${id}`);
+    const es = new EventSource(api.getProjectEventsStreamUrl(id), { withCredentials: true });
+    const parse = (event: MessageEvent) => {
+      try {
+        return JSON.parse(event.data);
+      } catch {
+        return null;
+      }
     };
 
-    const handleBuildUpdated = (e: MessageEvent) => {
-      try {
-        const updatedBuild = JSON.parse(e.data);
+    const onBuild = (event: MessageEvent) => {
+      const build = parse(event) as (BuildWithDeployment & { deleted?: boolean }) | null;
+      if (!build) return;
+      setQueryData<BuildWithDeployment[]>(queryKeys.builds(id), (prev = []) => {
         // Deletions (manual, bulk, or retention) arrive as { id, deleted: true }.
-        if (updatedBuild.deleted) {
-          setBuilds((prev) => prev.filter((b) => b.id !== updatedBuild.id));
-          return;
-        }
-        setBuilds((prev) => {
-          const exists = prev.find((b) => b.id === updatedBuild.id);
-          if (exists) {
-            return prev.map((b) => (b.id === updatedBuild.id ? updatedBuild : b));
-          }
-          return [updatedBuild, ...prev];
+        if (build.deleted) return prev.filter((b) => b.id !== build.id);
+        const exists = prev.some((b) => b.id === build.id);
+        // Events carry the build only; keep the deployment fields the list joined in.
+        return exists
+          ? prev.map((b) => (b.id === build.id ? { ...b, ...build } : b))
+          : [build, ...prev];
+      });
+      if (build.status === 'failed') {
+        toast.error('Build failed', {
+          description: build.commit_message?.split('\n')[0] ?? `#${build.id.slice(0, 8)}`,
         });
-        if (updatedBuild.status === 'success') {
-          api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
-          toast.success(`Build #${updatedBuild.id.slice(0, 8)} succeeded`);
-        } else if (updatedBuild.status === 'failed') {
-          toast.error(`Build #${updatedBuild.id.slice(0, 8)} failed`);
+      }
+    };
+
+    const onDeploymentEvent = (event: MessageEvent) => {
+      const payload = parse(event) as DeploymentEvent | null;
+      if (!payload) return;
+      refresh.builds();
+      refresh.deployment();
+      if (payload.status === 'active') {
+        onDeployment(null);
+        refresh.domain();
+        toast.success('Deployment is live');
+      } else {
+        onDeployment(payload);
+        if (payload.status === 'failed') {
+          toast.error('Deployment failed', { description: payload.status_message ?? undefined });
         }
-      } catch (err) {
-        console.error('[Project] Failed to parse build_updated SSE:', err);
       }
     };
 
-    const handleDeploymentUpdated = (e: MessageEvent) => {
-      try {
-        const payload = JSON.parse(e.data);
-        setDeploymentStatus(payload);
-
-        api.getBuilds(id).then(setBuilds).catch(console.error);
-        api.getActiveDeployment(id).then(setActiveDeployment).catch(console.error);
-
-        if (payload?.status === 'active') {
-          toast.success('Deployment activated');
-          setDeploymentStatus(null);
-          api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
-        } else if (payload?.status === 'failed') {
-          toast.error(payload?.status_message || 'Deployment failed');
-        } else if (payload?.status === 'dns_creating') {
-          toast.info('Setting up DNS...');
-        } else if (payload?.status === 'ssl_issuing') {
-          toast.info('Issuing SSL certificate...');
-        } else if (payload?.status === 'app_starting') {
-          toast.info('Starting application...');
-        }
-      } catch (err) {
-        console.error('[Project] Failed to parse deployment_updated SSE:', err);
+    const onUptime = (event: MessageEvent) => {
+      const payload = parse(event);
+      if (payload?.status) {
+        setQueryData<Project | undefined>(queryKeys.project(id), (prev) =>
+          prev ? { ...prev, uptime_status: payload.status } : prev,
+        );
       }
     };
+    const onDomain = () => refresh.domain();
 
-    const handleDomainStatus = (e: MessageEvent) => {
-      try {
-        const payload = JSON.parse(e.data);
-        console.log('Domain status update:', payload);
-        api.getDomainStatus(id).then(setDomainProvision).catch(console.error);
-      } catch (err) {
-        console.error('[Project] Failed to parse domain_status SSE:', err);
-      }
-    };
-
-    const handleUptimeUpdated = (e: MessageEvent) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload?.status) {
-          setProject((prev: any) => (prev ? { ...prev, uptime_status: payload.status } : prev));
-        }
-      } catch (err) {
-        console.error('[Project] Failed to parse uptime_updated SSE:', err);
-      }
-    };
-
-    es.addEventListener('build_updated', handleBuildUpdated);
-    es.addEventListener('deployment_updated', handleDeploymentUpdated);
-    es.addEventListener('domain_status', handleDomainStatus);
-    es.addEventListener('uptime_updated', handleUptimeUpdated);
-
-    es.onerror = (err) => {
-      console.warn('[Project] SSE connection error, reconnecting automatically:', err);
-    };
-
-    return () => {
-      es.removeEventListener('build_updated', handleBuildUpdated);
-      es.removeEventListener('deployment_updated', handleDeploymentUpdated);
-      es.removeEventListener('domain_status', handleDomainStatus);
-      es.removeEventListener('uptime_updated', handleUptimeUpdated);
-      es.close();
-    };
+    es.addEventListener('build_updated', onBuild);
+    es.addEventListener('deployment_updated', onDeploymentEvent);
+    es.addEventListener('domain_status', onDomain);
+    es.addEventListener('uptime_updated', onUptime);
+    return () => es.close();
+    // The refreshers are stable per id; re-subscribing on every render would drop events.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+}
 
-  const triggerBuild = async () => {
-    try {
-      setIsDeploying(true);
-      await api.triggerBuild(id);
-      refreshData();
-      return Promise.resolve();
-    } catch (error) {
-      console.error(error);
-      return Promise.reject(error);
-    } finally {
-      setIsDeploying(false);
-    }
-  };
+function ProjectDetailsContent() {
+  const id = useProjectId();
+  const searchParams = useSearchParams();
+  const requested = searchParams.get('tab') as ProjectTab | null;
+  const tab: ProjectTab = requested && PROJECT_TABS.includes(requested) ? requested : 'overview';
 
-  const activateBuild = async (buildId: string) => {
-    const activation = api.activateBuild(buildId);
-    toast.promise(activation, {
-      loading: 'Activating build...',
-      success: () => {
-        refreshData();
-        return 'Build activated';
-      },
-      error: 'Failed to activate build',
-    });
-    // The toast reports failures; callers only need to know when it has settled.
-    await activation.catch(console.error);
-  };
+  const projectQuery = useProject(id);
+  const buildsQuery = useBuilds(id);
+  const deploymentQuery = useActiveDeployment(id);
+  const domainQuery = useDomainStatus(id);
+  const [deploymentEvent, setDeploymentEvent] = useState<DeploymentEvent | null>(null);
+  const [starting, setStarting] = useState(false);
 
-  const stopDeployment = async () => {
-    try {
-      toast.promise(
-        (async () => {
-          await api.stopDeployment(id);
-          refreshData();
-          setActiveDeployment(null);
-        })(),
-        {
-          loading: 'Stopping deployment...',
-          success: 'Deployment stopped',
-          error: 'Failed to stop deployment',
-        },
-      );
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  useProjectEvents(id, {
+    onDeployment: setDeploymentEvent,
+    refresh: {
+      builds: () => void buildsQuery.refresh(),
+      deployment: () => void deploymentQuery.refresh(),
+      domain: () => void domainQuery.refresh(),
+      project: () => void projectQuery.refresh(),
+    },
+  });
 
-  const handleTabChange = (value: string) => {
-    const newParams = new URLSearchParams(searchParams.toString());
-    newParams.set('tab', value);
-    router.push(`?${newParams.toString()}`);
+  const project = projectQuery.data;
+  const builds = buildsQuery.data ?? [];
+  const activeDeployment = deploymentQuery.data ?? null;
+
+  const refreshAll = () => {
+    void projectQuery.refresh();
+    void buildsQuery.refresh();
+    void deploymentQuery.refresh();
+    void domainQuery.refresh();
   };
 
   if (!project) {
-    if (pageError) {
+    if (projectQuery.error) {
       return (
-        <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
-          <h1 className="text-xl font-semibold">Project unavailable</h1>
-          <p className="mt-2 max-w-md text-sm text-muted-foreground">{pageError}</p>
-          <Button className="mt-5" variant="outline" onClick={() => router.push('/')}>
-            Back to projects
+        <div className="page-width flex min-h-[60vh] flex-col items-center justify-center text-center">
+          <h1 className="text-lg font-medium">This project isn’t available</h1>
+          <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
+            {projectQuery.error.message}
+          </p>
+          <Button className="mt-5" variant="outline" asChild>
+            <Link href="/">Back to projects</Link>
           </Button>
         </div>
       );
     }
-    return (
-      <div className="flex min-h-[calc(100svh-4rem)] items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <ProjectSkeleton />;
   }
 
+  const state = deriveProjectState({
+    project,
+    latestBuild: builds[0],
+    activeDeployment,
+    deploymentEvent,
+    starting,
+  });
+
+  const deploy = async () => {
+    setStarting(true);
+    try {
+      const build = await api.triggerBuild(project.id);
+      setQueryData<BuildWithDeployment[]>(queryKeys.builds(project.id), (prev = []) =>
+        prev.some((b) => b.id === build.id) ? prev : [build as BuildWithDeployment, ...prev],
+      );
+      toast.success('Deploy started', {
+        description: `Building the latest commit on ${project.github_branch || 'main'}`,
+      });
+    } catch (error) {
+      toast.error('Could not start the deploy', {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setStarting(false);
+      void buildsQuery.refresh();
+    }
+  };
+
+  const activateBuild = async (buildId: string, label = 'Deploying build') => {
+    const activation = api.activateBuild(buildId);
+    toast.promise(activation, {
+      loading: `${label}…`,
+      success: 'Deployment started',
+      error: (error: Error) => error.message || 'Could not activate the build',
+    });
+    await activation.catch(() => undefined);
+    refreshAll();
+  };
+
+  const stopDeployment = async () => {
+    const stopping = api.stopDeployment(project.id);
+    toast.promise(stopping, {
+      loading: 'Stopping production…',
+      success: 'Production stopped',
+      error: 'Could not stop the deployment',
+    });
+    await stopping.catch(() => undefined);
+    deploymentQuery.mutate(null);
+    refreshAll();
+  };
+
   return (
-    <div className="min-h-[calc(100svh-4rem)] bg-background pb-20">
+    <div className="pb-20">
       <ProjectHeader
         project={project}
+        state={state}
         activeDeployment={activeDeployment}
-        deploymentStatus={deploymentStatus}
-        latestBuild={builds[0]}
-        isDeploying={isDeploying}
-        onTriggerBuild={triggerBuild}
+        onDeploy={deploy}
+        onRedeploy={() =>
+          activeDeployment && activateBuild(activeDeployment.build_id, 'Redeploying current build')
+        }
+        onStop={stopDeployment}
       />
+      <ProjectTabs projectId={project.id} current={tab} buildCount={builds.length} />
 
-      <div className="page-width space-y-6 py-6 sm:py-8">
-        <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-5 surface-card rounded-xl border border-border bg-card p-1 sm:inline-flex sm:w-fit sm:self-start">
-            <TabsTrigger
-              value="overview"
-              className="flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 text-[11px] font-medium leading-none sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
-            >
-              <LayoutDashboard className="h-4 w-4 shrink-0" />
-              <span>Overview</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="deployments"
-              className="flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 text-[11px] font-medium leading-none sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
-            >
-              <Rocket className="h-4 w-4 shrink-0" />
-              <span className="sm:hidden">Deploys</span>
-              <span className="hidden sm:inline">Deployments</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="environment"
-              className="flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 text-[11px] font-medium leading-none sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
-            >
-              <KeyRound className="h-4 w-4 shrink-0" />
-              <span className="sm:hidden">Env</span>
-              <span className="hidden sm:inline">Environment</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="uptime"
-              className="flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 text-[11px] font-medium leading-none sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
-            >
-              <Activity className="h-4 w-4 shrink-0" />
-              <span>Uptime</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              className="flex flex-col items-center justify-center gap-1 rounded-lg py-2 px-1 text-[11px] font-medium leading-none sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm data-[state=active]:bg-surface-muted data-[state=active]:text-foreground"
-            >
-              <Settings2 className="h-4 w-4 shrink-0" />
-              <span>Settings</span>
-            </TabsTrigger>
-          </TabsList>
+      <div className="page-width pt-6">
+        {tab === 'overview' && (
+          <OverviewTab
+            project={project}
+            state={state}
+            builds={builds}
+            buildsLoading={buildsQuery.isLoading}
+            activeDeployment={activeDeployment}
+            deploymentEvent={deploymentEvent}
+            domain={domainQuery.data}
+            onDeploy={deploy}
+            onActivateBuild={activateBuild}
+            onRefreshDomain={() => void domainQuery.refresh()}
+          />
+        )}
+        {tab === 'deployments' && (
+          <DeploymentsTab
+            projectId={project.id}
+            builds={builds}
+            loading={buildsQuery.isLoading}
+            activeDeployment={activeDeployment}
+            deploymentEvent={deploymentEvent}
+            keepBuilds={project.keep_builds}
+            onActivateBuild={activateBuild}
+          />
+        )}
+        {tab === 'logs' && <LogsTab project={project} />}
+        {tab === 'environment' && (
+          <EnvironmentTab
+            project={project}
+            canRedeploy={!!activeDeployment && !state.busy}
+            onRedeploy={() =>
+              activeDeployment &&
+              activateBuild(activeDeployment.build_id, 'Redeploying current build')
+            }
+          />
+        )}
+        {tab === 'uptime' && <UptimeTab project={project} />}
+        {tab === 'settings' && (
+          <SettingsTab
+            project={project}
+            hasDeployment={!!activeDeployment}
+            onStopDeployment={stopDeployment}
+            onProjectChange={refreshAll}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
-          <TabsContent value="overview" className="mt-6">
-            <OverviewTab
-              project={project}
-              activeDeployment={activeDeployment}
-              builds={builds}
-              onStopDeployment={stopDeployment}
-              onActivateBuild={activateBuild}
-              onOpenSettings={() => handleTabChange('settings')}
-              onOpenUptime={() => handleTabChange('uptime')}
-              onViewDeployments={() => handleTabChange('deployments')}
-              domainProvision={domainProvision}
-              deploymentStatus={deploymentStatus}
-              onRefreshDomain={refreshData}
-            />
-          </TabsContent>
-
-          <TabsContent value="deployments" className="mt-6">
-            <DeploymentsTab
-              builds={builds}
-              onActivateBuild={activateBuild}
-              onBuildDeleted={(buildId) =>
-                setBuilds((prev) => prev.filter((b) => b.id !== buildId))
-              }
-              activeDeployment={activeDeployment}
-              deploymentStatus={deploymentStatus}
-              keepBuilds={project.keep_builds}
-            />
-          </TabsContent>
-
-          <TabsContent value="environment" className="mt-6">
-            <EnvironmentTab project={project} />
-          </TabsContent>
-
-          <TabsContent value="uptime" className="mt-6">
-            <UptimeTab project={project} />
-          </TabsContent>
-
-          <TabsContent value="settings" className="mt-6">
-            <SettingsTab
-              project={project}
-              onProtectionChange={(enabled) =>
-                setProject((prev: any) => (prev ? { ...prev, access_protected: enabled } : prev))
-              }
-              onDomainChange={refreshData}
-              onProjectChange={refreshData}
-            />
-          </TabsContent>
-        </Tabs>
+function ProjectSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading project">
+      <div className="page-width pt-6 pb-5">
+        <div className="h-3 w-32 animate-pulse rounded bg-surface-muted" />
+        <div className="mt-4 flex items-center gap-4">
+          <div className="size-11 animate-pulse rounded-lg bg-surface-muted" />
+          <div className="space-y-2">
+            <div className="h-5 w-48 animate-pulse rounded bg-surface-muted" />
+            <div className="h-3 w-64 animate-pulse rounded bg-surface-muted/70" />
+          </div>
+        </div>
+      </div>
+      <div className="border-b border-border" />
+      <div className="page-width grid gap-4 pt-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="h-64 animate-pulse rounded-xl border border-border bg-card" />
+        <div className="h-64 animate-pulse rounded-xl border border-border bg-card" />
       </div>
     </div>
   );
@@ -348,13 +313,7 @@ function ProjectDetailsContent() {
 
 export default function ProjectDetails() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[calc(100svh-4rem)] items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
-      }
-    >
+    <Suspense fallback={<ProjectSkeleton />}>
       <ProjectDetailsContent />
     </Suspense>
   );

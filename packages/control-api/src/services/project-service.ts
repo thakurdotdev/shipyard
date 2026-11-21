@@ -18,6 +18,8 @@ export const ProjectService = {
       .select({
         id: builds.id,
         status: builds.status,
+        commit_sha: builds.commit_sha,
+        commit_message: builds.commit_message,
         created_at: builds.created_at,
         completed_at: builds.completed_at,
       })
@@ -46,6 +48,8 @@ export const ProjectService = {
         latest_build: {
           id: latestBuild.id,
           status: latestBuild.status,
+          commit_sha: latestBuild.commit_sha,
+          commit_message: latestBuild.commit_message,
           created_at: latestBuild.created_at,
           completed_at: latestBuild.completed_at,
         },
