@@ -150,7 +150,7 @@ export function EnvironmentTab({ project }: EnvironmentTabProps) {
       </div>
 
       {changeCount > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur animate-in slide-in-from-bottom-2 sm:sticky sm:bottom-4 sm:rounded-xl sm:border sm:bg-card sm:shadow-lg">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 border-t border-border bg-background/95 p-3 backdrop-blur animate-in slide-in-from-bottom-2 sm:sticky sm:bottom-4 sm:rounded-xl sm:border sm:bg-card sm:shadow-lg">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
             <p className="min-w-0 text-xs">
               <span className="font-medium text-foreground">
