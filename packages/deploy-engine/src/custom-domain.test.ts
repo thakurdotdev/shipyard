@@ -118,6 +118,29 @@ describe('custom domain configs', () => {
     expect(http).toContain('server_name example.com www.example.com;');
   });
 
+  test('every HTTPS server includes the optional site guard, and only HTTPS servers', () => {
+    const guard = 'include /etc/nginx/snippets/shipyard-site-guard*.conf;';
+    const count = (text: string) => text.split(guard).length - 1;
+    const aliases = ['www.example.com'];
+    // Site, then its www redirect: two HTTPS servers each.
+    expect(count(NginxService.generateConfig('example.com', 5100, false, aliases))).toBe(2);
+    expect(
+      count(
+        NginxService.generateStaticDomainConfig('example.com', '/srv/out', false, 'spa', aliases),
+      ),
+    ).toBe(2);
+    expect(count(NginxService.generateHttpOnlyConfig('example.com', 5100, false, aliases))).toBe(0);
+
+    process.env.NGINX_SITE_GUARD = '/srv/guards/*.conf';
+    try {
+      expect(NginxService.generateConfig('example.com', 5100, false)).toContain(
+        'include /srv/guards/*.conf;',
+      );
+    } finally {
+      delete process.env.NGINX_SITE_GUARD;
+    }
+  });
+
   test('redirect names persist through gate and preview rewrites', async () => {
     await NginxService.applyDomainConfig(
       'example.com',
