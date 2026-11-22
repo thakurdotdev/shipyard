@@ -54,6 +54,9 @@ describe.skipIf(!nginx || !openssl)('direct static Nginx virtual host', () => {
     http.stop(true);
     tls.stop(true);
 
+    // An empty guard folder: the include must match nothing and change nothing.
+    await mkdir(join(directory, 'guards'));
+    process.env.NGINX_SITE_GUARD = join(directory, 'guards', '*.conf');
     const config = NginxService.generateStaticDomainConfig('static-fixture', root)
       .replace('listen 80;', `listen 127.0.0.1:${httpPort};`)
       .replace('listen 443 ssl;', `listen 127.0.0.1:${tlsPort} ssl;`)
@@ -96,6 +99,7 @@ ${config}
   });
 
   afterAll(async () => {
+    delete process.env.NGINX_SITE_GUARD;
     child?.kill();
     if (child) await child.exited;
     if (directory) await rm(directory, { recursive: true, force: true });
@@ -171,5 +175,26 @@ ${config}
     await expect(
       requestNginxOrigin('wrong-domain.example', 1000, { port: tlsPort, ca }),
     ).rejects.toThrow();
+  });
+
+  test('applies a site guard dropped into the guard folder after a reload', async () => {
+    // The kind of rule an admin adds, e.g. refusing connections that skip a CDN.
+    await writeFile(
+      join(directory, 'guards', 'block-test.conf'),
+      'if ($arg_test_block) { return 403; }\n',
+    );
+    child.kill('SIGHUP');
+    let blocked = 0;
+    for (let attempt = 0; attempt < 100 && blocked !== 403; attempt++) {
+      await Bun.sleep(20);
+      const response = await requestNginxOrigin(domain, 1000, {
+        port: tlsPort,
+        ca,
+        path: '/?test_block=1',
+      });
+      blocked = response.status;
+    }
+    expect(blocked).toBe(403);
+    expect((await requestNginxOrigin(domain, 1000, { port: tlsPort, ca })).status).toBe(200);
   });
 });

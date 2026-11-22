@@ -50,12 +50,15 @@ const upstream = Bun.serve({
 const savedEnv = {
   CONTROL_API_URL: process.env.CONTROL_API_URL,
   NGINX_SITES_DIR: process.env.NGINX_SITES_DIR,
+  NGINX_SITE_GUARD: process.env.NGINX_SITE_GUARD,
 };
 let sitesDir: string;
 beforeAll(async () => {
   sitesDir = await mkdtemp(join(tmpdir(), 'shipyard-gate-sites-'));
   process.env.CONTROL_API_URL = `http://127.0.0.1:${upstream.port}`;
   process.env.NGINX_SITES_DIR = sitesDir;
+  // Not the server's own guard rules, which may need variables this test's nginx lacks.
+  process.env.NGINX_SITE_GUARD = '/nonexistent/site-guards/*.conf';
 });
 afterAll(async () => {
   for (const [name, value] of Object.entries(savedEnv)) {

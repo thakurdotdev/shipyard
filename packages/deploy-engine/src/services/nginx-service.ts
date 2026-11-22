@@ -5,6 +5,14 @@ import { staticSiteLocations, type StaticSiteKind } from './static-site';
 
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
 
+/**
+ * Server-wide rules an admin can add to every HTTPS site, for example "only accept
+ * connections from Cloudflare". It is a glob, so with no matching file nginx simply
+ * includes nothing; read on use so tests can point it elsewhere.
+ */
+const siteGuardInclude = () =>
+  `include ${process.env.NGINX_SITE_GUARD || '/etc/nginx/snippets/shipyard-site-guard*.conf'};`;
+
 // Read on use: the engine learns these from the Control API shortly after it starts.
 const baseDomain = () => config.baseDomain;
 const dashboardOrigin = () => config.publicUrl;
@@ -70,6 +78,7 @@ function aliasRedirectServer(domain: string, aliases: string[]): string {
 server {
     listen 443 ssl;
     server_name ${aliases.join(' ')};
+    ${siteGuardInclude()}
     ${sslLines(domain)}
     location /.well-known/acme-challenge/ { root ${CERTBOT_WEBROOT}; }
     location / { return 301 https://${domain}$request_uri; }
@@ -423,6 +432,7 @@ ${httpRedirectServer(domain, redirects)}
 server {
     listen 443 ssl;
     server_name ${domain};
+    ${siteGuardInclude()}
     ${sslLines(domain)}
     ${acmeLocation(gated)}
 ${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
@@ -504,6 +514,7 @@ ${httpRedirectServer(fullDomain, redirects)}
 server {
     listen 443 ssl;
     server_name ${fullDomain};
+    ${siteGuardInclude()}
 
     # Per-domain SSL certificate (issued by Let's Encrypt)
     ssl_certificate     /etc/letsencrypt/live/${fullDomain}/fullchain.pem;

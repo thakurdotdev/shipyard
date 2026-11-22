@@ -65,6 +65,28 @@ set `SHIPYARD_APP_USER=shipyard-apps` (plus the `PM0_*` values it prints) in `.e
 
 Existing apps switch over on their next activation (redeploy or rollback).
 
+### Server-wide site rules (for example, Cloudflare only)
+
+Every HTTPS site ShipYard writes includes `/etc/nginx/snippets/shipyard-site-guard*.conf`
+(override with `NGINX_SITE_GUARD`). It is a glob, so with no such file nothing changes. Put
+rules there that should apply to every site, such as refusing connections that skip
+Cloudflare when all your domains are proxied through it:
+
+```nginx
+# /etc/nginx/conf.d/from-cloudflare.conf (http level): 1 when the TCP peer is Cloudflare
+geo $realip_remote_addr $from_cloudflare {
+    default 0;
+    include /etc/nginx/snippets/cloudflare-ranges.conf;   # "<range> 1;" per line
+}
+
+# /etc/nginx/snippets/shipyard-site-guard.conf (inside each site's server block)
+if ($from_cloudflare = 0) { return 444; }
+```
+
+Only do this if every ShipYard domain is proxied (orange cloud): a DNS-only domain would be
+refused. Keep the ranges current from https://www.cloudflare.com/ips-v4 and `/ips-v6`.
+Existing sites pick it up on their next activation, or edit their configs once by hand.
+
 ## Tech Stack
 
 - **Runtime**: [Bun](https://bun.sh)
