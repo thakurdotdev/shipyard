@@ -110,7 +110,8 @@ describe('custom domain configs', () => {
     expect(conf).not.toContain(`example.com.${base}`);
 
     const proxy = NginxService.generateConfig('example.com', 5100, false, ['www.example.com']);
-    expect(proxy).toContain('proxy_pass http://127.0.0.1:5100;');
+    expect(proxy).toContain('server 127.0.0.1:5100;');
+    expect(proxy).toContain('proxy_pass http://shipyard_app_example_dcom;');
     expect(proxy).toContain('server_name www.example.com;');
     const http = NginxService.generateHttpOnlyConfig('example.com', 5100, false, [
       'www.example.com',

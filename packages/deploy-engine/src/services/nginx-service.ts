@@ -86,6 +86,67 @@ server {
 `;
 }
 
+/**
+ * A name for this site's nginx upstreams. Nginx names allow only letters,
+ * digits and `_`, so `-` and `.` are escaped (`_h`, `_d`) to keep every domain distinct.
+ */
+function siteId(domain: string): string {
+  return domain.replace(/-/g, '_h').replace(/\./g, '_d');
+}
+
+/**
+ * How long nginx keeps an idle connection to an app for reuse. It must be shorter than the
+ * app's own idle timeout (Node: 5 s, Bun: 10 s): otherwise nginx can send a request just as
+ * the app closes the socket, and a POST on such a socket fails with a 502.
+ */
+const UPSTREAM_IDLE_TIMEOUT = '4s';
+
+function upstreamBlock(name: string, server: string): string {
+  return `upstream ${name} {
+    server ${server};
+    keepalive 16;
+    keepalive_timeout ${UPSTREAM_IDLE_TIMEOUT};
+}`;
+}
+
+/** Lets nginx reuse connections to the app instead of opening one per request. */
+function appUpstream(domain: string, port: number): string {
+  return `${upstreamBlock(`shipyard_app_${siteId(domain)}`, `127.0.0.1:${port}`)}
+`;
+}
+
+/**
+ * Keepalive needs an empty Connection header, but WebSockets need "upgrade". Set per
+ * server under one shared name: a per-site `map` would add a long variable name per
+ * site, and nginx refuses to start once those overflow its variable hash.
+ */
+const CONNECTION_HEADER_VALUE = `set $shipyard_connection "";
+    if ($http_upgrade) {
+        set $shipyard_connection "upgrade";
+    }`;
+
+/** Headers every proxied app request gets: WebSocket upgrade, client address and scheme. */
+function appProxyHeaders(): string {
+  return `proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $shipyard_connection;
+        proxy_set_header Host $host;
+
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;`;
+}
+
+/**
+ * The app listens on localhost, so a connection that takes more than a few seconds means
+ * it is down: answer 502 quickly. Reads stay long for slow requests and streams.
+ */
+const APP_PROXY_TIMEOUTS = `proxy_connect_timeout 5s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;`;
+
 function gateUpstream(): string {
   const upstream = config.controlApiUrl;
   // Interpolated into nginx config, so anything but a plain origin is rejected.
@@ -98,12 +159,27 @@ function gateUpstream(): string {
 }
 
 /**
+ * An upstream with keepalive for the Control API, so the gate check that runs on every
+ * request of a protected site reuses connections. Returns the URL to proxy to.
+ */
+function gateUpstreamTarget(domain: string): { block: string; url: string } {
+  const origin = new URL(gateUpstream());
+  const secure = origin.protocol === 'https:';
+  const port = origin.port || (secure ? '443' : '80');
+  const name = `shipyard_gate_${siteId(domain)}`;
+  return {
+    block: upstreamBlock(name, `${origin.hostname}:${port}`),
+    url: `${secure ? 'https' : 'http'}://${name}`,
+  };
+}
+
+/**
  * Password gate for a site. Every request first goes to the Control API, which accepts or
  * rejects it from the visitor's cookie; rejected visitors get the login page at their own URL.
  * The gate's own routes and the ACME challenge are exempt.
  */
-function gateDirectives(): string {
-  const upstream = gateUpstream();
+function gateDirectives(domain: string): string {
+  const upstream = gateUpstreamTarget(domain).url;
   return `
     # Password gate (managed by ShipYard)
     auth_request /__shipyard_auth;
@@ -113,6 +189,8 @@ function gateDirectives(): string {
         internal;
         proxy_pass ${upstream}/gate/verify;
         proxy_pass_request_body off;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Content-Length "";
         proxy_set_header Host $host;
         proxy_set_header X-Gate-Host $host;
@@ -125,6 +203,7 @@ function gateDirectives(): string {
         client_max_body_size 4k;
         proxy_pass ${upstream}/gate/;
         proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Gate-Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -427,7 +506,7 @@ export const NginxService = {
     const siteKind = kind ?? this.getStaticKind(sub);
     const redirects = this.normalizeAliases(sub, aliases) ?? this.getAliases(sub);
     return `${configHeader(root, gated, siteKind, redirects)}
-${httpRedirectServer(domain, redirects)}
+${gated ? `${gateUpstreamTarget(domain).block}\n` : ''}${httpRedirectServer(domain, redirects)}
 
 server {
     listen 443 ssl;
@@ -435,7 +514,7 @@ server {
     ${siteGuardInclude()}
     ${sslLines(domain)}
     ${acmeLocation(gated)}
-${gated ? gateDirectives() : ''}${staticDomainLocations(root, siteKind)}
+${gated ? gateDirectives(domain) : ''}${staticDomainLocations(root, siteKind)}
 }
 ${aliasRedirectServer(domain, redirects)}`;
   },
@@ -509,6 +588,7 @@ ${aliasRedirectServer(domain, redirects)}`;
     }
     const fullDomain = this.domainForSubdomain(sub);
     return `${configHeader(null, gated, 'spa', redirects)}
+${appUpstream(fullDomain, port)}${gated ? `${gateUpstreamTarget(fullDomain).block}\n` : ''}
 ${httpRedirectServer(fullDomain, redirects)}
 
 server {
@@ -522,7 +602,9 @@ server {
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
-${gated ? gateDirectives() : ''}
+
+    ${CONNECTION_HEADER_VALUE}
+${gated ? gateDirectives(fullDomain) : ''}
     # The isolated preview route can be embedded only by the ShipYard dashboard.
     # Keep these header changes scoped here; the public application route below
     # preserves the app's own framing policy.
@@ -531,38 +613,21 @@ ${gated ? gateDirectives() : ''}
     }
 
     location ^~ /__shipyard_preview/ {
-        proxy_pass http://127.0.0.1:${port}/;
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://shipyard_app_${siteId(fullDomain)}/;
+        ${appProxyHeaders()}
 
         proxy_hide_header X-Frame-Options;
         proxy_hide_header Content-Security-Policy;
         add_header Content-Security-Policy "frame-ancestors ${dashboardOrigin()}" always;
 
-        proxy_read_timeout 300;
-        proxy_connect_timeout 300;
-        proxy_send_timeout 300;
+        ${APP_PROXY_TIMEOUTS}
     }
 
     location / {
-        proxy_pass http://127.0.0.1:${port};
-        proxy_http_version 1.1;
+        proxy_pass http://shipyard_app_${siteId(fullDomain)};
+        ${appProxyHeaders()}
 
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-        proxy_read_timeout 300;
-        proxy_connect_timeout 300;
-        proxy_send_timeout 300;
+        ${APP_PROXY_TIMEOUTS}
     }
 }
 ${aliasRedirectServer(fullDomain, redirects)}`;
@@ -604,9 +669,12 @@ ${staticDomainLocations(root, kind)}
 `;
     }
     return `${configHeader(null, false, 'spa', redirects)}
+${appUpstream(fullDomain, port)}
 server {
     listen 80;
     server_name ${names};
+
+    ${CONNECTION_HEADER_VALUE}
 
     # ACME challenge for Let's Encrypt certificate issuance
     location /.well-known/acme-challenge/ {
@@ -614,15 +682,10 @@ server {
     }
 
     location / {
-        proxy_pass http://127.0.0.1:${port};
-        proxy_http_version 1.1;
+        proxy_pass http://shipyard_app_${siteId(fullDomain)};
+        ${appProxyHeaders()}
 
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        ${APP_PROXY_TIMEOUTS}
     }
 }
 `;
@@ -714,8 +777,7 @@ server {
         const config = readFileSync(availablePath, 'utf8');
         if (
           config.includes('location ^~ /__shipyard_preview/') &&
-          (this.getStaticRoot(sub) !== null ||
-            config.includes(`proxy_pass http://127.0.0.1:${port}/;`))
+          (this.getStaticRoot(sub) !== null || config.includes(`server 127.0.0.1:${port};`))
         ) {
           return;
         }
