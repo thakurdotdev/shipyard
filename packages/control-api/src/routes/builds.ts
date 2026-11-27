@@ -1,4 +1,4 @@
-import { hasInternalToken } from '@thakur-deploy/config';
+import { hasInternalToken } from '@shipyard/config';
 import { Elysia } from 'elysia';
 import { LogLevel } from '../db/schema';
 import { BuildQueue } from '../queue';

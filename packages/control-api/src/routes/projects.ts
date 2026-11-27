@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { ProjectService } from '../services/project-service';
 import { ProjectAccessService } from '../services/project-access-service';

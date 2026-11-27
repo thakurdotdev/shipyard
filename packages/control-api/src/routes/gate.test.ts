@@ -9,7 +9,7 @@ const { GateService } = await import('../services/gate-service');
 const { GATE_COOKIE, signSession, monitorToken } = await import('../services/gate-session');
 
 const app = new Elysia().use(gateRoutes);
-const HOST = 'private.thakur.dev';
+const HOST = 'private.example.com';
 let hash: string;
 
 beforeAll(async () => {
@@ -94,7 +94,7 @@ describe('GET /gate/verify', () => {
   it('fails closed for unknown hosts, missing hosts and passwordless records', async () => {
     stubProject();
     expect(
-      (await call('/gate/verify', { headers: { 'x-gate-host': 'other.thakur.dev' } })).status,
+      (await call('/gate/verify', { headers: { 'x-gate-host': 'other.example.com' } })).status,
     ).toBe(403);
     expect((await call('/gate/verify', { headers: { 'x-gate-host': 'bad host' } })).status).toBe(
       403,

@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { CloudflareService } from '../services/cloudflare-service';
 import { DomainService } from '../services/domain-service';

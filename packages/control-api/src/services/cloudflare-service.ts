@@ -1,4 +1,4 @@
-import { config, getServerHost } from '@thakur-deploy/config';
+import { config, getServerHost } from '@shipyard/config';
 import { SettingsService } from './settings-service';
 import { classifyHostRecords, type HostDnsState } from './domain-names';
 

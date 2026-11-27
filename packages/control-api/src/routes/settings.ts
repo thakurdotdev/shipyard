@@ -1,4 +1,4 @@
-import { config, getServerHost } from '@thakur-deploy/config';
+import { config, getServerHost } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { GitHubService, resetGitHubAppCache } from '../services/github-service';
 import {

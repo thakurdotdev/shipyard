@@ -9,13 +9,13 @@ import { getContainerName, getImageName, DEFAULT_CONTAINER_LIMITS } from './type
 describe('Docker Types', () => {
   test('getContainerName generates valid name', () => {
     const name = getContainerName('abc12345-6789-0abc-def0-123456789abc');
-    expect(name).toBe('thakur-abc12345');
+    expect(name).toBe('shipyard-abc12345');
     expect(name.length).toBeLessThan(64); // Docker name limit
   });
 
   test('getImageName generates valid tag', () => {
     const image = getImageName('project-123', 'build-456');
-    expect(image).toBe('thakur-deploy/project-:build-45');
+    expect(image).toBe('shipyard/project-:build-45');
   });
 
   test('DEFAULT_CONTAINER_LIMITS has expected values', () => {
@@ -42,7 +42,7 @@ describe('Docker Exec', () => {
 
 // Integration tests (require Docker)
 describe.skipIf(!(await isDockerAvailable()))('Docker Integration', () => {
-  const testImageName = 'thakur-deploy/test:latest';
+  const testImageName = 'shipyard/test:latest';
 
   // These tests require Docker and are skipped in CI
   test('can pull a base image', async () => {

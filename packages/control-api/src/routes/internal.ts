@@ -1,4 +1,4 @@
-import { hasInternalToken, INTERNAL_TOKEN_HEADER } from '@thakur-deploy/config';
+import { hasInternalToken, INTERNAL_TOKEN_HEADER } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { GitHubService } from '../services/github-service';
 

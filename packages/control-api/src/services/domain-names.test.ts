@@ -11,16 +11,16 @@ import {
   siteNameFor,
 } from './domain-names';
 
-const BASE = 'thakur.dev';
+const BASE = 'example.com';
 
 describe('normalizeDomainInput', () => {
   it('turns a label into a subdomain of the base domain', () => {
-    expect(normalizeDomainInput('Portfolio', BASE)).toBe('portfolio.thakur.dev');
+    expect(normalizeDomainInput('Portfolio', BASE)).toBe('portfolio.example.com');
   });
 
   it('accepts custom domains in the forms people paste', () => {
-    for (const input of ['thakur.dev', 'https://Thakur.dev/', 'thakur.dev.', ' THAKUR.DEV ']) {
-      expect(normalizeDomainInput(input, BASE)).toBe('thakur.dev');
+    for (const input of ['example.com', 'https://Example.com/', 'example.com.', ' EXAMPLE.COM ']) {
+      expect(normalizeDomainInput(input, BASE)).toBe('example.com');
     }
     expect(normalizeDomainInput('shop.example.co.uk', BASE)).toBe('shop.example.co.uk');
   });
@@ -37,36 +37,36 @@ describe('normalizeDomainInput', () => {
     ]) {
       expect(() => normalizeDomainInput(bad, BASE)).toThrow();
     }
-    expect(() => normalizeDomainInput('api.thakur.dev', BASE)).toThrow('reserved');
+    expect(() => normalizeDomainInput('api.example.com', BASE)).toThrow('reserved');
   });
 });
 
 describe('site names', () => {
   it('keeps label names for subdomains and full names for custom domains', () => {
-    expect(siteNameFor('portfolio.thakur.dev', BASE)).toBe('portfolio');
-    expect(siteNameFor('thakur.dev', BASE)).toBe('thakur.dev');
-    expect(siteNameFor('a.b.thakur.dev', BASE)).toBe('a.b.thakur.dev');
+    expect(siteNameFor('portfolio.example.com', BASE)).toBe('portfolio');
     expect(siteNameFor('example.com', BASE)).toBe('example.com');
-    expect(isCustomDomain('portfolio.thakur.dev', BASE)).toBe(false);
-    expect(isCustomDomain('thakur.dev', BASE)).toBe(true);
+    expect(siteNameFor('a.b.example.com', BASE)).toBe('a.b.example.com');
+    expect(siteNameFor('example.com', BASE)).toBe('example.com');
+    expect(isCustomDomain('portfolio.example.com', BASE)).toBe(false);
+    expect(isCustomDomain('example.com', BASE)).toBe(true);
   });
 
   it('only custom domains get a www redirect', () => {
-    expect(domainAliases({ domain: 'thakur.dev', www_redirect: true }, BASE)).toEqual([
-      'www.thakur.dev',
+    expect(domainAliases({ domain: 'example.com', www_redirect: true }, BASE)).toEqual([
+      'www.example.com',
     ]);
-    expect(domainAliases({ domain: 'thakur.dev', www_redirect: false }, BASE)).toEqual([]);
-    expect(domainAliases({ domain: 'app.thakur.dev', www_redirect: true }, BASE)).toEqual([]);
+    expect(domainAliases({ domain: 'example.com', www_redirect: false }, BASE)).toEqual([]);
+    expect(domainAliases({ domain: 'app.example.com', www_redirect: true }, BASE)).toEqual([]);
     expect(projectHosts({ domain: null })).toEqual([]);
   });
 
   it('maps engine site names back to hostnames', () => {
-    expect(domainForSite('thakur.dev')).toBe('thakur.dev');
+    expect(domainForSite('example.com')).toBe('example.com');
   });
 });
 
 describe('classifyHostRecords', () => {
-  const ip = '140.245.15.112';
+  const ip = '203.0.113.10';
   const rec = (type: string, content: string, proxied = false) => ({
     id: `${type}-${content}`,
     type,
@@ -75,7 +75,7 @@ describe('classifyHostRecords', () => {
   });
 
   it('reuses records that already point here, proxied or not', () => {
-    expect(classifyHostRecords([rec('A', ip, true), rec('MX', 'mx.zoho.in')], ip)).toEqual({
+    expect(classifyHostRecords([rec('A', ip, true), rec('MX', 'mx.example.net')], ip)).toEqual({
       state: 'ours',
       recordId: `A-${ip}`,
       proxied: true,
@@ -84,7 +84,7 @@ describe('classifyHostRecords', () => {
   });
 
   it('ignores mail and text records when the name has no address yet', () => {
-    expect(classifyHostRecords([rec('MX', 'mx.zoho.in'), rec('TXT', 'v=spf1')], ip)).toEqual({
+    expect(classifyHostRecords([rec('MX', 'mx.example.net'), rec('TXT', 'v=spf1')], ip)).toEqual({
       state: 'missing',
     });
   });
@@ -94,13 +94,15 @@ describe('classifyHostRecords', () => {
     expect(classifyHostRecords([rec('A', ip), rec('AAAA', '2001:db8::1')], ip).state).toBe(
       'elsewhere',
     );
-    expect(classifyHostRecords([rec('CNAME', 'other.host')], ip, 'thakur.dev').state).toBe(
+    expect(classifyHostRecords([rec('CNAME', 'other.host')], ip, 'example.com').state).toBe(
       'elsewhere',
     );
   });
 
   it('accepts www as a CNAME to the domain itself', () => {
-    expect(classifyHostRecords([rec('CNAME', 'thakur.dev.')], ip, 'thakur.dev').state).toBe('ours');
+    expect(classifyHostRecords([rec('CNAME', 'example.com.')], ip, 'example.com').state).toBe(
+      'ours',
+    );
   });
 });
 
@@ -114,12 +116,14 @@ describe('provisionMatches', () => {
 
   it('matches only the same domain and the same www setting', () => {
     expect(
-      provisionMatches(row('thakur.dev', ['www.thakur.dev']), 'thakur.dev', ['www.thakur.dev']),
+      provisionMatches(row('example.com', ['www.example.com']), 'example.com', ['www.example.com']),
     ).toBe(true);
-    expect(provisionMatches(row('thakur.dev', []), 'thakur.dev', ['www.thakur.dev'])).toBe(false);
-    expect(provisionMatches(row('portfolio.thakur.dev', []), 'thakur.dev', [])).toBe(false);
+    expect(provisionMatches(row('example.com', []), 'example.com', ['www.example.com'])).toBe(
+      false,
+    );
+    expect(provisionMatches(row('portfolio.example.com', []), 'example.com', [])).toBe(false);
     expect(
-      provisionMatches({ full_domain: 'a.thakur.dev', alias_records: null }, 'a.thakur.dev', []),
+      provisionMatches({ full_domain: 'a.example.com', alias_records: null }, 'a.example.com', []),
     ).toBe(true);
   });
 

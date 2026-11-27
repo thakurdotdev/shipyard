@@ -1,5 +1,5 @@
 {
-  "name": "thakur-deploy",
+  "name": "shipyard",
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
@@ -9,8 +9,8 @@
   "scripts": {
     "test": "bun test",
     "dev": "bun run --filter '*' dev 2>&1 | tee debug.log",
-    "generate": "bun run --filter '@thakur-deploy/control-api' generate",
-    "migrate": "bun run --filter '@thakur-deploy/control-api' migrate",
+    "generate": "bun run --filter '@shipyard/control-api' generate",
+    "migrate": "bun run --filter '@shipyard/control-api' migrate",
     "lint": "bun lint",
     "format": "bun fmt",
     "prepare": "husky",

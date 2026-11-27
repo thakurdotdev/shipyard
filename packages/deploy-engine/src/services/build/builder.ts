@@ -1,4 +1,4 @@
-import { childProcessEnv, config, internalAuthHeaders } from '@thakur-deploy/config';
+import { childProcessEnv, config, internalAuthHeaders } from '@shipyard/config';
 import { spawn } from 'child_process';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { unlink, writeFile } from 'fs/promises';

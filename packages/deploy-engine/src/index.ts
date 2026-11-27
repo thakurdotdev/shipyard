@@ -1,4 +1,4 @@
-import { hasInternalToken, platformListenHost } from '@thakur-deploy/config';
+import { hasInternalToken, platformListenHost } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { syncPlatformInfo } from './services/platform-sync';
 import { DeployService } from './services/deploy-service';

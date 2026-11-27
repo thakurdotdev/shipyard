@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { db } from '../db';
 import { builds, deployments, projectAccess, projects, uptimeMonitors } from '../db/schema';
 import { and, desc, eq, getTableColumns, sql } from 'drizzle-orm';

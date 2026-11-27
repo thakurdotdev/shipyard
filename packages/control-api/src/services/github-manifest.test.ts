@@ -13,7 +13,7 @@ const {
   manifestActionUrl,
   verifyState,
 } = await import('./github-manifest');
-const { config } = await import('@thakur-deploy/config');
+const { config } = await import('@shipyard/config');
 
 describe('manifest', () => {
   it('describes an App with the URLs and permissions ShipYard uses', () => {

@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { auth, authBaseUrl, canCreateAccount } from '../lib/auth';
 import { resetGitHubAppCache } from '../services/github-service';

@@ -11,7 +11,7 @@ import {
 import { existsSync, readdirSync } from 'fs';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { NginxService, serverNames } from './services/nginx-service';
 import { parseSanNames } from './services/ssl-service';
 
@@ -57,8 +57,8 @@ describe('site names', () => {
 
   test('reads certificate names and server names', () => {
     expect(
-      parseSanNames('X509v3 Subject Alternative Name:\n    DNS:thakur.dev, DNS:www.thakur.dev'),
-    ).toEqual(['thakur.dev', 'www.thakur.dev']);
+      parseSanNames('X509v3 Subject Alternative Name:\n    DNS:example.com, DNS:www.example.com'),
+    ).toEqual(['example.com', 'www.example.com']);
     expect(serverNames('server_name a.com  www.a.com;\nserver_name _ *.a.com ~^x;')).toEqual([
       'a.com',
       'www.a.com',

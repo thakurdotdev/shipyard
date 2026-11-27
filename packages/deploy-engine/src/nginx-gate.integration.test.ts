@@ -23,7 +23,7 @@ const upstream = Bun.serve({
     requests.push({ path: `${req.method} ${url.pathname}`, headers });
     if (url.pathname === '/gate/verify') {
       if (verifyMode === 'broken') return new Response('boom', { status: 500 });
-      if (headers['x-gate-host'] !== `${SUBDOMAIN}.thakur.dev`)
+      if (headers['x-gate-host'] !== `${SUBDOMAIN}.example.com`)
         return new Response(null, { status: 403 });
       return new Response(null, {
         status: /shipyard_gate=ok/.test(headers.cookie ?? '') ? 200 : 401,
@@ -94,7 +94,7 @@ describe('gate configuration', () => {
     expect(config).toContain('auth_request /__shipyard_auth;');
     expect(config).toContain('server 127.0.0.1:5100;');
     expect(config).toContain(
-      'proxy_pass http://shipyard_gate_gate_hfixture_dthakur_ddev/gate/verify;',
+      'proxy_pass http://shipyard_gate_gate_hfixture_dexample_dcom/gate/verify;',
     );
   });
 
@@ -111,7 +111,7 @@ describe.skipIf(!nginx || !openssl)('password-gated nginx virtual host', () => {
   let child: ReturnType<typeof Bun.spawn>;
   let tlsPort: number;
   let ca: Buffer;
-  const domain = `${SUBDOMAIN}.thakur.dev`;
+  const domain = `${SUBDOMAIN}.example.com`;
 
   function fetchOrigin(
     path: string,

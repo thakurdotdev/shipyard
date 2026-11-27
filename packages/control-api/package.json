@@ -1,5 +1,5 @@
 {
-  "name": "@thakur-deploy/control-api",
+  "name": "@shipyard/control-api",
   "version": "0.0.0",
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target=bun --packages=external",
@@ -12,7 +12,7 @@
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
     "@sinclair/typebox": "^0.34.41",
-    "@thakur-deploy/config": "workspace:*",
+    "@shipyard/config": "workspace:*",
     "better-auth": "^1.6.25",
     "bullmq": "^5.81.1",
     "drizzle-orm": "^0.45.1",

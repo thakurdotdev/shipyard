@@ -46,9 +46,9 @@ export async function runContainer(config: ContainerConfig): Promise<RunResult> 
     '--cpus',
     cpuLimit,
     '--label',
-    `thakur.projectId=${config.projectId}`,
+    `shipyard.projectId=${config.projectId}`,
     '--label',
-    `thakur.buildId=${config.buildId}`,
+    `shipyard.buildId=${config.buildId}`,
     '-e',
     'NODE_ENV=production',
     ...envFlags,
@@ -196,9 +196,9 @@ export async function listRunningContainers(): Promise<
   const result = await execDocker([
     'ps',
     '--format',
-    '{{.Names}} {{.Label "thakur.projectId"}} {{.Label "thakur.buildId"}}',
+    '{{.Names}} {{.Label "shipyard.projectId"}} {{.Label "shipyard.buildId"}}',
     '--filter',
-    'label=thakur.projectId',
+    'label=shipyard.projectId',
   ]);
 
   if (result.exitCode !== 0) return [];

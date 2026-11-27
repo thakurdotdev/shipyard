@@ -99,7 +99,7 @@ describe('derived values', () => {
     expect(deriveBaseDomain('https://deploy.example.com')).toBe('example.com');
     expect(deriveBaseDomain('https://a.b.example.co.uk')).toBe('b.example.co.uk');
     expect(deriveBaseDomain('https://example.com')).toBe('example.com');
-    expect(deriveBaseDomain('http://35.94.192.61')).toBe('localhost');
+    expect(deriveBaseDomain('http://203.0.113.20')).toBe('localhost');
     expect(deriveBaseDomain('http://localhost:4013')).toBe('localhost');
     expect(deriveBaseDomain('not a url')).toBe('localhost');
   });

@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 /**
  * Queue configuration for the in-engine build worker.
  * Must match control-api's QUEUE_CONFIG.name (packages/control-api/src/queue/config.ts).

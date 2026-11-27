@@ -1,4 +1,4 @@
-import { config, platformListenHost } from '@thakur-deploy/config';
+import { config, platformListenHost } from '@shipyard/config';
 import { cors } from '@elysiajs/cors';
 import { Elysia } from 'elysia';
 import { auth } from './lib/auth';

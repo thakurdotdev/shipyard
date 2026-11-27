@@ -1,4 +1,4 @@
-import { config, internalAuthHeaders } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@shipyard/config';
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
 const FLUSH_INTERVAL = 300; // 300ms - flush more frequently for real-time feel

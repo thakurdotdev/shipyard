@@ -41,13 +41,10 @@ export function Footer() {
               Self-hosted platform-as-a-service for modern web applications — build, deploy and
               manage your projects with ease.
             </p>
-            <p className="mt-6 text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-              A product by Pankaj
-            </p>
           </div>
 
           <p className="text-sm text-muted-foreground md:text-right">
-            © ShipYard · All rights reserved.
+            © ShipYard · Open source under the MIT license.
           </p>
         </div>
       </div>

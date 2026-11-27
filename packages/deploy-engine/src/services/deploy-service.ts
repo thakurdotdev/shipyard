@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { existsSync, mkdirSync } from 'fs';
 import { unlink, symlink, rename } from 'fs/promises';
 import { basename, join } from 'path';

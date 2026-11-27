@@ -1,4 +1,4 @@
-import { config, internalAuthHeaders } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@shipyard/config';
 export type LogLevel = 'info' | 'warning' | 'error' | 'success' | 'deploy';
 
 const CONTROL_API_URL = config.controlApiUrl;

@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { Queue, QueueEvents, Job } from 'bullmq';
 import { QUEUE_CONFIG } from './config';
 import { EventStreamService } from '../services/event-stream-service';

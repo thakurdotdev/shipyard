@@ -10,11 +10,11 @@ interface GitHubInstallationToken {
 export interface GitHubAppInfo {
   /** App id as configured on the server. */
   id: string;
-  /** Public slug, e.g. "thakur-deploy". */
+  /** Public slug, e.g. "my-shipyard". */
   slug: string;
   /** Display name, e.g. "ShipYard". */
   name: string;
-  /** Full install-page URL, e.g. https://github.com/apps/thakur-deploy/installations/new */
+  /** Full install-page URL, e.g. https://github.com/apps/shipyard/installations/new */
   installUrl: string;
 }
 

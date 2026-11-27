@@ -1,4 +1,4 @@
-import { findRepoRoot } from '@thakur-deploy/config';
+import { findRepoRoot } from '@shipyard/config';
 import { inArray } from 'drizzle-orm';
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';

@@ -1,4 +1,4 @@
-import { config, getServerHost } from '@thakur-deploy/config';
+import { config, getServerHost } from '@shipyard/config';
 import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../db';
 import { deployments, domainProvisions, projects } from '../db/schema';

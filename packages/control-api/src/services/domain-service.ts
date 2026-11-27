@@ -1,4 +1,4 @@
-import { config, getServerHost } from '@thakur-deploy/config';
+import { config, getServerHost } from '@shipyard/config';
 import { promises as dnsPromises } from 'dns';
 import { db } from '../db';
 import { domainProvisions, projects } from '../db/schema';
