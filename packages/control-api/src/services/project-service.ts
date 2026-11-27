@@ -6,6 +6,7 @@ import { AppType, isStaticFramework } from '../config/framework-config';
 import { normalizeWatchPatternsInput } from './deploy-change-detection';
 import { GateService } from './gate-service';
 import { normalizeDomainInput, siteNameFor } from './domain-names';
+import { SettingsService } from './settings-service';
 import { deployEngineFetch } from './deploy-engine-client';
 
 const IS_PLATFORM_PROD = config.isProduction;
@@ -128,12 +129,13 @@ export const ProjectService = {
 
   async allocateNextPort(): Promise<number> {
     let candidatePort: number | null = null;
+    const range = SettingsService.portRange();
 
     try {
       const res = await deployEngineFetch(`/ports/allocate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ startPort: range.start, endPort: range.end }),
       });
 
       if (res.ok) {
@@ -154,11 +156,11 @@ export const ProjectService = {
       }
     }
 
-    // Fallback: check 5000-6000 against DB and host
+    // Fallback: check the range against the database and the host
     const allAssigned = await db.select({ port: projects.port }).from(projects);
     const assignedSet = new Set(allAssigned.map((p) => p.port).filter(Boolean));
 
-    for (let p = 5000; p <= 6000; p++) {
+    for (let p = range.start; p <= range.end; p++) {
       if (!assignedSet.has(p)) {
         const check = await this.checkPortAvailability(p);
         if (check.available) {

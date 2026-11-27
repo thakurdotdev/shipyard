@@ -18,6 +18,7 @@ import { settingsRoutes } from './routes/settings';
 import { setupRoutes } from './routes/setup';
 import { githubWebhook } from './routes/webhook-handler';
 import { isGitHubLoginConfigured, SettingsService } from './services/settings-service';
+import { followEngineSettings, pushEngineSettings } from './services/engine-settings';
 import { UptimeService } from './services/uptime-service';
 
 const publicRoutes = new Elysia()
@@ -46,6 +47,10 @@ try {
 } catch (error) {
   console.warn('[Settings] Could not load saved settings; using .env only:', error);
 }
+// The Deploy Engine applies Docker mode, builds at a time and the certbot email. It asks for
+// them when it starts; changes are pushed as they are saved.
+followEngineSettings();
+void pushEngineSettings();
 
 // 1. Create Elysia app
 const app = new Elysia()

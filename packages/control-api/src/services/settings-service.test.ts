@@ -92,3 +92,34 @@ describe('validation', () => {
     expect(normalizeSetting('resend_from_email', ' A <a@b.c> ')).toBe('A <a@b.c>');
   });
 });
+
+describe('deployment settings', () => {
+  it('validates Docker mode, builds at a time, ports and the certbot email', () => {
+    expect(normalizeSetting('use_docker', 'true')).toBe('true');
+    expect(() => normalizeSetting('use_docker', 'yes')).toThrow('true or false');
+    expect(normalizeSetting('build_concurrency', ' 2 ')).toBe('2');
+    for (const bad of ['0', '5', '1.5', 'two']) {
+      expect(() => normalizeSetting('build_concurrency', bad)).toThrow('1 to 4');
+    }
+    expect(normalizeSetting('port_range_start', '7000')).toBe('7000');
+    expect(() => normalizeSetting('port_range_end', '80')).toThrow('1024 to 65535');
+    expect(normalizeSetting('certbot_email', 'ops@example.com')).toBe('ops@example.com');
+    expect(() => normalizeSetting('certbot_email', 'not-an-email')).toThrow('valid email');
+  });
+
+  it('reads the port range from settings, then .env, then 5000-6000', () => {
+    SettingsService._setForTests({});
+    expect(SettingsService.portRange()).toEqual({ start: 5000, end: 6000 });
+    SettingsService._setForTests({ port_range_start: '7000', port_range_end: '7100' });
+    expect(SettingsService.portRange()).toEqual({ start: 7000, end: 7100 });
+  });
+
+  it('rejects a port range that is reversed or too small before writing anything', async () => {
+    SettingsService._setForTests({ port_range_start: '7000', port_range_end: '7100' });
+    await expect(SettingsService.set({ port_range_start: '7200' })).rejects.toThrow(
+      'below the last one',
+    );
+    await expect(SettingsService.set({ port_range_end: '7005' })).rejects.toThrow('at least 10');
+    expect(SettingsService.portRange()).toEqual({ start: 7000, end: 7100 });
+  });
+});

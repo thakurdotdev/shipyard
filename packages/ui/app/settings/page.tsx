@@ -140,6 +140,20 @@ const CLOUDFLARE_FIELDS: FieldSpec[] = [
   { key: 'cloudflare_zone_id', label: 'Zone ID', placeholder: 'From the zone’s Overview page' },
 ];
 
+const PORT_FIELDS: FieldSpec[] = [
+  { key: 'port_range_start', label: 'First app port', placeholder: '5000' },
+  { key: 'port_range_end', label: 'Last app port', placeholder: '6000' },
+];
+
+const CERTBOT_FIELD: FieldSpec = {
+  key: 'certbot_email',
+  label: "Let's Encrypt email",
+  placeholder: 'you@example.com',
+  help: 'Used only if certbot has no account on this server yet. Leave empty to skip.',
+};
+
+const DEPLOYMENT_TEXT_KEYS: SettingKey[] = [...PORT_FIELDS.map((f) => f.key), CERTBOT_FIELD.key];
+
 const EMAIL_FIELDS: FieldSpec[] = [
   { key: 'resend_api_key', label: 'Resend API key', placeholder: 're_…' },
   {
@@ -421,6 +435,104 @@ function SettingsContent() {
             'email',
             EMAIL_FIELDS.map((f) => f.key),
           )}
+        </div>
+      </Section>
+
+      <Section
+        title="Deployments"
+        description="How apps build and run on this server. Changes apply to the next build or deploy; running apps keep going until then."
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Label htmlFor="use-docker">Run apps in Docker</Label>
+              <SourceBadge source={data.settings.use_docker.source} />
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Off: apps run as pm0 processes, the lighter option. On: each app runs in its own
+              container. Each app switches over on its next deploy.
+            </p>
+            {data.deployments.docker_available === false && (
+              <p className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-400">
+                Docker isn&apos;t available to the platform user on this server. Install it and add
+                the user to the docker group to turn this on.
+              </p>
+            )}
+            {data.deployments.docker_available === null && (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Couldn&apos;t reach the Deploy Engine to check for Docker.
+              </p>
+            )}
+          </div>
+          <Switch
+            id="use-docker"
+            checked={data.settings.use_docker.value === 'true'}
+            disabled={
+              saving !== null ||
+              (data.settings.use_docker.value !== 'true' &&
+                data.deployments.docker_available !== true)
+            }
+            onCheckedChange={(checked) =>
+              save('docker', [], { use_docker: checked ? 'true' : 'false' })
+            }
+          />
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span id="build-concurrency-label" className="text-sm font-medium">
+                Builds at a time
+              </span>
+              <SourceBadge source={data.settings.build_concurrency.source} />
+            </div>
+            <div
+              role="radiogroup"
+              aria-labelledby="build-concurrency-label"
+              className="inline-flex rounded-lg border border-border p-0.5"
+            >
+              {Array.from({ length: data.deployments.max_build_concurrency }, (_, i) => {
+                const n = String(i + 1);
+                const selected = (data.settings.build_concurrency.value ?? '1') === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={saving !== null}
+                    onClick={() => !selected && save('concurrency', [], { build_concurrency: n })}
+                    className={
+                      'h-8 min-w-9 rounded-md px-3 text-sm tabular-nums transition-colors disabled:opacity-60 ' +
+                      (selected
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground')
+                    }
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Installing and building can take a lot of memory. Raise this only if the server has RAM
+            to spare. Builds of the same project always run one after another.
+          </p>
+        </div>
+
+        <div className="space-y-4 border-t border-border pt-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {PORT_FIELDS.map((spec) => (
+              <SettingField key={spec.key} {...fieldProps(spec)} />
+            ))}
+          </div>
+          <p className="-mt-2 text-xs leading-5 text-muted-foreground">
+            New apps that run as a process get a free port from this range. Existing apps keep
+            theirs.
+          </p>
+          <SettingField {...fieldProps(CERTBOT_FIELD)} />
+          <div className="flex justify-end">{saveButton('deployments', DEPLOYMENT_TEXT_KEYS)}</div>
         </div>
       </Section>
 

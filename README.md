@@ -167,8 +167,11 @@ REDIS_URL=redis://127.0.0.1:6379/0
 ```
 
 The rest is derived or set in the dashboard. **Settings** holds the GitHub App, Cloudflare
-(optional: creates a DNS record per app; without it, add a `*.example.com` wildcard record) and
-Resend for uptime emails. Values saved there are encrypted in the database and override `.env`.
+(optional: creates a DNS record per app; without it, add a `*.example.com` wildcard record),
+Resend for uptime emails, and **Deployments**: Docker mode, how many builds run at once (1-4;
+builds of one project always run in order), the port range for new apps and the Let's Encrypt
+email. Values saved there are stored in the database and override `.env`; the Deploy Engine
+picks up changes without a restart, and they apply from the next build or deploy.
 Optional overrides such as `BASE_DOMAIN` and `SERVER_HOST` are listed in `.env.example`.
 
 Installs from before this layout keep working: per-package `.env` files and the old variable

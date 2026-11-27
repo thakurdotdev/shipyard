@@ -25,6 +25,13 @@ export const SETTING_DEFINITIONS = {
   resend_api_key: { env: 'RESEND_API_KEY', secret: true },
   resend_from_email: { env: 'RESEND_FROM_EMAIL', secret: false },
   allow_signups: { env: undefined, secret: false },
+  // Deployments: applied by the Deploy Engine (pushed on change, see engine-settings.ts).
+  use_docker: { env: 'USE_DOCKER', secret: false },
+  build_concurrency: { env: 'BUILD_CONCURRENCY', secret: false },
+  certbot_email: { env: 'CERTBOT_EMAIL', secret: false },
+  // Ports given to new apps that run as a process.
+  port_range_start: { env: 'PORT_RANGE_START', secret: false },
+  port_range_end: { env: 'PORT_RANGE_END', secret: false },
   // Web Push signing keys: generated on first use, never shown or edited in the dashboard.
   vapid_public_key: { env: 'VAPID_PUBLIC_KEY', secret: false, internal: true },
   vapid_private_key: { env: 'VAPID_PRIVATE_KEY', secret: true, internal: true },
@@ -37,6 +44,24 @@ export type SettingKey = keyof typeof SETTING_DEFINITIONS;
 export type SettingSource = 'dashboard' | 'env' | null;
 
 export const SETTING_KEYS = Object.keys(SETTING_DEFINITIONS) as SettingKey[];
+
+/** Must match MAX_BUILD_CONCURRENCY in the Deploy Engine (config/runtime-settings.ts). */
+export const MAX_BUILD_CONCURRENCY = 4;
+const DEFAULT_PORT_RANGE = { start: 5000, end: 6000 };
+
+/** Port range for new apps from settings, with the one in `updates` applied first. */
+function portRange(updates: Partial<Record<SettingKey, string | null>> = {}) {
+  const pick = (key: 'port_range_start' | 'port_range_end', fallback: number) => {
+    // A removed dashboard value (null) falls back to .env, like SettingsService.get.
+    const raw = key in updates ? (updates[key] ?? fromEnv(key)) : SettingsService.get(key);
+    const n = Number(raw);
+    return raw && Number.isInteger(n) ? n : fallback;
+  };
+  return {
+    start: pick('port_range_start', DEFAULT_PORT_RANGE.start),
+    end: pick('port_range_end', DEFAULT_PORT_RANGE.end),
+  };
+}
 
 export function isSettingKey(key: string): key is SettingKey {
   return key in SETTING_DEFINITIONS;
@@ -84,8 +109,30 @@ export function normalizeSetting(key: SettingKey, raw: string): string {
       }
       break;
     case 'allow_signups':
-      if (value !== 'true' && value !== 'false')
-        throw new Error('allow_signups must be true or false');
+    case 'use_docker':
+      if (value !== 'true' && value !== 'false') throw new Error(`${key} must be true or false`);
+      break;
+    case 'build_concurrency': {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 1 || n > MAX_BUILD_CONCURRENCY) {
+        throw new Error(
+          `Builds at a time must be a whole number from 1 to ${MAX_BUILD_CONCURRENCY}`,
+        );
+      }
+      return String(n);
+    }
+    case 'port_range_start':
+    case 'port_range_end': {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 1024 || n > 65535) {
+        throw new Error('Ports must be whole numbers from 1024 to 65535');
+      }
+      return String(n);
+    }
+    case 'certbot_email':
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        throw new Error("Enter a valid email address for Let's Encrypt");
+      }
       break;
     case 'github_app_slug':
       if (!/^[a-z0-9-]+$/i.test(value))
@@ -124,6 +171,11 @@ export const SettingsService = {
     return fromEnv(key) ? 'env' : null;
   },
 
+  /** Port range for new apps (Settings → Deployments, PORT_RANGE_* or 5000-6000). */
+  portRange() {
+    return portRange();
+  },
+
   /** True only when the setting is explicitly "true". */
   flag(key: SettingKey): boolean {
     return this.get(key) === 'true';
@@ -141,6 +193,15 @@ export const SettingsService = {
       if (!isSettingKey(key)) throw new Error(`Unknown setting: ${key}`);
       if (raw === null || raw.trim() === '') toDelete.push(key);
       else toWrite.push({ key, value: normalizeSetting(key, raw) });
+    }
+    if ('port_range_start' in updates || 'port_range_end' in updates) {
+      const normalized = Object.fromEntries(toWrite.map(({ key, value }) => [key, value]));
+      const range = portRange({
+        ...Object.fromEntries(toDelete.map((key) => [key, null])),
+        ...normalized,
+      });
+      if (range.start >= range.end) throw new Error('The first port must be below the last one');
+      if (range.end - range.start < 10) throw new Error('Leave room for at least 10 ports');
     }
 
     await db.transaction(async (tx) => {
