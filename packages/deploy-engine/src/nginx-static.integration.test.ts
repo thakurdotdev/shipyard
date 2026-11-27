@@ -21,6 +21,7 @@ describe.skipIf(!nginx || !openssl)('direct static Nginx virtual host', () => {
     await mkdir(join(root, 'assets'), { recursive: true });
     await writeFile(join(root, 'index.html'), html);
     await writeFile(join(root, 'assets', 'app.js'), 'console.log("static build");');
+    await writeFile(join(root, 'assets', 'index-B1x_Y3z4.js'), 'console.log("hashed");');
     const cert = join(directory, 'cert.pem');
     const key = join(directory, 'key.pem');
     const certificate = Bun.spawn(
@@ -127,6 +128,30 @@ ${config}
         404,
       );
     }
+  });
+
+  test('lets browsers and the CDN keep content-hashed bundles for a year', async () => {
+    const hashed = await requestNginxOrigin(domain, 1000, {
+      port: tlsPort,
+      ca,
+      path: '/assets/index-B1x_Y3z4.js',
+    });
+    expect(hashed.status).toBe(200);
+    expect(hashed.headers.get('content-type')).toContain('javascript');
+    expect(hashed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(
+      (await requestNginxOrigin(domain, 1000, { port: tlsPort, ca, path: '/assets/x-missing1.js' }))
+        .status,
+    ).toBe(404);
+  });
+
+  test('does not mark files without a content hash as immutable', async () => {
+    const plain = await requestNginxOrigin(domain, 1000, {
+      port: tlsPort,
+      ca,
+      path: '/assets/app.js',
+    });
+    expect(plain.headers.get('cache-control')).toBeNull();
   });
 
   test('supports embedded SPA previews with the dashboard framing policy', async () => {

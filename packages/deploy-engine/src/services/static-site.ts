@@ -73,6 +73,13 @@ function spaSiteLocations(): string {
         add_header Cache-Control "no-cache" always;
     }
 
+    # Vite names build output with a content hash (index-B1x2Y3z4.js), so a name never
+    # points at different content: browsers and Cloudflare may keep it for a year.
+    location ~ "^/assets/.+-[A-Za-z0-9_-]{8}\\.(?:${ASSET_EXTENSIONS})$" {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
     # Missing bundles must return 404, never HTML with a JavaScript MIME type.
     location /assets/ {
         try_files $uri =404;
