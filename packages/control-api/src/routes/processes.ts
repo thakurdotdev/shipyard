@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { relaySSE } from '../utils/sse-relay';
 
 /**
  * pm0 HTTP APIs. The platform daemon runs ShipYard itself (and, before isolation, every
@@ -153,8 +154,14 @@ function sanitizeProcess(proc: RawPM0Process, daemon: Daemon = 'platform') {
   };
 }
 
+/** A wedged daemon must not hold dashboard requests open forever. */
+const PM0_REQUEST_TIMEOUT_MS = 60_000;
+
 async function pm0Fetch(path: string, opts?: RequestInit, daemon: Daemon = 'platform') {
-  const res = await daemonFetch(daemon, path, opts);
+  const res = await daemonFetch(daemon, path, {
+    signal: AbortSignal.timeout(PM0_REQUEST_TIMEOUT_MS),
+    ...opts,
+  });
   const text = await res.text();
 
   if (!res.ok) {
@@ -325,7 +332,7 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
     })
 
     // SSE log stream — proxy straight through
-    .get('/processes/:target/logs', async ({ params: { target }, query, set }) => {
+    .get('/processes/:target/logs', async ({ params: { target }, query, request, set }) => {
       try {
         const qs = new URLSearchParams();
         if (query && typeof query === 'object') {
@@ -337,20 +344,29 @@ export const processesRoutes = new Elysia().group('/pm0', (app) =>
         const upstream = await daemonFetch(
           t.daemon,
           `/processes/${encodeURIComponent(t.target)}/logs?${qs.toString()}`,
+          {
+            // Closing the dashboard tab must also close the follow stream to pm0; otherwise
+            // every opened log viewer leaves an upstream connection (and a tail) running.
+            signal: request.signal,
+            // A follow stream is meant to stay open while the process is quiet. Bun's
+            // fetch otherwise gives up on an idle body with a TimeoutError.
+            timeout: false,
+          } as RequestInit,
         );
 
-        if (!upstream.ok) {
-          set.status = upstream.status;
+        if (!upstream.ok || !upstream.body) {
+          set.status = upstream.ok ? 502 : upstream.status;
           return { error: `PM0 log stream error: ${upstream.status}` };
         }
 
-        // Return SSE response
-        set.headers['content-type'] = 'text/event-stream';
-        set.headers['cache-control'] = 'no-cache, no-transform';
-        set.headers['connection'] = 'keep-alive';
-        set.headers['x-accel-buffering'] = 'no';
-
-        return upstream.body;
+        return new Response(relaySSE(upstream.body, { label: 'ProcessLogs' }), {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          },
+        });
       } catch (e: unknown) {
         set.status = 502;
         return { error: getErrorMessage(e) };

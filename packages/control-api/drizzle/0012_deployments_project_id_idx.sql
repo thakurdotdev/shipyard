@@ -1,0 +1,1 @@
+CREATE INDEX "deployments_project_id_idx" ON "deployments" USING btree ("project_id");

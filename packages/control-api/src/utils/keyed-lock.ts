@@ -12,12 +12,18 @@ export function createKeyedLock(maxHoldMs: number) {
     /** Resolves once every earlier holder of `key` released (or timed out). Call the result to release. */
     async acquire(key: string): Promise<() => void> {
       const previous = tails.get(key) ?? Promise.resolve();
+      // A holder counts as released when it calls release() or after maxHoldMs. The timer
+      // is cleared on release so a busy key doesn't pile up pending timeouts.
       let release!: () => void;
-      const held = new Promise<void>((resolve) => {
-        release = resolve;
+      const done = new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, maxHoldMs);
+        // Never keep the process alive just for a lock timeout.
+        (timer as { unref?: () => void }).unref?.();
+        release = () => {
+          clearTimeout(timer);
+          resolve();
+        };
       });
-      // A holder counts as released when it calls release() or after maxHoldMs.
-      const done = Promise.race([held, delay(maxHoldMs)]);
       const tail = previous.then(() => done);
       tails.set(key, tail);
       void tail.then(() => {
@@ -33,12 +39,4 @@ export function createKeyedLock(maxHoldMs: number) {
       return tails.size;
     },
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    // Never keep the process alive just for a lock timeout.
-    (timer as { unref?: () => void }).unref?.();
-  });
 }

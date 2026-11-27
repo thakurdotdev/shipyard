@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { delimiter, join } from 'path';
 import { appUserEnv, asAppUser, isAppUserEnabled } from './app-user';
 import { Builder } from './build/builder';
+import { LogStreamer } from './build/log-streamer';
 import { LogService } from './log-service';
 
 /** Migrations can be slow, but a hung command must never block deploys forever. */
@@ -85,8 +86,8 @@ export async function runPreDeployCommand({
     }
   }, timeoutMs);
 
-  // Forward output line by line, in order, without blocking the process.
-  let logChain = Promise.resolve();
+  // Forward output line by line, in order. Lines are batched like build output, so a
+  // chatty migration doesn't cost one request (and one log row) per line.
   const forward = (stream: NodeJS.ReadableStream) => {
     let pending = '';
     stream.setEncoding('utf8');
@@ -94,13 +95,10 @@ export async function runPreDeployCommand({
       pending += chunk;
       const lines = pending.split('\n');
       pending = lines.pop() ?? '';
-      for (const line of lines) {
-        logChain = logChain.then(() => LogService.stream(buildId, `${line}\n`, 'info'));
-      }
+      for (const line of lines) LogStreamer.stream(buildId, '', `${line}\n`, 'info');
     });
     stream.on('end', () => {
-      if (pending)
-        logChain = logChain.then(() => LogService.stream(buildId, `${pending}\n`, 'info'));
+      if (pending) LogStreamer.stream(buildId, '', `${pending}\n`, 'info');
     });
   };
   forward(child.stdout!);
@@ -110,7 +108,7 @@ export async function runPreDeployCommand({
     child.on('error', reject);
     child.on('close', (code) => resolve(code));
   }).finally(() => clearTimeout(timer));
-  await logChain;
+  await LogStreamer.ensureFlushed(buildId);
 
   const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
   if (timedOut) {

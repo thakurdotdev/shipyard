@@ -440,15 +440,21 @@ export const Builder = {
         );
         child = spawn(argv[0], argv.slice(1), { cwd, env: appUserEnv(env) });
       } else {
-        const [cmd, ...args] = bunCommand.split(' ');
-        child = spawn(cmd, args, { cwd, shell: true, env });
+        // Own process group, so a timeout also stops what `sh` started (the actual
+        // bundler, its workers...) instead of leaving them running after the build failed.
+        child = spawn('sh', ['-c', bunCommand], { cwd, env, detached: true });
       }
 
       // Timeout to prevent indefinite hangs
       const timeout = setTimeout(() => {
         console.error(`[Builder] Command timed out after ${TIMEOUT_MS / 1000}s: ${bunCommand}`);
         LogStreamer.stream(buildId, projectId, `\n❌ Command timed out after 5 minutes\n`, 'error');
-        child.kill('SIGTERM');
+        try {
+          if (isAppUserEnabled()) child.kill('SIGTERM');
+          else process.kill(-child.pid!, 'SIGKILL');
+        } catch {
+          child.kill('SIGKILL');
+        }
         reject(new Error(`Command timed out after 5 minutes: ${bunCommand}`));
       }, TIMEOUT_MS);
 

@@ -167,7 +167,7 @@ ${config}
           ].join('\r\n'),
         );
       });
-      socket.on('data', (chunk) => {
+      socket.on('data', (chunk: Buffer) => {
         received += chunk.toString('latin1');
         if (received.includes('\r\n\r\n')) {
           socket.destroy();
