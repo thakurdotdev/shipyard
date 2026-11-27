@@ -188,3 +188,7 @@ This starts the Control API, Deploy Engine (which also runs the build worker), a
 dashboard on http://localhost:4013, which forwards `/api` to the Control API. Production builds
 of the dashboard are a static export (`packages/ui/out`) served by Nginx; `bun run start` in
 `packages/ui` serves the same files on :4013 for setups that proxy to it.
+
+## License
+
+[MIT](LICENSE)
