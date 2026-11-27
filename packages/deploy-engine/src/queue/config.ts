@@ -6,10 +6,7 @@ import { config } from '@shipyard/config';
 export const QUEUE_CONFIG = {
   name: 'build-queue',
 
-  // Worker settings
-  worker: {
-    concurrency: 1, // Process one build at a time to protect the server
-  },
+  // Builds at a time comes from Settings → Deployments (see config/runtime-settings.ts).
 };
 
 /**

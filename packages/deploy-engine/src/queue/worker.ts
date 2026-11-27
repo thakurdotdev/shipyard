@@ -1,6 +1,8 @@
 import { Worker, Job } from 'bullmq';
 import { getRedisConnection, QUEUE_CONFIG } from './config';
 import { Builder, type BuildJob } from '../services/build';
+import { engineSettings, onEngineSettingsChange } from '../config/runtime-settings';
+import { createKeyedLock } from './project-lock';
 
 /**
  * Build job data structure (must match control-api's BuildJobData)
@@ -9,6 +11,10 @@ export type BuildJobData = BuildJob;
 
 // Singleton worker instance
 let buildWorker: Worker<BuildJobData> | null = null;
+let stopFollowingSettings: (() => void) | null = null;
+
+/** Builds of one project run in order even when several builds may run at once. */
+const oneBuildPerProject = createKeyedLock();
 
 /**
  * Build Worker Service
@@ -37,14 +43,14 @@ export const BuildWorker = {
 
         // Builder handles status updates + log streaming back to the control-api.
         // control-api auto-activates the build when it receives status=success.
-        await Builder.execute(job.data);
+        await oneBuildPerProject(job.data.project_id, () => Builder.execute(job.data));
 
         console.log(`[BuildWorker] Job ${job.id} completed successfully`);
         return { success: true };
       },
       {
         connection,
-        concurrency: QUEUE_CONFIG.worker.concurrency,
+        concurrency: engineSettings().buildConcurrency,
         // Stalled job handling
         stalledInterval: 30000, // Check for stalled jobs every 30s
         maxStalledCount: 1, // Move to failed after 1 stall
@@ -72,6 +78,13 @@ export const BuildWorker = {
       console.error('[BuildWorker] Worker error:', error);
     });
 
+    // Builds at a time can change from the dashboard; running builds are not interrupted.
+    stopFollowingSettings = onEngineSettingsChange((next, previous) => {
+      if (!buildWorker || next.buildConcurrency === previous.buildConcurrency) return;
+      buildWorker.concurrency = next.buildConcurrency;
+      console.log(`[BuildWorker] Now running up to ${next.buildConcurrency} builds at a time`);
+    });
+
     console.log('[BuildWorker] Initialized and listening for jobs');
   },
 
@@ -85,6 +98,8 @@ export const BuildWorker = {
     }
 
     console.log('[BuildWorker] Shutting down gracefully...');
+    stopFollowingSettings?.();
+    stopFollowingSettings = null;
 
     // Close worker (waits for current job to complete)
     await buildWorker.close();

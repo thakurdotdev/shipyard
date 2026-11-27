@@ -120,6 +120,9 @@ describe('custom domain configs', () => {
   });
 
   test('every HTTPS server includes the optional site guard, and only HTTPS servers', () => {
+    // The test preload overrides the guard path; check the default without it.
+    const previousGuard = process.env.NGINX_SITE_GUARD;
+    delete process.env.NGINX_SITE_GUARD;
     const guard = 'include /etc/nginx/snippets/shipyard-site-guard*.conf;';
     const count = (text: string) => text.split(guard).length - 1;
     const aliases = ['www.example.com'];
@@ -138,7 +141,8 @@ describe('custom domain configs', () => {
         'include /srv/guards/*.conf;',
       );
     } finally {
-      delete process.env.NGINX_SITE_GUARD;
+      if (previousGuard === undefined) delete process.env.NGINX_SITE_GUARD;
+      else process.env.NGINX_SITE_GUARD = previousGuard;
     }
   });
 

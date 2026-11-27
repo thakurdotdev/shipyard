@@ -30,6 +30,8 @@ const app = Bun.serve({
   },
 });
 
+let previousGuard: string | undefined;
+
 describe.skipIf(!nginx || !openssl)('proxied app Nginx virtual host', () => {
   let directory: string;
   let child: ReturnType<typeof Bun.spawn>;
@@ -75,6 +77,7 @@ describe.skipIf(!nginx || !openssl)('proxied app Nginx virtual host', () => {
 
     // An empty guard folder: the server's real guard rules need variables this nginx lacks.
     await mkdir(join(directory, 'guards'));
+    previousGuard = process.env.NGINX_SITE_GUARD;
     process.env.NGINX_SITE_GUARD = join(directory, 'guards', '*.conf');
     const config = NginxService.generateConfig('proxy-fixture', app.port!, false)
       .replace('listen 80;', `listen 127.0.0.1:${httpPort};`)
@@ -119,7 +122,8 @@ ${config}
   });
 
   afterAll(async () => {
-    delete process.env.NGINX_SITE_GUARD;
+    if (previousGuard === undefined) delete process.env.NGINX_SITE_GUARD;
+    else process.env.NGINX_SITE_GUARD = previousGuard;
     child?.kill();
     if (child) await child.exited;
     app.stop(true);

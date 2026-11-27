@@ -1,12 +1,10 @@
 import { describe, it, expect, spyOn, afterAll } from 'bun:test';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
 
-// Isolate the build directory and make control-api status calls fail fast.
-// Must happen before the dynamic imports below: paths.ts captures BASE_DIR at import time.
-const TEST_BASE_DIR = join(tmpdir(), `shipyard-build-test-${Date.now()}`);
-process.env.BASE_DIR = TEST_BASE_DIR;
+// The test preload points BASE_DIR at a throwaway folder before any module reads it.
+const TEST_BASE_DIR = process.env.BASE_DIR!;
+// Make control-api status calls fail fast.
 process.env.CONTROL_API_URL = 'http://127.0.0.1:9';
 
 // Spies instead of mock.module so the overrides never leak into other test files.
@@ -106,6 +104,6 @@ describe('Deploy Engine builder (in-place build)', () => {
 
   afterAll(() => {
     restoreSpies();
-    rmSync(TEST_BASE_DIR, { recursive: true, force: true });
+    rmSync(join(TEST_BASE_DIR, 'project-test-1'), { recursive: true, force: true });
   });
 });

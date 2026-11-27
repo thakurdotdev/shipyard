@@ -20,7 +20,12 @@ export type SettingKey =
   | 'cloudflare_zone_id'
   | 'resend_api_key'
   | 'resend_from_email'
-  | 'allow_signups';
+  | 'allow_signups'
+  | 'use_docker'
+  | 'build_concurrency'
+  | 'certbot_email'
+  | 'port_range_start'
+  | 'port_range_end';
 
 export interface SettingView {
   configured: boolean;
@@ -33,6 +38,11 @@ export interface SettingView {
 export interface PlatformSettings {
   settings: Record<SettingKey, SettingView>;
   server: { public_url: string; base_domain: string; server_ip: string; production: boolean };
+  deployments: {
+    /** Whether Docker works for the Deploy Engine; null when it could not be asked. */
+    docker_available: boolean | null;
+    max_build_concurrency: number;
+  };
   github: {
     login_ready: boolean;
     app_ready: boolean;

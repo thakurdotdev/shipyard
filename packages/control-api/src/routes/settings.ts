@@ -1,11 +1,13 @@
 import { config, getServerHost } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { GitHubService, resetGitHubAppCache } from '../services/github-service';
+import { engineDockerAvailable } from '../services/engine-settings';
 import {
   isGitHubAppConfigured,
   isGitHubLoginConfigured,
   isInternalSetting,
   isSettingKey,
+  MAX_BUILD_CONCURRENCY,
   SETTING_DEFINITIONS,
   SETTING_KEYS,
   SettingKey,
@@ -53,6 +55,11 @@ async function fullView() {
       server_ip: await getServerHost(),
       production: config.isProduction,
     },
+    deployments: {
+      /** Whether the engine can run Docker; null when it could not be asked. */
+      docker_available: await engineDockerAvailable(),
+      max_build_concurrency: MAX_BUILD_CONCURRENCY,
+    },
     github: {
       login_ready: isGitHubLoginConfigured(),
       app_ready: isGitHubAppConfigured(),
@@ -74,6 +81,19 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' }).get('', fullVi
         return { error: `Unknown setting: ${key}` };
       }
       updates[key] = value;
+    }
+    // Docker mode on a host without Docker would fail every deploy, so check first.
+    if (updates.use_docker === 'true' && !SettingsService.flag('use_docker')) {
+      const available = await engineDockerAvailable();
+      if (available !== true) {
+        set.status = 400;
+        return {
+          error:
+            available === null
+              ? 'Could not reach the Deploy Engine to check for Docker. Try again shortly.'
+              : 'Docker is not available to the platform user. Install Docker (and add the user to the docker group), then try again.',
+        };
+      }
     }
     try {
       await SettingsService.set(updates);
