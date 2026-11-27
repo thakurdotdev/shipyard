@@ -1,196 +1,104 @@
 # ShipYard
 
-ShipYard is a self-hosted PaaS (Platform as a Service) solution built for modern web applications. It allows you to build, deploy, and manage your projects with ease, leveraging a microservices architecture.
+Push-to-deploy for your own server. Connect a GitHub repo, push, and ShipYard builds the app and
+serves it on its own domain with HTTPS.
 
-## Architecture
+**Website:** https://shipyard.thakur.dev
 
-The project is structured as a monorepo with the following services:
+## Features
 
-- **UI (`packages/ui`)**: A Next.js dashboard, exported as static files, for managing projects, viewing build logs, and controlling deployments.
-- **Control API (`packages/control-api`)**: The central management API that orchestrates builds, deployments, and system state. It owns the database and the realtime WebSocket log stream.
-- **Deploy Engine (`packages/deploy-engine`)**: The single worker service. It consumes build jobs from the queue, clones and builds each project **in place**, then activates it via the process manager (pm0) and configures the reverse proxy (Nginx). Since builds land directly in the deployment directory, dependencies are installed once and reused at activation.
+- Deploys on every push to the branch you pick, and reports the result on the commit in GitHub
+- Builds Next.js, Vite, Bun, Elysia, Hono, Express and Go apps
+- Live build logs, and one-click rollback to an earlier build
+- A subdomain for every app, plus custom domains with Let's Encrypt certificates
+- Encrypted environment variables, pre-deploy commands (for migrations) and monorepo support
+- Password protection for any site, and uptime checks with email alerts
 
-## Key Features
+Vite builds and Next.js static exports are served by Nginx as files, with no app process.
+A Vite build must produce `dist/index.html`. Everything else runs as a process on its own port.
 
-- **Queue-based builds**: A Redis/BullMQ queue ensures builds are processed one at a time, preventing system overload while still surfacing queue position to the UI.
-- **Build-in-place deploys**: The deploy engine builds each project directly into its deployment directory, so there is no artifact copy step and no second `bun install` during activation.
-- **Realtime Logs**: Watch build and deployment logs stream in real-time via WebSockets, giving you instant visibility into what's happening.
-- **Dynamic Domain Generation**: Automatically assigns and configures subdomains for each deployed project using Nginx wildcard routing.
-- **Webhook Triggered Deployments**: Deploy your projects automatically when changes are pushed to your repository.
-- **Uptime Monitoring**: Schedule public HTTP checks for each project and send account email alerts when an app goes down or recovers.
+## Install
 
-Uptime email alerts use the Resend API; add the API key and sender in **Settings**. Monitoring can be set to check every 1, 5, 10, 15, or 30 minutes. Custom endpoints must resolve to public IP addresses; leaving the endpoint blank uses the project's generated domain once an active deployment exists.
-
-### Password-protected sites
-
-Any project can be put behind a password from **Project → Settings → Password protection**
-(turn it on, set a password, choose how long a browser stays signed in). Visitors see a
-ShipYard-styled password page on the project's own domain, at the URL they asked for, before
-anything from the site is served. Use it for private or personal projects.
-
-How it works: the project's Nginx server block gets an `auth_request` that asks the Control
-API (`GET /gate/verify`) about every request, using a signed, HttpOnly session cookie.
-`/__shipyard_gate/*` on the site is proxied to the Control API's login routes. Toggling the
-setting regenerates and reloads that one Nginx config (`POST /nginx/gate` on the Deploy Engine),
-so no redeploy is needed, and later deploys keep the setting.
-
-- The password is stored as an Argon2id hash in `project_access` (never in `projects`, so the
-  project APIs cannot return it). Session cookies are signed with a key derived from
-  the platform `SECRET` and the password hash, so changing the password signs everyone out.
-- Failed logins are throttled per project and client address (5 per 10 minutes).
-- It covers the whole site, including any API routes or webhooks the app exposes.
-- If the Control API is unreachable, protected sites fail closed (HTTP 500), never open.
-- Uptime checks of the project's own domain carry a signed bypass header so they keep working.
-- The dashboard's embedded preview is replaced by an "Open live site" link while protected.
-- Enforced by Nginx, so only in production. In development the apps are served directly.
-- Deploy Engine reaches the gate at `CONTROL_API_URL` (default `http://127.0.0.1:4010`).
-- Apps with their own port must not be reachable from outside the server except through Nginx
-  (see App isolation below).
-
-### App isolation
-
-Deployed code is untrusted: a vulnerable app, or a dependency's `postinstall` script, must
-not get the platform's privileges. On a server, run `sudo scripts/isolate-apps.sh` once and
-set `SHIPYARD_APP_USER=shipyard-apps` (plus the `PM0_*` values it prints) in `.env`. Then:
-
-- clones, `bun install`, builds, pre-deploy commands and running apps use that account
-  (no sudo, no access to the platform's home, `.env` files or TLS keys), supervised by its
-  own pm0 daemon (`shipyard-apps-pm0.service`);
-- apps get `HOST`/`HOSTNAME=127.0.0.1` (Next.js also `--hostname`), Nginx proxies to
-  `127.0.0.1`, and a deploy log warning names apps that still bind `0.0.0.0`;
-- `shipyard-apps-guard.service` drops replies from that account's sockets on every
-  interface but loopback, so an app port is never public even if a firewall rule is opened;
-- the Control API and Deploy Engine listen on `127.0.0.1` and authenticate each other with
-  the internal token derived from `SECRET`.
-
-Existing apps switch over on their next activation (redeploy or rollback).
-
-### Server-wide site rules (for example, Cloudflare only)
-
-Every HTTPS site ShipYard writes includes `/etc/nginx/snippets/shipyard-site-guard*.conf`
-(override with `NGINX_SITE_GUARD`). It is a glob, so with no such file nothing changes. Put
-rules there that should apply to every site, such as refusing connections that skip
-Cloudflare when all your domains are proxied through it:
-
-```nginx
-# /etc/nginx/conf.d/from-cloudflare.conf (http level): 1 when the TCP peer is Cloudflare
-geo $realip_remote_addr $from_cloudflare {
-    default 0;
-    include /etc/nginx/snippets/cloudflare-ranges.conf;   # "<range> 1;" per line
-}
-
-# /etc/nginx/snippets/shipyard-site-guard.conf (inside each site's server block)
-if ($from_cloudflare = 0) { return 444; }
-```
-
-Only do this if every ShipYard domain is proxied (orange cloud): a DNS-only domain would be
-refused. Keep the ranges current from https://www.cloudflare.com/ips-v4 and `/ips-v6`.
-Existing sites pick it up on their next activation, or edit their configs once by hand.
-
-## Tech Stack
-
-- **Runtime**: [Bun](https://bun.sh)
-- **Frontend**: [Next.js](https://nextjs.org) with Tailwind CSS
-- **Database**: PostgreSQL with Drizzle ORM
-- **Queue**: Redis with BullMQ
-- **Process Management**: pm0 (PM2-compatible) for non-Docker deployments; optional Docker mode via `USE_DOCKER=true`
-- **Proxy**: Nginx
-
-### Vite deployments
-
-Vite apps are built with the configured build command (normally `bun run build`).
-The app directory, including a configured monorepo root directory, must contain
-`dist/index.html` after the build. A missing output fails the build and activation.
-
-In production, the domain's Nginx virtual host serves these files directly on the
-standard HTTP/HTTPS ports. Vite projects have no assigned application port and no
-Bun/pm0 process or Docker container. The dashboard preview serves the same static
-root. Port controls are disabled when Vite is selected in project configuration.
-This also applies when runtime applications use Docker mode. Local development
-uses an automatically assigned port and a small Bun static server, which is also
-included in the deploy engine's compiled output.
-
-Browser-history routes fall back to `index.html`, missing bundles return 404, and
-HTML is revalidated so browsers pick up new deployments. Static activation probes
-the local Nginx HTTPS virtual host using the domain's SNI, validates its certificate,
-and checks that the response matches the new build (bypassing DNS/CDN caches).
-Configuration or readiness failures restore the previous domain configuration.
-Existing Vite deployments migrate on their next activation: the old per-project
-Nginx listener and managed application process are retired, then the stored port
-is cleared. No database migration is required.
-The Nginx worker must have read/traverse access to the deployed `dist` directory
-and its parent directories (the default `/var/lib/shipyard/apps` location is intended
-for this). An unreadable output fails the activation health check.
-
-## Install on a server
-
-On a fresh Debian or Ubuntu server, as a regular user with sudo:
+You need a Debian or Ubuntu server and a user with sudo. Run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thakurdotdev/shipyard/main/scripts/install.sh | bash
+curl -fsSL https://shipyard.thakur.dev/install.sh | bash
 ```
 
-The installer sets up everything ShipYard needs and asks only for the dashboard domain:
+The installer asks for one thing: the dashboard's domain, such as `deploy.example.com`. Apps
+are then served under `*.example.com`. It installs Nginx, certbot, PostgreSQL, Redis, Bun and
+pm0, puts ShipYard in `/opt/shipyard` and starts it. Everything comes back after a reboot.
 
-- Packages: Nginx, certbot, PostgreSQL, Redis, Bun, Node.js and pm0.
-- Code: clones the repo to `/opt/shipyard`.
-- Database: creates its role and database.
-- Configuration: writes one `.env` with four values (below).
-- Build and run: builds for production, runs migrations, serves the dashboard's static files
-  and the API through Nginx (with a Let's Encrypt certificate), and starts the Control API and
-  Deploy Engine under pm0.
-- Reboots: pm0 brings the platform and deployed apps back after a reboot.
+When it finishes, it prints a setup link. Open it to create the GitHub App (one click), then
+sign in with GitHub. The first account becomes the owner, and new sign-ups stay closed until
+you open them in Settings.
 
-It ends by printing a one-time setup link. Open it to create the GitHub App in one click
-(GitHub opens with everything filled in), then sign in with GitHub: the first account becomes
-the owner, and later sign-ups stay closed unless the owner allows them in Settings. Leave the
-domain empty to try ShipYard over plain HTTP on the server's IP.
+**DNS:** point `*.example.com` at the server, or add a Cloudflare token in Settings and ShipYard
+creates a record for each app. No domain yet? Leave it empty and try ShipYard over HTTP on the
+server's IP.
 
-Running it again is safe. Every step checks before it acts, existing values are kept, and
-`SECRET` is never regenerated (keys derived from it encrypt stored project env vars).
+### Update
 
 ```bash
-/opt/shipyard/scripts/install.sh update   # pull, rebuild what changed, migrate, restart only that
-/opt/shipyard/scripts/install.sh doctor   # read-only health report
-/opt/shipyard/scripts/install.sh --help   # all options; --yes plus flags or env vars for unattended installs
+/opt/shipyard/scripts/install.sh update   # pull, rebuild what changed, migrate, restart
+/opt/shipyard/scripts/install.sh doctor   # read-only health check
 ```
+
+Running the installer again is safe: it keeps your settings and never changes `SECRET`.
 
 ## Configuration
 
-Everything reads one `.env` at the repository root:
+The installer writes `/opt/shipyard/.env` with four values:
 
 ```bash
-PUBLIC_URL=https://deploy.example.com   # dashboard; apps go under *.example.com
-SECRET=<openssl rand -hex 32>           # sign-in, encryption and internal keys derive from it
+PUBLIC_URL=https://deploy.example.com   # the dashboard; apps go under *.example.com
+SECRET=...                              # signs sessions and encrypts env vars. Never change it
 DATABASE_URL=postgres://...
 REDIS_URL=redis://127.0.0.1:6379/0
 ```
 
-The rest is derived or set in the dashboard. **Settings** holds the GitHub App, Cloudflare
-(optional: creates a DNS record per app; without it, add a `*.example.com` wildcard record),
-Resend for uptime emails, and **Deployments**: Docker mode, how many builds run at once (1-4;
-builds of one project always run in order), the port range for new apps and the Let's Encrypt
-email. Values saved there are stored in the database and override `.env`; the Deploy Engine
-picks up changes without a restart, and they apply from the next build or deploy.
-Optional overrides such as `BASE_DOMAIN` and `SERVER_HOST` are listed in `.env.example`.
+Everything else is set in the dashboard under **Settings**:
 
-Installs from before this layout keep working: per-package `.env` files and the old variable
-names (`CLIENT_URL`, `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `GITHUB_*`, ...) are still read,
-and `install.sh update` adds the root `.env` next to them.
+- GitHub App
+- Cloudflare DNS (optional)
+- Resend, for uptime emails
+- Deployments: Docker mode, builds at a time, the port range for apps, and the Let's Encrypt
+  email
 
-## Getting Started
+Values saved in Settings override `.env` and take effect without a restart. Less common
+options are listed in [`.env.example`](.env.example).
 
-For development, copy `.env.example` to `.env` (set `SECRET` and `DATABASE_URL`), run
-`bun run migrate`, then start every service:
+## Security
+
+Deployed code runs on the same server as ShipYard. On a shared or public server, run apps
+under their own account so a bad app or dependency can't reach the platform:
 
 ```bash
-bun run dev
+sudo /opt/shipyard/scripts/isolate-apps.sh
 ```
 
-This starts the Control API, Deploy Engine (which also runs the build worker), and the
-dashboard on http://localhost:4013, which forwards `/api` to the Control API. Production builds
-of the dashboard are a static export (`packages/ui/out`) served by Nginx; `bun run start` in
-`packages/ui` serves the same files on :4013 for setups that proxy to it.
+See [docs/security.md](docs/security.md) for what that changes, how password-protected sites
+work, and how to accept traffic only through Cloudflare.
+
+## Development
+
+```bash
+cp .env.example .env      # set SECRET and DATABASE_URL
+bun install
+bun run migrate
+bun run dev               # dashboard at http://localhost:4013
+bun test
+```
+
+The repository has three packages:
+
+| Package                  | What it does                                                             |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `packages/ui`            | The dashboard (Next.js, exported as static files that Nginx serves)      |
+| `packages/control-api`   | API, database (PostgreSQL + Drizzle), build queue (Redis + BullMQ), logs |
+| `packages/deploy-engine` | Clones and builds apps, runs them under pm0 or Docker, configures Nginx  |
+
+The marketing site lives in [`landing/`](landing) and is deployed with ShipYard itself.
 
 ## License
 

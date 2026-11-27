@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ShipYard installer: sets up a fresh Debian/Ubuntu server (or updates an existing one).
 #
-#   curl -fsSL https://raw.githubusercontent.com/thakurdotdev/shipyard/main/scripts/install.sh | bash
+#   curl -fsSL https://shipyard.thakur.dev/install.sh | bash
 #   ./scripts/install.sh [install|update|doctor] [options]
 #
 # Every step checks before it acts, so re-running is safe. Configuration is one `.env` at
