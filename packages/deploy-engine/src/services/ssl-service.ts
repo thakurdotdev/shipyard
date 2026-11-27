@@ -2,11 +2,12 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { LogService } from './log-service';
+import { engineSettings } from '../config/runtime-settings';
 
 const CERTBOT_WEBROOT = process.env.CERTBOT_WEBROOT || '/var/www/certbot';
-// Optional: certbot registers its account once (the installer does it with your email);
-// Let's Encrypt no longer sends expiry emails, so later requests don't need one.
-const CERTBOT_EMAIL = process.env.CERTBOT_EMAIL?.trim();
+// The email is optional (Settings → Deployments, or CERTBOT_EMAIL): certbot registers its
+// account once (the installer does it with your email), and Let's Encrypt no longer sends
+// expiry emails, so later requests don't need one.
 const LETSENCRYPT_DIR = '/etc/letsencrypt/live';
 
 const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -69,6 +70,7 @@ export const SSLService = {
     await chmodProc.exited;
 
     try {
+      const certbotEmail = engineSettings().certbotEmail;
       const args = [
         'sudo',
         'certbot',
@@ -82,7 +84,7 @@ export const SSLService = {
         '--expand',
         '--non-interactive',
         '--agree-tos',
-        ...(CERTBOT_EMAIL ? ['--email', CERTBOT_EMAIL] : ['--register-unsafely-without-email']),
+        ...(certbotEmail ? ['--email', certbotEmail] : ['--register-unsafely-without-email']),
         '--no-eff-email',
         // Force renewal if cert exists but is invalid
         '--force-renewal',

@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 
 /**

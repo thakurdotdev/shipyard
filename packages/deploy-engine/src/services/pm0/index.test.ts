@@ -9,7 +9,7 @@ import {
 } from './types';
 
 const process: PM0ProcessInfo = {
-  name: 'syncvibe',
+  name: 'my-app',
   pm_id: 7,
   monit: { memory: 0, cpu: 0 },
   pm2_env: {
@@ -52,13 +52,13 @@ describe('pm0 project ownership and static migration', () => {
     }));
     try {
       expect(await PM0Service.findProcessByProjectId('project-123')).toEqual({
-        name: 'syncvibe',
+        name: 'my-app',
         pm_id: 7,
         daemon: 'platform',
       });
       expect(await PM0Service.isRunning('project-123')).toBe(true);
       expect(await PM0Service.list()).toEqual([
-        { name: 'syncvibe', projectId: 'project-123', buildId: 'build-456', status: 'online' },
+        { name: 'my-app', projectId: 'project-123', buildId: 'build-456', status: 'online' },
       ]);
       expect(await PM0Service.delete('project-123')).toBe(true);
       expect(command).toHaveBeenCalledWith(['delete', '7'], { daemon: 'platform' });
@@ -88,12 +88,12 @@ describe('pm0 project ownership and static migration', () => {
     }));
     try {
       expect(await PM0Service.findProcessByProjectId('project-123')).toEqual({
-        name: 'syncvibe',
+        name: 'my-app',
         pm_id: 3,
         daemon: 'apps',
       });
       // Platform services (no DEPLOY_PROJECT_ID) are never listed as deployments.
-      expect((await PM0Service.list()).map((p) => p.name)).toEqual(['syncvibe', 'syncvibe']);
+      expect((await PM0Service.list()).map((p) => p.name)).toEqual(['my-app', 'my-app']);
       expect(await PM0Service.delete('project-123')).toBe(true);
       expect(command).toHaveBeenCalledWith(['delete', '3'], { daemon: 'apps' });
       expect(command).toHaveBeenCalledWith(['delete', '7'], { daemon: 'platform' });

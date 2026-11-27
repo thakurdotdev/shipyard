@@ -46,9 +46,9 @@ export const DEFAULT_CONTAINER_LIMITS = {
  * Container naming conventions
  */
 export function getContainerName(projectId: string): string {
-  return `thakur-${projectId.slice(0, 8)}`;
+  return `shipyard-${projectId.slice(0, 8)}`;
 }
 
 export function getImageName(projectId: string, buildId: string): string {
-  return `thakur-deploy/${projectId.slice(0, 8)}:${buildId.slice(0, 8)}`;
+  return `shipyard/${projectId.slice(0, 8)}:${buildId.slice(0, 8)}`;
 }

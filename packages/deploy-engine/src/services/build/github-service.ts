@@ -1,4 +1,4 @@
-import { config, internalAuthHeaders } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@shipyard/config';
 import jwt from 'jsonwebtoken';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';

@@ -1,5 +1,5 @@
 {
-  "name": "@thakur-deploy/deploy-engine",
+  "name": "@shipyard/deploy-engine",
   "version": "0.0.0",
   "scripts": {
     "build": "bun build src/index.ts src/static-server.ts --outdir dist --target=bun --packages=external",
@@ -8,7 +8,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@thakur-deploy/config": "workspace:*",
+    "@shipyard/config": "workspace:*",
     "bullmq": "^5.81.1",
     "elysia": "^1.4.29",
     "ioredis": "^5.9.1",

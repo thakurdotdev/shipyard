@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { infrastructureServices, ServiceType, ServiceStatus, user } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { getServerHost } from '@thakur-deploy/config';
+import { getServerHost } from '@shipyard/config';
 import { randomBytes } from 'crypto';
 import { decrypt, encrypt } from '../lib/crypto';
 import {

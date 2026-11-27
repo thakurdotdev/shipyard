@@ -1,4 +1,4 @@
-import { childProcessEnv } from '@thakur-deploy/config';
+import { childProcessEnv } from '@shipyard/config';
 import { spawn } from 'child_process';
 import { delimiter, join } from 'path';
 import { appUserEnv, asAppUser, isAppUserEnabled } from './app-user';

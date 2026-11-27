@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 /**
  * Queue configuration for build jobs
  */
@@ -24,8 +24,5 @@ export const QUEUE_CONFIG = {
     },
   },
 
-  // Worker settings
-  worker: {
-    concurrency: 1, // Process one build at a time to protect server
-  },
+  // The Deploy Engine runs the worker; builds at a time is set in Settings → Deployments.
 };

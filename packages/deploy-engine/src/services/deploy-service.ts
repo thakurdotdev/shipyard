@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { existsSync, mkdirSync } from 'fs';
 import { unlink, symlink, rename } from 'fs/promises';
 import { basename, join } from 'path';
@@ -26,14 +26,42 @@ import { resolveStaticSite } from './static-site';
 import { isPortAvailable } from '../utils/port';
 import { requestNginxOrigin } from './nginx-health';
 import { runPreDeployCommand } from './pre-deploy';
+import { engineSettings } from '../config/runtime-settings';
 
 const IS_PLATFORM_PROD = config.isProduction;
 
 /**
- * Feature flag for Docker deployments.
- * Set USE_DOCKER=true to enable containerized deployments.
+ * Docker mode (Settings → Deployments, or USE_DOCKER=true) runs apps in containers instead
+ * of pm0 processes. It can change while apps are running, so it is read per deploy, and
+ * stopping a project also clears anything the other mode left running (see stopBothModes).
  */
-const USE_DOCKER = process.env.USE_DOCKER === 'true';
+const useDocker = () => engineSettings().useDocker;
+
+let dockerCheck: { at: number; available: Promise<boolean> } | null = null;
+
+/** Whether Docker can be used on this host; cached for a minute, never throws. */
+function dockerInstalled(): Promise<boolean> {
+  if (!dockerCheck || Date.now() - dockerCheck.at > 60_000) {
+    dockerCheck = {
+      at: Date.now(),
+      available: DockerService.isAvailable().catch(() => false),
+    };
+  }
+  return dockerCheck.available;
+}
+
+/**
+ * Stops a project's container when Docker is installed. Apps started before Docker mode
+ * was turned off still run as containers and keep their port until stopped here.
+ */
+async function stopContainerIfAny(projectId: string, buildId?: string): Promise<void> {
+  if (!(await dockerInstalled())) return;
+  try {
+    await DockerService.stop(projectId, buildId);
+  } catch (error) {
+    console.warn(`[DeployService] Could not stop container for ${projectId}:`, error);
+  }
+}
 
 // Bounded retry with wall-clock timeout
 async function retry<T>(
@@ -245,11 +273,19 @@ export const DeployService = {
       );
       await PM0Service.delete(projectId);
       await NginxService.removeStaticConfig(projectId);
-      if (USE_DOCKER) await DockerService.stop(projectId);
-    } else if (USE_DOCKER) {
+      await stopContainerIfAny(projectId);
+    } else if (useDocker()) {
       if (IS_PLATFORM_PROD) await NginxService.removeStaticConfig(projectId);
       await LogService.step(buildId, 'Starting containerized deployment');
       await LogService.detail(buildId, 'Using Docker for isolation');
+      if (!(await dockerInstalled())) {
+        throw new Error(
+          'Docker mode is on, but Docker is not available to the platform user. ' +
+            'Install Docker or turn Docker mode off in Settings.',
+        );
+      }
+      // A process from before Docker mode was turned on would keep the port.
+      await PM0Service.delete(projectId);
 
       const result = await DockerService.deploy(
         projectId,
@@ -273,6 +309,8 @@ export const DeployService = {
       // Stop any existing process
       await LogService.detail(buildId, 'Stopping previous deployment if exists');
       if (IS_PLATFORM_PROD) await NginxService.removeStaticConfig(projectId);
+      // A container from before Docker mode was turned off would keep the port.
+      await stopContainerIfAny(projectId);
       await this.killProjectProcess(projectId, port!);
 
       // Start the application
@@ -329,13 +367,15 @@ export const DeployService = {
         await NginxService.removeConfig(subdomain);
       }
       if (IS_PLATFORM_PROD) await NginxService.removeStaticConfig(projectId);
-      if (USE_DOCKER) {
-        if (buildId) await LogService.detail(buildId, 'Stopping Docker container');
-        await DockerService.stop(projectId, buildId);
-      } else {
-        if (buildId) await LogService.detail(buildId, 'Stopping managed process via pm0');
-        await PM0Service.delete(projectId);
+      // Both: the project may have been started before Docker mode was switched.
+      if (buildId) {
+        await LogService.detail(
+          buildId,
+          useDocker() ? 'Stopping Docker container' : 'Stopping managed process via pm0',
+        );
       }
+      await PM0Service.delete(projectId);
+      await stopContainerIfAny(projectId, useDocker() ? buildId : undefined);
     } else {
       if (!port) throw new Error('Stopping a deployment requires a project ID or port');
       await this.ensurePortFree(port);
@@ -349,12 +389,9 @@ export const DeployService = {
 
   async deleteProject(projectId: string, port?: number, subdomain?: string, buildIds?: string[]) {
     if (IS_PLATFORM_PROD) await NginxService.removeStaticConfig(projectId);
-    // Stop and cleanup Docker resources
-    if (USE_DOCKER) {
-      await DockerService.cleanup(projectId, buildIds);
-    } else {
-      await PM0Service.delete(projectId);
-    }
+    // Both modes: the project may have run under either one.
+    await PM0Service.delete(projectId);
+    if (await dockerInstalled()) await DockerService.cleanup(projectId, buildIds);
 
     // Cleanup filesystem
     const projectDir = getProjectDir(projectId);

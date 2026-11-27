@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 /**
  * Queue configuration for the in-engine build worker.
  * Must match control-api's QUEUE_CONFIG.name (packages/control-api/src/queue/config.ts).
@@ -6,10 +6,7 @@ import { config } from '@thakur-deploy/config';
 export const QUEUE_CONFIG = {
   name: 'build-queue',
 
-  // Worker settings
-  worker: {
-    concurrency: 1, // Process one build at a time to protect the server
-  },
+  // Builds at a time comes from Settings → Deployments (see config/runtime-settings.ts).
 };
 
 /**

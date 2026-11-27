@@ -96,7 +96,7 @@ describe('readCookie', () => {
 
 describe('normalizeHost', () => {
   it('lowercases and drops the port', () => {
-    expect(normalizeHost('Site.Thakur.dev:443')).toBe('site.thakur.dev');
+    expect(normalizeHost('Site.Example.com:443')).toBe('site.example.com');
   });
   it.each(['', null, 'bad host', 'a/b', '-x.com', 'x.com\nfoo'])('rejects %p', (value) => {
     expect(normalizeHost(value)).toBeNull();

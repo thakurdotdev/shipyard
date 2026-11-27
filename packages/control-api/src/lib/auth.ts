@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
@@ -67,8 +67,8 @@ function createAuth() {
       },
     },
     advanced: {
-      // Other *.thakur.dev apps (e.g. SyncVibe) also use better-auth and set
-      // `__Secure-better-auth.session_token` on `.thakur.dev`. The browser sends that
+      // Deployed apps under the same parent domain may also use better-auth and set
+      // `__Secure-better-auth.session_token` on the parent domain. The browser sends that
       // cookie here too, ahead of ours, and the session lookup fails. A unique
       // prefix keeps the two cookies apart. The UI and API share one origin, so
       // the cookie also doesn't need to be shared across subdomains.

@@ -1,6 +1,6 @@
 import { SettingsService } from './settings-service';
 import { NotificationService } from './notification-service';
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { and, asc, avg, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';

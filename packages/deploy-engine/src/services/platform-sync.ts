@@ -1,4 +1,4 @@
-import { config } from '@thakur-deploy/config';
+import { config } from '@shipyard/config';
 
 /**
  * The engine builds full domains (`<sub>.<base domain>`) and frame-ancestor headers from

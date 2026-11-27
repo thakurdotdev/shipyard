@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "thakur-deploy",
+      "name": "shipyard",
       "devDependencies": {
         "bun-types": "latest",
         "fast-check": "^3.15.0",
@@ -14,16 +14,16 @@
       },
     },
     "packages/config": {
-      "name": "@thakur-deploy/config",
+      "name": "@shipyard/config",
       "version": "0.0.0",
     },
     "packages/control-api": {
-      "name": "@thakur-deploy/control-api",
+      "name": "@shipyard/control-api",
       "version": "0.0.0",
       "dependencies": {
         "@elysiajs/cors": "^1.4.0",
+        "@shipyard/config": "workspace:*",
         "@sinclair/typebox": "^0.34.41",
-        "@thakur-deploy/config": "workspace:*",
         "better-auth": "^1.6.25",
         "bullmq": "^5.81.1",
         "drizzle-orm": "^0.45.1",
@@ -41,10 +41,10 @@
       },
     },
     "packages/deploy-engine": {
-      "name": "@thakur-deploy/deploy-engine",
+      "name": "@shipyard/deploy-engine",
       "version": "0.0.0",
       "dependencies": {
-        "@thakur-deploy/config": "workspace:*",
+        "@shipyard/config": "workspace:*",
         "bullmq": "^5.81.1",
         "elysia": "^1.4.29",
         "ioredis": "^5.9.1",
@@ -428,6 +428,12 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.62.2", "", { "os": "win32", "cpu": "x64" }, "sha512-BfzEnDJOt9T8M989/lA37EcJgat01wLRnoi5dQf3QzOH7jzpqTAzdDbVfRljVr5r+jzKqpbHeyOfAaXxAd0PAA=="],
 
+    "@shipyard/config": ["@shipyard/config@workspace:packages/config"],
+
+    "@shipyard/control-api": ["@shipyard/control-api@workspace:packages/control-api"],
+
+    "@shipyard/deploy-engine": ["@shipyard/deploy-engine@workspace:packages/deploy-engine"],
+
     "@simple-git/args-pathspec": ["@simple-git/args-pathspec@1.0.3", "", {}, "sha512-ngJMaHlsWDTfjyq9F3VIQ8b7NXbBLq5j9i5bJ6XLYtD6qlDXT7fdKY2KscWWUF8t18xx052Y/PUO1K1TRc9yKA=="],
 
     "@simple-git/argv-parser": ["@simple-git/argv-parser@1.1.1", "", { "dependencies": { "@simple-git/args-pathspec": "^1.0.3" } }, "sha512-Q9lBcfQ+VQCpQqGJFHe5yooOS5hGdLFFbJ5R+R5aDsnkPCahtn1hSkMcORX65J2Z5lxSkD0lQorMsncuBQxYUw=="],
@@ -469,12 +475,6 @@
     "@tailwindcss/oxide-win32-x64-msvc": ["@tailwindcss/oxide-win32-x64-msvc@4.3.3", "", { "os": "win32", "cpu": "x64" }, "sha512-yJ0pwIVc/nYeGoV02WtsN8KYyLQv7kyI2wDnkezyJlGGjkd4QLwDGAwl47YpPJeuI0M0ObaXGSPjvWDPeTPggw=="],
 
     "@tailwindcss/postcss": ["@tailwindcss/postcss@4.3.3", "", { "dependencies": { "@alloc/quick-lru": "^5.2.0", "@tailwindcss/node": "4.3.3", "@tailwindcss/oxide": "4.3.3", "postcss": "^8.5.16", "tailwindcss": "4.3.3" } }, "sha512-JTSZZGQi1AyKirbLN3azmjVzef92tcX7h+iSqPdaeStyFpGpDlKvvpxeOE8njhbUanbRwr3z8DyzhICWnMtQeg=="],
-
-    "@thakur-deploy/config": ["@thakur-deploy/config@workspace:packages/config"],
-
-    "@thakur-deploy/control-api": ["@thakur-deploy/control-api@workspace:packages/control-api"],
-
-    "@thakur-deploy/deploy-engine": ["@thakur-deploy/deploy-engine@workspace:packages/deploy-engine"],
 
     "@tokenizer/inflate": ["@tokenizer/inflate@0.4.1", "", { "dependencies": { "debug": "^4.4.3", "token-types": "^6.1.1" } }, "sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA=="],
 

@@ -1,12 +1,14 @@
-import { hasInternalToken, INTERNAL_TOKEN_HEADER } from '@thakur-deploy/config';
+import { hasInternalToken, INTERNAL_TOKEN_HEADER } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { GitHubService } from '../services/github-service';
+import { engineSettingsPayload } from '../services/engine-settings';
 
 export { hasInternalToken, INTERNAL_TOKEN_HEADER };
 
 /**
- * Calls from the Deploy Engine. The GitHub App key lives in the database, which only the
- * Control API reads, so the engine asks here for short-lived clone tokens.
+ * Calls from the Deploy Engine. The GitHub App key and dashboard settings live in the
+ * database, which only the Control API reads, so the engine asks here for short-lived clone
+ * tokens and, when it starts, for the settings it applies.
  */
 export const internalRoutes = new Elysia({ prefix: '/internal' })
   .onBeforeHandle(({ request, set }) => {
@@ -15,6 +17,7 @@ export const internalRoutes = new Elysia({ prefix: '/internal' })
       return { error: 'Forbidden' };
     }
   })
+  .get('/engine-settings', () => engineSettingsPayload())
   .post(
     '/github/installation-token',
     async ({ body, set }) => {

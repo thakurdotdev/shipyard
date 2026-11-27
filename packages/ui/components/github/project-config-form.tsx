@@ -53,9 +53,8 @@ import {
   getDefaultBuildCommand,
   isStaticFramework,
 } from '@/lib/framework-config';
+import { useBaseDomain } from '@/lib/queries';
 import { cn } from '@/lib/utils';
-
-const BASE_DOMAIN = 'thakur.dev';
 
 interface ProjectConfigFormProps {
   repo: GitRepository;
@@ -218,6 +217,7 @@ export function ProjectConfigForm({
   const [rootDirectory, setRootDirectory] = useState(initialRootDirectory);
   const [branch, setBranch] = useState(repo.default_branch || 'main');
   const [domain, setDomain] = useState('');
+  const baseDomain = useBaseDomain() || '…';
   const [port, setPort] = useState('');
   const [appType, setAppType] = useState<AppType>(detectedAppType ?? 'nextjs');
   const [buildCommand, setBuildCommand] = useState(() => defaultBuildFor(appType));
@@ -279,7 +279,7 @@ export function ProjectConfigForm({
         ? 'Starting build…'
         : 'Deploy';
 
-  const previewHost = `${subdomain || `${trimSlug(name) || 'my-app'}-xxxx`}.${BASE_DOMAIN}`;
+  const previewHost = `${subdomain || `${trimSlug(name) || 'my-app'}-xxxx`}.${baseDomain}`;
 
   const blockingIssue = useMemo(() => {
     if (!trimSlug(name)) return 'Add a project name';
@@ -436,7 +436,7 @@ export function ProjectConfigForm({
                     </span>
                   </div>
                   <span className="flex h-10 items-center rounded-r-xl border border-l-0 border-border bg-surface-muted px-3 text-sm text-muted-foreground">
-                    .{BASE_DOMAIN}
+                    .{baseDomain}
                   </span>
                 </div>
                 <p
@@ -452,7 +452,7 @@ export function ProjectConfigForm({
                   )}
                 >
                   {domainCheck.status === 'available'
-                    ? `${subdomain}.${BASE_DOMAIN} is available`
+                    ? `${subdomain}.${baseDomain} is available`
                     : domainCheck.status === 'loading'
                       ? 'Checking availability…'
                       : domainCheck.message || 'Leave blank for a generated subdomain.'}

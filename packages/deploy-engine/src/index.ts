@@ -1,4 +1,4 @@
-import { hasInternalToken, platformListenHost } from '@thakur-deploy/config';
+import { hasInternalToken, platformListenHost } from '@shipyard/config';
 import { Elysia, t } from 'elysia';
 import { syncPlatformInfo } from './services/platform-sync';
 import { DeployService } from './services/deploy-service';
@@ -8,11 +8,16 @@ import { DockerService } from './services/docker';
 import { PM0Service } from './services/pm0';
 import { InfraContainers } from './services/infra-containers';
 import { BuildWorker } from './queue';
+import {
+  applyEngineSettings,
+  engineSettings,
+  MAX_BUILD_CONCURRENCY,
+  syncEngineSettings,
+} from './config/runtime-settings';
 
 import { isPortAvailable, findAvailablePort } from './utils/port';
 
 const PORT = process.env.PORT || 4012;
-const USE_DOCKER = process.env.USE_DOCKER === 'true';
 
 const app = new Elysia()
   // Every route below acts with the platform's privileges (writes Nginx configs, issues
@@ -362,6 +367,30 @@ const app = new Elysia()
       return new Response(e.message, { status: 500 });
     }
   })
+  // Settings saved in the dashboard (the Control API pushes them on every change).
+  .post(
+    '/settings',
+    ({ body }) => {
+      const next = applyEngineSettings(body);
+      return {
+        use_docker: next.useDocker,
+        build_concurrency: next.buildConcurrency,
+        certbot_email: next.certbotEmail ?? null,
+      };
+    },
+    {
+      body: t.Object({
+        use_docker: t.Optional(t.Boolean()),
+        build_concurrency: t.Optional(t.Integer({ minimum: 1, maximum: MAX_BUILD_CONCURRENCY })),
+        certbot_email: t.Optional(t.Union([t.String({ maxLength: 254 }), t.Null()])),
+      }),
+    },
+  )
+  // Checked before Docker mode is turned on, so it can't be enabled on a host without Docker.
+  .get('/docker/status', async () => ({
+    available: await DockerService.isAvailable().catch(() => false),
+    enabled: engineSettings().useDocker,
+  }))
   .get('/*', () => {
     return DeployService.serveRequest();
   })
@@ -371,22 +400,24 @@ console.log(`🚀 Deploy Engine is running at ${app.server?.hostname}:${app.serv
 
 // Learn the dashboard URL and base domain from the Control API when not set here.
 syncPlatformInfo();
+// Load the settings saved in the dashboard (Docker mode, build concurrency, ...).
+syncEngineSettings();
 
 // Start the in-engine build worker (consumes the shared BullMQ build queue)
 BuildWorker.initialize().catch((err) => {
   console.error('[BuildWorker] Failed to initialize:', err);
 });
 
-// Recover managed processes on startup
-if (USE_DOCKER) {
-  DockerService.recoverLogStreams().catch((e) => {
+// Recover managed apps on startup. Docker mode can be switched while apps run, so apps of
+// both kinds may exist: pm0 processes always, containers whenever Docker is installed.
+PM0Service.recoverProcesses().catch((e) => {
+  console.error('Failed to recover PM0 processes:', e);
+});
+DockerService.isAvailable()
+  .then((available) => (available ? DockerService.recoverLogStreams() : undefined))
+  .catch((e) => {
     console.error('Failed to recover Docker log streams:', e);
   });
-} else {
-  PM0Service.recoverProcesses().catch((e) => {
-    console.error('Failed to recover PM0 processes:', e);
-  });
-}
 
 // Graceful shutdown
 const gracefulShutdown = async (signal: string) => {

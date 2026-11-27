@@ -3,7 +3,7 @@
  * deploy engine replaced by an in-memory fake. Needs a scratch database:
  *
  *   TEST_DATABASE_URL=postgres://... (migrated) DATABASE_URL=$TEST_DATABASE_URL \
- *     PLATFORM_ENV=production SERVER_HOST=140.245.15.112 BASE_DOMAIN=thakur.dev \
+ *     PLATFORM_ENV=production SERVER_HOST=203.0.113.10 BASE_DOMAIN=example.com \
  *     bun test src/services/domain-change.integration.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
@@ -12,10 +12,10 @@ const enabled =
   Boolean(process.env.TEST_DATABASE_URL) &&
   process.env.DATABASE_URL === process.env.TEST_DATABASE_URL &&
   process.env.PLATFORM_ENV === 'production' &&
-  process.env.SERVER_HOST === '140.245.15.112' &&
-  process.env.BASE_DOMAIN === 'thakur.dev';
+  process.env.SERVER_HOST === '203.0.113.10' &&
+  process.env.BASE_DOMAIN === 'example.com';
 
-const IP = '140.245.15.112';
+const IP = '203.0.113.10';
 const ZONE = 'a'.repeat(32);
 
 interface FakeRecord {
@@ -56,10 +56,10 @@ interface FakeRecord {
       const path = url.pathname.replace('/client/v4', '');
       if (path === '/zones') {
         const name = url.searchParams.get('name');
-        return json({ success: true, result: name === 'thakur.dev' ? [{ id: ZONE, name }] : [] });
+        return json({ success: true, result: name === 'example.com' ? [{ id: ZONE, name }] : [] });
       }
       if (path === `/zones/${ZONE}`)
-        return json({ success: true, result: { id: ZONE, name: 'thakur.dev' } });
+        return json({ success: true, result: { id: ZONE, name: 'example.com' } });
       if (path === `/zones/${ZONE}/dns_records` && method === 'GET') {
         const name = url.searchParams.get('name');
         return json({ success: true, result: records.filter((r) => r.name === name) });
@@ -103,11 +103,11 @@ interface FakeRecord {
       case '/nginx/conflicts':
         return json({
           conflicts:
-            body.subdomain === 'thakur.dev'
+            body.subdomain === 'example.com'
               ? [
                   {
                     file: '/etc/nginx/sites-enabled/portfolio',
-                    names: ['thakur.dev', 'www.thakur.dev'],
+                    names: ['example.com', 'www.example.com'],
                   },
                 ]
               : [],
@@ -134,7 +134,7 @@ interface FakeRecord {
         github_url: 'https://github.com/x/portfolio',
         build_command: 'bun run build',
         app_type: 'vite',
-        domain: 'portfolio.thakur.dev',
+        domain: 'portfolio.example.com',
       })
       .returning();
     projectId = project.id;
@@ -145,7 +145,7 @@ interface FakeRecord {
         github_url: 'https://github.com/x/shop',
         build_command: 'bun run build',
         app_type: 'vite',
-        domain: 'shop.thakur.dev',
+        domain: 'shop.example.com',
       })
       .returning();
     otherProjectId = other.id;
@@ -159,7 +159,7 @@ interface FakeRecord {
     await db.insert(schema.domainProvisions).values({
       project_id: projectId,
       subdomain: 'portfolio',
-      full_domain: 'portfolio.thakur.dev',
+      full_domain: 'portfolio.example.com',
       server_ip: IP,
       dns_record_id: 'rec-portfolio',
       dns_status: 'proxied',
@@ -201,28 +201,28 @@ interface FakeRecord {
   beforeEach(() => {
     calls = [];
     activateFails = false;
-    certCovers = new Set(['portfolio.thakur.dev', 'thakur.dev', 'www.thakur.dev']);
+    certCovers = new Set(['portfolio.example.com', 'example.com', 'www.example.com']);
     records = [
-      { id: 'rec-portfolio', type: 'A', name: 'portfolio.thakur.dev', content: IP, proxied: true },
-      { id: 'rec-apex', type: 'A', name: 'thakur.dev', content: IP, proxied: true },
-      { id: 'rec-mx', type: 'MX', name: 'thakur.dev', content: 'mx.zoho.in', proxied: false },
-      { id: 'rec-www', type: 'A', name: 'www.thakur.dev', content: IP, proxied: true },
+      { id: 'rec-portfolio', type: 'A', name: 'portfolio.example.com', content: IP, proxied: true },
+      { id: 'rec-apex', type: 'A', name: 'example.com', content: IP, proxied: true },
+      { id: 'rec-mx', type: 'MX', name: 'example.com', content: 'mx.example.net', proxied: false },
+      { id: 'rec-www', type: 'A', name: 'www.example.com', content: IP, proxied: true },
     ];
   });
 
   test('check reports reuse, takeover and blockers without changing anything', async () => {
     await seed({});
-    const ok = await DomainChangeService.check(await project(), 'https://Thakur.dev/', true);
+    const ok = await DomainChangeService.check(await project(), 'https://Example.com/', true);
     expect(ok.errors).toEqual([]);
-    expect(ok.domain).toBe('thakur.dev');
+    expect(ok.domain).toBe('example.com');
     expect(ok.hosts).toEqual([
-      { name: 'thakur.dev', status: 'ours', proxied: true },
-      { name: 'www.thakur.dev', status: 'ours', proxied: true },
+      { name: 'example.com', status: 'ours', proxied: true },
+      { name: 'www.example.com', status: 'ours', proxied: true },
     ]);
     expect(ok.replaces[0].file).toContain('portfolio');
 
     records.find((r) => r.id === 'rec-www')!.content = '9.9.9.9';
-    const blocked = await DomainChangeService.check(await project(), 'thakur.dev', true);
+    const blocked = await DomainChangeService.check(await project(), 'example.com', true);
     expect(blocked.errors.join(' ')).toContain('points somewhere else');
 
     const taken = await DomainChangeService.check(await project(), 'shop', false);
@@ -233,30 +233,30 @@ interface FakeRecord {
 
   test('moves to the apex with www, reusing its DNS and certificate, and retires the old subdomain', async () => {
     await seed({});
-    const started = await DomainChangeService.start(await project(), 'thakur.dev', true);
+    const started = await DomainChangeService.start(await project(), 'example.com', true);
     expect(started.started).toBe(true);
     const result = await finish();
     expect(result.state).toBe('done');
 
     const moved = await project();
-    expect(moved.domain).toBe('thakur.dev');
+    expect(moved.domain).toBe('example.com');
     expect(moved.www_redirect).toBe(true);
 
     const activate = calls.find((c) => c.path === '/activate')!;
-    expect(activate.body.subdomain).toBe('thakur.dev');
-    expect(activate.body.aliases).toEqual(['www.thakur.dev']);
+    expect(activate.body.subdomain).toBe('example.com');
+    expect(activate.body.aliases).toEqual(['www.example.com']);
     // The certificate exists: no ACME listener, nothing written before the single switch.
     expect(
       calls.some((c) => c.path === '/nginx/http-only' || c.path === '/nginx/upgrade-https'),
     ).toBe(false);
 
     const provision = (await DomainService.getByProjectId(projectId))!;
-    expect(provision.full_domain).toBe('thakur.dev');
-    expect(provision.subdomain).toBe('thakur.dev');
+    expect(provision.full_domain).toBe('example.com');
+    expect(provision.subdomain).toBe('example.com');
     expect(provision.dns_record_owned).toBe(false);
     expect(provision.ssl_reused).toBe(false); // the fake engine reports a fresh issue
     expect(JSON.parse(provision.alias_records!)).toEqual([
-      { name: 'www.thakur.dev', id: 'rec-www', zoneId: ZONE, owned: false },
+      { name: 'www.example.com', id: 'rec-www', zoneId: ZONE, owned: false },
     ]);
 
     // Existing apex/www/mail records untouched; the old subdomain's own record removed.
@@ -264,27 +264,27 @@ interface FakeRecord {
     expect(records.find((r) => r.id === 'rec-apex')!.proxied).toBe(true);
     expect(calls.find((c) => c.path === '/nginx/remove')!.body).toEqual({ subdomain: 'portfolio' });
     expect(calls.find((c) => c.path === '/ssl/revoke')!.body).toEqual({
-      domain: 'portfolio.thakur.dev',
+      domain: 'portfolio.example.com',
     });
   });
 
   test('a failed switch puts the old domain and its records back', async () => {
     await seed({});
     activateFails = true;
-    certCovers = new Set(['portfolio.thakur.dev']); // the new one needs a certificate
+    certCovers = new Set(['portfolio.example.com']); // the new one needs a certificate
     await DomainChangeService.start(await project(), 'newsite', false);
     const result = await finish();
     expect(result.state).toBe('failed');
-    expect(result.message).toContain('portfolio.thakur.dev is still live');
+    expect(result.message).toContain('portfolio.example.com is still live');
 
     const back = await project();
-    expect(back.domain).toBe('portfolio.thakur.dev');
+    expect(back.domain).toBe('portfolio.example.com');
     const provision = (await DomainService.getByProjectId(projectId))!;
-    expect(provision.full_domain).toBe('portfolio.thakur.dev');
+    expect(provision.full_domain).toBe('portfolio.example.com');
     expect(provision.dns_record_id).toBe('rec-portfolio');
     expect(provision.dns_status).toBe('proxied');
     // The record created for the new name is gone again; the old site was never touched.
-    expect(records.some((r) => r.name === 'newsite.thakur.dev')).toBe(false);
+    expect(records.some((r) => r.name === 'newsite.example.com')).toBe(false);
     expect(records.some((r) => r.id === 'rec-portfolio')).toBe(true);
     // Only the new name's own HTTP-only config is removed; the old site is never touched.
     expect(calls.filter((c) => c.path === '/nginx/remove').map((c) => c.body)).toEqual([
@@ -295,24 +295,24 @@ interface FakeRecord {
 
   test('refuses to take over a site when no certificate covers the domain yet', async () => {
     await seed({});
-    certCovers = new Set(['portfolio.thakur.dev']);
-    const check = await DomainChangeService.check(await project(), 'thakur.dev', true);
+    certCovers = new Set(['portfolio.example.com']);
+    const check = await DomainChangeService.check(await project(), 'example.com', true);
     expect(check.errors.join(' ')).toContain('no certificate covering');
-    await expect(DomainChangeService.start(await project(), 'thakur.dev', true)).rejects.toThrow(
+    await expect(DomainChangeService.start(await project(), 'example.com', true)).rejects.toThrow(
       'no certificate covering',
     );
-    expect((await project()).domain).toBe('portfolio.thakur.dev');
+    expect((await project()).domain).toBe('portfolio.example.com');
   });
 
   test('deleting a project never removes DNS records or certificates it found in place', async () => {
     await seed({
-      subdomain: 'thakur.dev',
-      full_domain: 'thakur.dev',
+      subdomain: 'example.com',
+      full_domain: 'example.com',
       dns_record_id: 'rec-apex',
       dns_record_owned: false,
       ssl_reused: true,
       alias_records: JSON.stringify([
-        { name: 'www.thakur.dev', id: 'rec-www', zoneId: ZONE, owned: false },
+        { name: 'www.example.com', id: 'rec-www', zoneId: ZONE, owned: false },
       ]),
     });
     await DomainService.deprovision(projectId);
@@ -324,26 +324,26 @@ interface FakeRecord {
     ]);
     expect(calls.some((c) => c.path === '/ssl/revoke')).toBe(false);
     expect(calls.find((c) => c.path === '/nginx/remove')!.body).toEqual({
-      subdomain: 'thakur.dev',
+      subdomain: 'example.com',
     });
   });
 
   test('switching www off keeps the site and drops only a www record ShipYard created', async () => {
     await seed({
-      subdomain: 'thakur.dev',
-      full_domain: 'thakur.dev',
+      subdomain: 'example.com',
+      full_domain: 'example.com',
       dns_record_id: 'rec-apex',
       dns_record_owned: false,
       ssl_reused: true,
       alias_records: JSON.stringify([
-        { name: 'www.thakur.dev', id: 'rec-www', zoneId: ZONE, owned: true },
+        { name: 'www.example.com', id: 'rec-www', zoneId: ZONE, owned: true },
       ]),
     });
     await db
       .update(schema.projects)
-      .set({ domain: 'thakur.dev', www_redirect: true })
+      .set({ domain: 'example.com', www_redirect: true })
       .where(eq(schema.projects.id, projectId));
-    await DomainChangeService.start(await project(), 'thakur.dev', false);
+    await DomainChangeService.start(await project(), 'example.com', false);
     expect((await finish()).state).toBe('done');
     expect(records.some((r) => r.id === 'rec-www')).toBe(false);
     expect(records.some((r) => r.id === 'rec-apex')).toBe(true);

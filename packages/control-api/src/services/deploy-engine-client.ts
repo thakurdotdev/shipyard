@@ -1,4 +1,4 @@
-import { config, internalAuthHeaders } from '@thakur-deploy/config';
+import { config, internalAuthHeaders } from '@shipyard/config';
 
 /**
  * fetch() against the Deploy Engine with the internal token attached. The engine rejects

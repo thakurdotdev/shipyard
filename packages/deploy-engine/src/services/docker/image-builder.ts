@@ -327,7 +327,7 @@ export async function removeImage(imageName: string): Promise<boolean> {
  * Prune old images for a project, keeping only the latest N.
  */
 export async function pruneProjectImages(projectId: string, keepCount: number = 3): Promise<void> {
-  const prefix = `thakur-deploy/${projectId.slice(0, 8)}`;
+  const prefix = `shipyard/${projectId.slice(0, 8)}`;
 
   // List images with this prefix
   const result = await execDocker([
