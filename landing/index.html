@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShipYard: push-to-deploy on your own server</title>
+    <meta
+      name="description"
+      content="ShipYard is an open-source (MIT) platform that turns one Linux server into your own deploy platform. Connect a GitHub repo, push, and your app builds and goes live on its own domain with HTTPS."
+    />
+    <meta name="theme-color" content="#0a0a0b" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link rel="canonical" href="https://shipyard.thakur.dev/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://shipyard.thakur.dev/" />
+    <meta property="og:site_name" content="ShipYard" />
+    <meta property="og:title" content="ShipYard: push-to-deploy on your own server" />
+    <meta
+      property="og:description"
+      content="An open-source, self-hosted PaaS. One install command, then every git push builds and goes live with HTTPS, realtime logs and one-click rollback."
+    />
+    <meta property="og:image" content="https://shipyard.thakur.dev/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ShipYard: Your server. Your platform." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ShipYard: push-to-deploy on your own server" />
+    <meta name="twitter:description" content="An open-source, self-hosted PaaS. One install command, then every git push builds and goes live with HTTPS, realtime logs and one-click rollback." />
+    <meta name="twitter:image" content="https://shipyard.thakur.dev/og.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ShipYard",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Debian, Ubuntu",
+        "description": "A self-hosted platform for deploying web apps from GitHub: push to deploy, realtime build logs, custom domains with HTTPS, rollbacks and uptime alerts.",
+        "url": "https://shipyard.thakur.dev/",
+        "image": "https://shipyard.thakur.dev/og.png",
+        "codeRepository": "https://github.com/thakurdotdev/shipyard",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>
+      try {
+        const t = localStorage.getItem('shipyard-landing-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <!-- ───────────────────────── Nav ───────────────────────── -->
+    <header class="nav" id="nav">
+      <div class="nav-inner">
+        <a class="brand" href="#top" aria-label="ShipYard home">
+          <img src="/logo.png" alt="" width="28" height="28" />
+          <span>ShipYard</span>
+        </a>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#how">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch to light theme">
+            <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
+            <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
+          </button>
+          <a class="btn btn-surface btn-sm" href="https://github.com/thakurdotdev/shipyard" target="_blank" rel="noopener">
+            <svg class="gh" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.67 5.56.67 11.83c0 5.01 3.25 9.26 7.76 10.76.57.1.78-.25.78-.55v-1.93c-3.16.69-3.82-1.52-3.82-1.52-.52-1.31-1.26-1.66-1.26-1.66-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.74 2.66 1.24 3.31.95.1-.74.4-1.24.72-1.52-2.52-.29-5.17-1.26-5.17-5.6 0-1.24.44-2.25 1.17-3.04-.12-.29-.51-1.44.11-3 0 0 .95-.3 3.12 1.16a10.8 10.8 0 0 1 5.68 0c2.17-1.47 3.12-1.16 3.12-1.16.62 1.56.23 2.71.11 3 .73.79 1.17 1.8 1.17 3.04 0 4.35-2.65 5.31-5.18 5.59.41.35.77 1.04.77 2.1v3.11c0 .3.21.66.79.55a11.17 11.17 0 0 0 7.75-10.76C23.33 5.56 18.27.5 12 .5Z" /></svg>
+            <span>GitHub</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ───────────────────────── Hero ───────────────────────── -->
+      <section class="hero" id="top">
+        <div class="glow" aria-hidden="true"></div>
+        <div class="container">
+          <div class="hero-head">
+            <h1 class="hero-title">
+              <span class="block">Your server.</span>
+              <span class="block muted-ink">Your platform.</span>
+            </h1>
+            <div class="hero-side">
+              <p class="lede">
+                ShipYard turns one Linux box into a push-to-deploy platform. Connect a GitHub repo,
+                push, and your app builds and goes live on its own domain with HTTPS.
+              </p>
+              <div class="cta-row">
+                <a class="btn btn-primary" href="#install">
+                  <span class="lg-only">Install on your server</span><span class="sm-only">Install</span>
+                </a>
+                <a class="btn btn-surface" href="https://github.com/thakurdotdev/shipyard" target="_blank" rel="noopener">
+                  <span class="lg-only">Open source on GitHub</span><span class="sm-only">GitHub</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hero demo: a replay of one deploy, as the dashboard shows it -->
+          <div class="bezel hero-demo">
+            <div class="bezel-inner console" id="console" aria-label="Demo: a push to main builds and goes live">
+              <div class="console-bar">
+                <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+                <div class="console-meta">
+                  <span class="proj">acme-web</span>
+                  <span class="sep">/</span>
+                  <span class="branch">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="8" r="2.5" /><path d="M6 8.5v7M18 10.5c0 4-6 3-11 6" /></svg>
+                    main
+                  </span>
+                  <span class="commit">9f3c2a1</span>
+                </div>
+                <span class="status" id="status" data-state="queued"><b></b><span>Queued</span></span>
+              </div>
+
+              <div class="console-steps" aria-hidden="true">
+                <span data-step="clone">Clone</span>
+                <span data-step="install">Install</span>
+                <span data-step="build">Build</span>
+                <span data-step="predeploy">Pre-deploy</span>
+                <span data-step="activate">Go live</span>
+              </div>
+
+              <pre class="log" id="log" aria-live="off"></pre>
+
+              <div class="console-foot">
+                <span class="domain" id="domain">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+                  https://acme-web.example.com
+                </span>
+                <span class="demo-tag">Demo replay</span>
+                <button class="replay" id="replay" type="button">Replay</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack" aria-label="Frameworks ShipYard builds">
+            <span class="stack-label">Builds</span>
+            <ul>
+              <li>Next.js</li>
+              <li>Vite</li>
+              <li>Bun</li>
+              <li>Elysia</li>
+              <li>Hono</li>
+              <li>Express</li>
+              <li>Go</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── How it works ───────────────────────── -->
+      <section class="section" id="how">
+        <div class="container">
+          <h2 class="section-title">
+            <span class="block">From empty server</span>
+            <span class="block muted-ink">to live app in three steps.</span>
+          </h2>
+
+          <ol class="steps">
+            <li class="card step">
+              <span class="step-n">1</span>
+              <h3>Run one command</h3>
+              <p>
+                On a fresh Debian or Ubuntu server, the installer sets up Nginx, certificates,
+                PostgreSQL, Redis and Bun, then starts ShipYard. It only asks for your domain.
+              </p>
+              <div class="mini-term"><span class="prompt">$</span> curl -fsSL shipyard.thakur.dev/install.sh | bash</div>
+            </li>
+            <li class="card step">
+              <span class="step-n">2</span>
+              <h3>Connect GitHub</h3>
+              <p>
+                Open the setup link it prints. GitHub opens with the app already filled in: one
+                click to create it, then sign in. The first account becomes the owner.
+              </p>
+              <div class="mini-term ok"><span class="tick">✓</span> GitHub App connected</div>
+            </li>
+            <li class="card step">
+              <span class="step-n">3</span>
+              <h3>Push</h3>
+              <p>
+                Pick a repo, branch and framework. Every push to that branch builds and goes live,
+                and the result shows up on the commit in GitHub.
+              </p>
+              <div class="mini-term"><span class="prompt">$</span> git push origin main</div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Features ───────────────────────── -->
+      <section class="section" id="features">
+        <div class="container">
+          <h2 class="section-title">
+            <span class="block">What a deploy platform does,</span>
+            <span class="block muted-ink">on hardware you control.</span>
+          </h2>
+
+          <div class="bento">
+            <!-- Realtime logs -->
+            <article class="card tile span-4">
+              <div class="tile-copy">
+                <h3>Logs as they happen</h3>
+                <p>Build and deploy output streams to the dashboard over WebSockets, with colours intact. Builds queue one at a time, and you can see your place in line.</p>
+              </div>
+              <div class="tile-visual logs-visual" aria-hidden="true">
+                <div><span class="c-dim">12:04:31</span> <span class="c-brand">[build]</span> next build</div>
+                <div><span class="c-dim">12:04:44</span> &nbsp;✓ Compiled successfully</div>
+                <div><span class="c-dim">12:04:52</span> &nbsp;✓ Generating static pages (24/24)</div>
+                <div><span class="c-dim">12:04:53</span> <span class="c-brand">[activate]</span> health check 200</div>
+                <div><span class="c-dim">12:04:53</span> <span class="c-ok">● Live</span></div>
+              </div>
+            </article>
+
+            <!-- Rollback -->
+            <article class="card tile span-2">
+              <div class="tile-copy">
+                <h3>Roll back in a click</h3>
+                <p>Recent builds stay on disk, so going back to one is instant. Choose how many to keep.</p>
+              </div>
+              <ul class="tile-visual builds" aria-hidden="true">
+                <li><code>9f3c2a1</code><span>Add pricing page</span><em class="pill live">Live</em></li>
+                <li><code>41be07d</code><span>Fix nav on mobile</span><em class="pill">Roll back</em></li>
+                <li><code>c08e5f9</code><span>Initial deploy</span><em class="pill">Roll back</em></li>
+              </ul>
+            </article>
+
+            <!-- Domains -->
+            <article class="card tile span-2">
+              <div class="tile-copy">
+                <h3>Domains and HTTPS</h3>
+                <p>Every project gets a subdomain. Add your own domain and ShipYard gets it a Let's Encrypt certificate.</p>
+              </div>
+              <ul class="tile-visual domains" aria-hidden="true">
+                <li><span class="lock">●</span>acme-web.example.com</li>
+                <li><span class="lock">●</span>acme.com <small>+ www redirect</small></li>
+              </ul>
+            </article>
+
+            <!-- Env -->
+            <article class="card tile span-2">
+              <div class="tile-copy">
+                <h3>Encrypted env vars</h3>
+                <p>Secrets are encrypted at rest and handed to your app at build and run time.</p>
+              </div>
+              <ul class="tile-visual env" aria-hidden="true">
+                <li><code>DATABASE_URL</code><span>••••••••••••</span></li>
+                <li><code>STRIPE_KEY</code><span>••••••••••••</span></li>
+              </ul>
+            </article>
+
+            <!-- Uptime -->
+            <article class="card tile span-2">
+              <div class="tile-copy">
+                <h3>Uptime alerts</h3>
+                <p>Checks every 1 to 30 minutes, and an email when a site goes down or comes back.</p>
+              </div>
+              <div class="tile-visual uptime" aria-hidden="true">
+                <div class="bars" id="uptime-bars"></div>
+                <div class="uptime-legend"><span>30 checks</span><span class="c-ok">Up</span></div>
+              </div>
+            </article>
+
+            <!-- Password -->
+            <article class="card tile span-3">
+              <div class="tile-copy">
+                <h3>Password-protect any site</h3>
+                <p>Put a staging site or side project behind a password, enforced by Nginx before your app sees a request. No redeploy needed to turn it on.</p>
+              </div>
+              <div class="tile-visual gate" aria-hidden="true">
+                <div class="gate-card">
+                  <span class="gate-title">This site is private</span>
+                  <span class="gate-input">••••••••</span>
+                  <span class="gate-btn">Continue</span>
+                </div>
+              </div>
+            </article>
+
+            <!-- Isolation -->
+            <article class="card tile span-3">
+              <div class="tile-copy">
+                <h3>Apps can't touch the platform</h3>
+                <p>Builds and apps run as their own unprivileged user, bound to loopback behind Nginx. A bad dependency script can't read ShipYard's keys or open a public port.</p>
+              </div>
+              <div class="tile-visual iso" aria-hidden="true">
+                <div class="iso-row"><span>shipyard</span><em>platform, keys, database</em></div>
+                <div class="iso-wall"></div>
+                <div class="iso-row app"><span>shipyard-apps</span><em>your builds and processes</em></div>
+              </div>
+            </article>
+          </div>
+
+          <ul class="small-features">
+            <li>
+              <h3>Pre-deploy commands</h3>
+              <p>Run migrations against the new build before it takes traffic. If they fail, the old version stays live.</p>
+            </li>
+            <li>
+              <h3>Monorepos</h3>
+              <p>Point a project at a folder, and only redeploy when files under the paths you choose change.</p>
+            </li>
+            <li>
+              <h3>Static sites served by Nginx</h3>
+              <p>Vite builds skip the Node process entirely. Nginx serves the files, with long caching for hashed assets.</p>
+            </li>
+            <li>
+              <h3>Processes at a glance</h3>
+              <p>See every running app's CPU, memory and restarts, and restart one from the dashboard.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Install ───────────────────────── -->
+      <section class="section" id="install">
+        <div class="container">
+          <div class="bezel">
+            <div class="bezel-inner install">
+              <div class="install-copy">
+                <h2 class="section-title">
+                  <span class="block">One command.</span>
+                  <span class="block muted-ink">Then just push.</span>
+                </h2>
+                <p class="lede">
+                  Run it as a regular user with sudo on a fresh Debian or Ubuntu server. Point a
+                  wildcard DNS record at the server, or let ShipYard create records through
+                  Cloudflare. No domain yet? Leave it empty and try it over HTTP on the server's IP.
+                </p>
+              </div>
+
+              <div class="cmd" id="cmd">
+                <code><span class="prompt">$</span> <span id="cmd-text">curl -fsSL https://shipyard.thakur.dev/install.sh | bash</span></code>
+                <button class="btn btn-primary btn-sm copy" id="copy" type="button">Copy</button>
+              </div>
+
+              <dl class="after">
+                <div><dt><code>install.sh update</code></dt><dd>Pull, rebuild only what changed, migrate, restart.</dd></div>
+                <div><dt><code>install.sh doctor</code></dt><dd>A read-only health report of the whole setup.</dd></div>
+                <div><dt>Safe to re-run</dt><dd>Every step checks before it acts, and keeps your existing settings. <a class="inline-link" href="/install.sh" target="_blank" rel="noopener">Read the script</a> before you run it.</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── FAQ ───────────────────────── -->
+      <section class="section" id="faq">
+        <div class="container faq-wrap">
+          <h2 class="section-title">
+            <span class="block">Questions</span>
+          </h2>
+          <div class="faq">
+            <details>
+              <summary>What do I need to run it?</summary>
+              <p>A Debian or Ubuntu server you can reach over SSH, a user with sudo, and ideally a domain. The installer handles the rest: Nginx, certbot, PostgreSQL, Redis, Bun, Node.js and the process manager.</p>
+            </details>
+            <details>
+              <summary>Do my apps run in Docker?</summary>
+              <p>Not by default. Apps run as supervised processes behind Nginx, which keeps a small server light. If you prefer containers, there's an optional Docker mode.</p>
+            </details>
+            <details>
+              <summary>What does it cost?</summary>
+              <p>Nothing. ShipYard is open source under the MIT license, with no plans or per-app pricing. You pay for your own server, and you can run as many apps on it as it can handle.</p>
+            </details>
+            <details>
+              <summary>Can other people sign in?</summary>
+              <p>You sign in with GitHub, and the first account becomes the owner. Sign-ups stay closed until the owner opens them in Settings.</p>
+            </details>
+            <details>
+              <summary>What happens when a deploy fails?</summary>
+              <p>A failed build or pre-deploy command never touches the live app: the current version keeps serving, and the logs show exactly where it stopped. If something slips through, roll back to an earlier build from the dashboard.</p>
+            </details>
+            <details>
+              <summary>What survives a reboot?</summary>
+              <p>Everything. The process manager brings ShipYard and every deployed app back up when the server restarts.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Final CTA ───────────────────────── -->
+      <section class="section">
+        <div class="container">
+          <div class="bezel final">
+            <div class="bezel-inner final-inner">
+              <div class="glow small" aria-hidden="true"></div>
+              <h2 class="section-title">
+                <span class="block">Stop renting a platform.</span>
+                <span class="block muted-ink">Run your own.</span>
+              </h2>
+              <div class="cta-row center">
+                <a class="btn btn-primary" href="#install">
+                  <span class="lg-only">Install on your server</span><span class="sm-only">Install</span>
+                </a>
+                <a class="btn btn-surface" href="https://github.com/thakurdotdev/shipyard" target="_blank" rel="noopener">
+                  <span class="lg-only">Star on GitHub</span><span class="sm-only">GitHub</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ───────────────────────── Footer ───────────────────────── -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-top">
+          <div class="footer-brand">
+            <a class="brand" href="#top" aria-label="ShipYard home">
+              <img src="/logo.png" alt="" width="28" height="28" />
+              <span>ShipYard</span>
+            </a>
+            <p>An open-source, self-hosted platform for deploying web apps from GitHub.</p>
+          </div>
+          <nav class="footer-links" aria-label="Footer">
+            <div>
+              <h4>Product</h4>
+              <a href="#how">How it works</a>
+              <a href="#features">Features</a>
+              <a href="#install">Install</a>
+            </div>
+            <div>
+              <h4>Project</h4>
+              <a href="https://github.com/thakurdotdev/shipyard" target="_blank" rel="noopener">Source code</a>
+              <a href="https://github.com/thakurdotdev/shipyard#readme" target="_blank" rel="noopener">Documentation</a>
+              <a href="https://github.com/thakurdotdev/shipyard/issues" target="_blank" rel="noopener">Report an issue</a>
+              <a href="https://github.com/thakurdotdev/shipyard/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+            </div>
+          </nav>
+        </div>
+        <p class="copyright">© <span id="year">2026</span> ShipYard</p>
+        <div class="wordmark" aria-hidden="true">ShipYard<i></i></div>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
