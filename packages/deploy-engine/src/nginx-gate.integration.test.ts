@@ -93,9 +93,8 @@ describe('gate configuration', () => {
     const config = NginxService.generateConfig(SUBDOMAIN, 5100, true);
     expect(config).toContain('auth_request /__shipyard_auth;');
     expect(config).toContain('server 127.0.0.1:5100;');
-    expect(config).toContain(
-      'proxy_pass http://shipyard_gate_gate_hfixture_dexample_dcom/gate/verify;',
-    );
+    // The upstream name ends with the escaped base domain, which depends on the environment.
+    expect(config).toMatch(/proxy_pass http:\/\/shipyard_gate_gate_hfixture_d\w+\/gate\/verify;/);
   });
 
   test('serves nothing but the ACME challenge before the certificate exists', () => {

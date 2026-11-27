@@ -3,12 +3,15 @@ import { DeployService } from './services/deploy-service';
 import { join } from 'path';
 import { mkdirSync, writeFileSync } from 'fs';
 
-// Mock constants/env if needed or just rely on the service using process.cwd()
-// We might need to adjust BASE_DIR env var for safety
-process.env.BASE_DIR = join(process.cwd(), 'test-workspace');
 const TEST_PORT = 9001;
 
-describe('Redeploy Flow', () => {
+/**
+ * Starts and replaces a real app under the machine's pm0 daemon on port 9001. On a server
+ * that daemon also supervises ShipYard and its deployed apps, so this only runs when asked:
+ *
+ *   SHIPYARD_PM0_INTEGRATION=1 bun test src/redeploy.test.ts
+ */
+describe.skipIf(process.env.SHIPYARD_PM0_INTEGRATION !== '1')('Redeploy Flow', () => {
   const projectId = 'test-redeploy-project';
   const buildId1 = 'build-1';
   const buildId2 = 'build-2';

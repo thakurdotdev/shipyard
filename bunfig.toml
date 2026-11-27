@@ -26,3 +26,7 @@ ignorePatterns = [
   "apps/**/builds",
   "packages/deploy-engine/apps",
 ]
+
+[test]
+# Keeps deploy-engine tests off the real apps directory and server Nginx rules.
+preload = ["./packages/deploy-engine/src/test-preload.ts"]
