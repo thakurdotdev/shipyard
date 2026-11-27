@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/api';
+import { useBaseDomain } from '@/lib/queries';
 import { Check, Loader2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -35,6 +36,7 @@ import {
 } from '@/lib/framework-config';
 
 export function ManualProjectForm() {
+  const baseDomain = useBaseDomain() || '…';
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -179,7 +181,7 @@ export function ManualProjectForm() {
         ...formData,
         pre_deploy_command: isStatic ? null : formData.pre_deploy_command.trim() || null,
         port: !isStatic && formData.port ? parseInt(formData.port, 10) : undefined,
-        domain: formData.domain ? `${formData.domain}.thakur.dev` : '',
+        domain: formData.domain || '',
         env_vars: envVarsRecord,
         access: toAccessPayload(protection),
       });
@@ -301,7 +303,7 @@ export function ManualProjectForm() {
                     }}
                     className="text-right"
                   />
-                  <span className="text-muted-foreground whitespace-nowrap">.thakur.dev</span>
+                  <span className="text-muted-foreground whitespace-nowrap">.{baseDomain}</span>
                 </div>
                 <Button
                   type="button"

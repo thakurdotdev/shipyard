@@ -143,7 +143,7 @@ export default function ImportPage() {
         pre_deploy_command: config.preDeployCommand,
         app_type: config.appType,
         root_directory: config.rootDirectory,
-        domain: config.domain ? `${config.domain}.thakur.dev` : '',
+        domain: config.domain || '',
         port: config.port,
         github_repo_id: selectedRepo.id.toString(),
         github_repo_full_name: selectedRepo.full_name,

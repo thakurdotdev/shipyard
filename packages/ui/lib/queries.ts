@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api';
+import { platformApi } from '@/lib/platform-api';
 import { pm0Api, type PM0Process } from '@/lib/pm0-api';
 import type { Build, Project, UptimeSettings } from '@/lib/types';
 import { useQuery } from '@/lib/use-query';
@@ -14,6 +15,7 @@ export const queryKeys = {
   deployment: (id: string) => `project:${id}:deployment`,
   domain: (id: string) => `project:${id}:domain`,
   uptime: (id: string) => `project:${id}:uptime`,
+  setupStatus: 'setup:status',
 };
 
 /** A build row as the builds list returns it: the build plus its deployment, if any. */
@@ -40,6 +42,15 @@ export interface DomainProvision {
   ssl_status: string;
   ssl_expiry?: string | null;
   error_message?: string | null;
+}
+
+/**
+ * The domain new projects live under (`<name>.<base domain>`), from the server's
+ * configuration. Empty until it loads.
+ */
+export function useBaseDomain(): string {
+  const { data } = useQuery(queryKeys.setupStatus, () => platformApi.getSetupStatus());
+  return data?.base_domain ?? '';
 }
 
 /** One PM0 listing serves the projects list, the processes page and every project page. */
