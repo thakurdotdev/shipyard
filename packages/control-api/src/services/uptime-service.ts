@@ -24,6 +24,8 @@ const HISTORY_MAX_CHECKS = 3_000;
 
 type CheckJobData = { monitorId: string };
 
+let emailWarningShown = false;
+
 function redisConnection() {
   const url = new URL(config.redisUrl);
   return {
@@ -446,9 +448,14 @@ export const UptimeService = {
     const apiKey = SettingsService.get('resend_api_key');
     const from = SettingsService.get('resend_from_email');
     if (!apiKey || !from) {
-      console.warn('[Uptime] Email alerts are not set up in Settings — skipping alert delivery');
+      // This runs every 15s; say it once instead of filling the log.
+      if (!emailWarningShown) {
+        emailWarningShown = true;
+        console.warn('[Uptime] Email alerts are not set up in Settings — skipping alert delivery');
+      }
       return;
     }
+    emailWarningShown = false;
 
     const pending = await db
       .select({ alert: uptimeAlerts, monitor: uptimeMonitors, project: projects, account: user })

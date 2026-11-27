@@ -167,6 +167,7 @@ export const deployments = pgTable(
   (table) => {
     return {
       buildIdIdx: index('deployments_build_id_idx').on(table.build_id),
+      projectIdIdx: index('deployments_project_id_idx').on(table.project_id),
       statusIdx: index('deployments_status_idx').on(table.status),
     };
   },

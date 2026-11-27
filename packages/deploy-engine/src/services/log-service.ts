@@ -20,6 +20,8 @@ export const LogService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...internalAuthHeaders() },
         body: JSON.stringify({ logs: message, level }),
+        // A stuck Control API must not stall the deployment that is logging to it.
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!res.ok) {

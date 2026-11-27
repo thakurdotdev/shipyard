@@ -13,7 +13,13 @@ import { NginxService } from './nginx-service';
 import { DockerService } from './docker';
 import { PM0Service } from './pm0';
 import { isWorkspaceRoot } from '../utils/workspace';
-import { ARTIFACTS_DIR, getBuildDir, getBuildExtractDir, getProjectDir } from '../config/paths';
+import {
+  ARTIFACTS_DIR,
+  assertSafeId,
+  getBuildDir,
+  getBuildExtractDir,
+  getProjectDir,
+} from '../config/paths';
 import {
   APP_BIND_HOST,
   appUser,
@@ -29,6 +35,8 @@ import { runPreDeployCommand } from './pre-deploy';
 import { engineSettings } from '../config/runtime-settings';
 
 const IS_PLATFORM_PROD = config.isProduction;
+/** Runtime dependency install for a deployment (bun install --production). */
+const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Docker mode (Settings → Deployments, or USE_DOCKER=true) runs apps in containers instead
@@ -93,9 +101,10 @@ async function retry<T>(
 
 export const DeployService = {
   async receiveArtifact(buildId: string, stream: ReadableStream<any>) {
+    assertSafeId('build', buildId);
     const path = join(ARTIFACTS_DIR, `${buildId}.tar.gz`);
-    const buf = await new Response(stream).arrayBuffer();
-    await Bun.write(path, buf);
+    // Streamed to disk: an artifact can be hundreds of MB and must not sit in memory.
+    await Bun.write(path, new Response(stream));
     return { success: true, path };
   },
 
@@ -695,27 +704,32 @@ export const DeployService = {
       await LogService.detail(buildId, 'Running bun install...');
     }
 
-    const installProc = Bun.spawn(asAppUser(['bun', 'install', '--production']), {
-      cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+    // A hung install (registry outage, lifecycle script waiting on input) must fail the
+    // deploy instead of holding the project's deploy lock forever.
+    // As the app user our signal cannot cross sudo, so `timeout` enforces the limit there.
+    const installArgv = ['bun', 'install', '--production'];
+    const installProc = Bun.spawn(
+      isAppUserEnabled()
+        ? asAppUser(['timeout', '-k', '10s', `${INSTALL_TIMEOUT_MS / 1000}s`, ...installArgv])
+        : installArgv,
+      {
+        cwd,
+        stdout: 'pipe',
+        stderr: 'pipe',
+        timeout: INSTALL_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+      },
+    );
 
     // Capture and log install output
     const captureOutput = async (stream: ReadableStream<Uint8Array> | null) => {
       if (!stream) return '';
-      const reader = stream.getReader();
-      let output = '';
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          output += new TextDecoder().decode(value);
-        }
+        return await new Response(stream).text();
       } catch (e) {
         console.error(`[DeployService] Error reading install output:`, e);
+        return '';
       }
-      return output;
     };
 
     const [stdout, stderr] = await Promise.all([

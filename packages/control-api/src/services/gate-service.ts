@@ -78,6 +78,14 @@ export const GateService = {
           sessionHours: row.sessionHours ?? DEFAULT_SESSION_HOURS,
         }
       : null;
+    // Nginx only asks about hosts it serves, but keep the map bounded regardless.
+    if (hostCache.size >= 1_000) {
+      const now = Date.now();
+      for (const [key, entry] of hostCache) {
+        if (now - entry.at >= CACHE_TTL_MS) hostCache.delete(key);
+      }
+      if (hostCache.size >= 1_000) hostCache.clear();
+    }
     hostCache.set(host, { at: Date.now(), record });
     return record;
   },

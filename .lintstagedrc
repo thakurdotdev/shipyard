@@ -1,4 +1,4 @@
 {
-  "**/*.{ts,tsx,js,jsx}": ["bun lint --fix", "bun fmt"],
+  "**/*.{ts,tsx,js,jsx}": ["sh scripts/lint.sh --fix", "bun fmt"],
   "**/*.{json,css,md}": ["bun fmt"]
 }

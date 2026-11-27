@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
-import { LogLevel } from '@/lib/types';
+import { LogEntry, LogLevel } from '@/lib/types';
 import { useLogStore } from '@/stores/log-store';
 import { ArrowDownCircle, Loader2 } from 'lucide-react';
 import { UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,13 +13,16 @@ import { LogFilter } from './log-filter';
 import { LogLine } from './log-line';
 import { LogSearch } from './log-search';
 
+/** Stable empty list, so memoised values don't recompute on every render before logs load. */
+const NO_LOGS: LogEntry[] = [];
+
 interface LogViewerProps {
   buildId: string;
 }
 
 export function LogViewer({ buildId }: LogViewerProps) {
   const { logs, appendLog, setLogs, mergeLogs, clearLogs } = useLogStore();
-  const logEntries = logs[buildId] || [];
+  const logEntries = logs[buildId] ?? NO_LOGS;
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentMatchRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -140,6 +143,9 @@ export function LogViewer({ buildId }: LogViewerProps) {
     fetchLogs();
     return () => {
       mounted = false;
+      // Only this viewer reads the store and it refetches on mount, so drop the lines
+      // instead of keeping every build ever opened in memory for the life of the tab.
+      useLogStore.getState().clearLogs(buildId);
     };
   }, [buildId, setLogs]);
 

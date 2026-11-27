@@ -152,10 +152,13 @@ export async function getContainerLogs(containerName: string, tail: number = 100
 export function streamContainerLogs(
   containerName: string,
   onLog: (line: string) => void,
+  onExit?: () => void,
 ): () => void {
   const proc = spawn('docker', ['logs', '-f', '--tail', '0', containerName], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  proc.on('error', () => {});
+  if (onExit) proc.on('close', onExit);
 
   const handleData = (data: Buffer) => {
     const lines = data.toString().split('\n').filter(Boolean);

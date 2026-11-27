@@ -5,6 +5,7 @@
  * Uses modular sub-components for specific operations.
  */
 
+import { LogStreamer } from '../build/log-streamer';
 import { LogService } from '../log-service';
 import { buildImage, removeImage, pruneProjectImages } from './image-builder';
 import {
@@ -136,9 +137,17 @@ export const DockerService = {
     this.stopLogStreaming(projectId);
 
     const containerName = getContainerName(projectId);
-    const cleanup = streamContainerLogs(containerName, (line) => {
-      LogService.stream(buildId, line, 'info');
-    });
+    // Batched like build output: a chatty app must not cost one request (and one
+    // console line) per log line.
+    const cleanup = streamContainerLogs(
+      containerName,
+      (line) => LogStreamer.stream(buildId, projectId, `${line}\n`, 'info'),
+      () => {
+        // `docker logs -f` ends when the container goes away: forget it.
+        if (this._logStreamers.get(projectId) === cleanup) this._logStreamers.delete(projectId);
+        void LogStreamer.ensureFlushed(buildId);
+      },
+    );
 
     this._logStreamers.set(projectId, cleanup);
   },

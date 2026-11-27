@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { LogStreamer } from './build/log-streamer';
 import { LogService } from './log-service';
 import { runPreDeployCommand } from './pre-deploy';
 
@@ -13,6 +14,9 @@ describe('runPreDeployCommand', () => {
     dir = mkdtempSync(join(tmpdir(), 'shipyard-predeploy-'));
     logs.length = 0;
     spyOn(LogService, 'stream').mockImplementation(async (_id: string, message: string) => {
+      logs.push(message);
+    });
+    spyOn(LogStreamer, 'stream').mockImplementation((_id: string, _p: string, message: string) => {
       logs.push(message);
     });
   });

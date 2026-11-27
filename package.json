@@ -11,7 +11,7 @@
     "dev": "bun run --filter '*' dev 2>&1 | tee debug.log",
     "generate": "bun run --filter '@shipyard/control-api' generate",
     "migrate": "bun run --filter '@shipyard/control-api' migrate",
-    "lint": "bun lint",
+    "lint": "sh scripts/lint.sh",
     "format": "bun fmt",
     "prepare": "husky",
     "build": "NODE_ENV=production PLATFORM_ENV=production bun run --filter '*' build"
